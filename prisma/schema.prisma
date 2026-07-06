@@ -114,6 +114,8 @@ model PlanTier {
   isRecommended     Boolean      @default(false)
   sortOrder         Int
   archived          Boolean      @default(false)
+  // Display-only extras; blocklist-checked; never enter the plan document.
+  customLabels      String[]     @default([])
   clauses           TierClause[]
   plans             Plan[]
 }
