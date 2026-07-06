@@ -87,9 +87,10 @@ export async function flushSmsQueue() {
   return due.length;
 }
 
-export async function cancelScheduledSms(cancelKey: string) {
+// Prefix match: "nudge:<planId>" and "svc:<planId>" cancel their whole family.
+export async function cancelScheduledSms(cancelKeyPrefix: string) {
   await prisma.outboundSms.updateMany({
-    where: { cancelKey, status: "QUEUED" },
+    where: { cancelKey: { startsWith: cancelKeyPrefix }, status: "QUEUED" },
     data: { status: "CANCELLED" },
   });
 }

@@ -1,0 +1,104 @@
+// Screen 07 — service anniversaries and the reminder engine (lite).
+// ponytail: no self-book slots; reminders say "reply to book" until an
+// availability system exists. SMS only; email reminders when there's a queue.
+import { prisma } from "@/lib/db";
+import { sendSms } from "@/lib/sms";
+
+export const REMINDER_OFFSETS_DAYS = [30, 14, 3] as const;
+
+export function nextServiceDate(from: Date): Date {
+  const d = new Date(from);
+  d.setFullYear(d.getFullYear() + 1);
+  return d;
+}
+
+export type DueService = {
+  customerId: string;
+  customerName: string;
+  dueDate: Date;
+  onPlan: boolean;
+  tierName?: string;
+  hasCp12: boolean;
+  planId?: string;
+};
+
+// Active plans drive renewals; no-plan customers with a known last service are
+// sell opportunities — both belong on the due list (spec Screens 05 + 07).
+export async function dueServices(engineerId: string): Promise<DueService[]> {
+  const plans = await prisma.plan.findMany({
+    where: { engineerId, status: "ACTIVE", activatedAt: { not: null } },
+    include: {
+      customer: true,
+      tier: { include: { clauses: { include: { clause: true } } } },
+    },
+  });
+  const due: DueService[] = plans.map((p) => ({
+    customerId: p.customerId,
+    customerName: `${p.customer.firstName} ${p.customer.lastName}`,
+    dueDate: nextServiceDate(p.activatedAt!),
+    onPlan: true,
+    tierName: p.tier?.name,
+    hasCp12: (p.tier?.clauses ?? []).some((tc) => tc.clause.code === "CP12"),
+    planId: p.id,
+  }));
+
+  const noPlanCustomers = await prisma.customer.findMany({
+    where: {
+      engineerId,
+      plans: { none: { status: "ACTIVE" } },
+      properties: { some: { appliances: { some: { lastServicedAt: { not: null } } } } },
+    },
+    include: { properties: { include: { appliances: true } } },
+  });
+  for (const c of noPlanCustomers) {
+    const serviced = c.properties
+      .flatMap((p) => p.appliances)
+      .map((a) => a.lastServicedAt)
+      .filter((d): d is Date => Boolean(d))
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    if (serviced) {
+      due.push({
+        customerId: c.id,
+        customerName: `${c.firstName} ${c.lastName}`,
+        dueDate: nextServiceDate(serviced),
+        onPlan: false,
+        hasCp12: false,
+      });
+    }
+  }
+  return due.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+}
+
+// Queue 30/14/3-day SMS reminders for active plans. Idempotent via cancelKey;
+// called from the jobs endpoint alongside the SMS flush.
+export async function queueServiceReminders(): Promise<number> {
+  const now = new Date();
+  const plans = await prisma.plan.findMany({
+    where: { status: "ACTIVE", activatedAt: { not: null } },
+    include: { customer: true, engineer: true },
+  });
+  let queued = 0;
+  for (const plan of plans) {
+    const due = nextServiceDate(plan.activatedAt!);
+    const brand = plan.engineer.tradingName ?? plan.engineer.slug;
+    for (const offset of REMINDER_OFFSETS_DAYS) {
+      const sendAfter = new Date(due);
+      sendAfter.setDate(sendAfter.getDate() - offset);
+      sendAfter.setHours(10, 0, 0, 0);
+      if (sendAfter <= now) continue;
+      const cancelKey = `svc:${plan.id}:${offset}`;
+      const exists = await prisma.outboundSms.findFirst({ where: { cancelKey } });
+      if (exists) continue;
+      await sendSms({
+        engineerId: plan.engineerId,
+        to: plan.customer.phone,
+        body: `Hi ${plan.customer.firstName} — your annual service with ${brand} is due by ${due.toLocaleDateString("en-GB", { day: "numeric", month: "long" })}. Reply to this text to book it in.`,
+        messageClass: "TRANSACTIONAL",
+        sendAfter,
+        cancelKey,
+      });
+      queued++;
+    }
+  }
+  return queued;
+}

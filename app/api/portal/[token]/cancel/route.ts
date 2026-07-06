@@ -35,8 +35,9 @@ export async function POST(_req: Request, ctx: { params: Promise<{ token: string
     where: { id: plan.id },
     data: { status: "CANCELLED", cancelledAt: new Date() },
   });
-  // A cancelled plan must not receive "your quote is still open" nudges.
+  // A cancelled plan gets no nudges and no service reminders.
   await cancelScheduledSms(`nudge:${plan.id}`);
+  await cancelScheduledSms(`svc:${plan.id}`);
   await track("plan_cancelled", { type: "CUSTOMER", id: plan.customerId }, {
     planId: plan.id,
     ref: plan.ref,

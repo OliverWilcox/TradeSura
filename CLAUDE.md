@@ -10,9 +10,12 @@ Planlock takes a 20% app fee. Full product spec: @docs/design-spec.html
   03 (plan builder), 04 (doorstep flow), 05 (customer book, CSV import only),
   09 (customer signup web), 10 (customer portal + plan document email),
   plus the gas-emergency interlock component.
-- Do NOT build P1/P2 features (campaigns, calendar, tickets UI, payouts detail,
+- Do NOT build P1/P2 features (campaigns, tickets UI, payouts detail,
   cancel/save flow, referrals) even though the spec describes them. Stub routes
   with a "coming soon" page where navigation requires it.
+  [DECISION 2026-07-06, human] Scope extended post-P0: Screen 07 (service
+  calendar + reminder engine, lite: no self-book slots) and a working "More"
+  hub (settings, GC status, payouts summary, sign out) are now in scope.
 - When the spec and this file conflict, this file wins. When unsure between two
   approaches, present both briefly and ask — do not decide architecture alone.
 
