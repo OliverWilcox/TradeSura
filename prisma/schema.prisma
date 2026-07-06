@@ -1,0 +1,197 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PlanStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  CANCELLED
+}
+
+enum ClauseKind {
+  CORE
+  ADD
+}
+
+enum ActorType {
+  ENGINEER
+  CUSTOMER
+  SYSTEM
+}
+
+enum MessageClass {
+  TRANSACTIONAL
+  MARKETING
+}
+
+enum SmsStatus {
+  QUEUED
+  SENT
+  CANCELLED
+}
+
+model Engineer {
+  id                String     @id @default(cuid())
+  email             String     @unique
+  slug              String     @unique
+  tradingName       String?
+  logoUrl           String?
+  gasSafeNo         String?
+  gasSafeName       String?
+  gasSafeCompany    String?
+  gasSafeCategories String?
+  gasSafeVerifiedAt DateTime?
+  gcOrganisationId  String?    @unique
+  gcAccessToken     String? // sandbox org token; never logged
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  customers         Customer[]
+  tiers             PlanTier[]
+  plans             Plan[]
+}
+
+model Customer {
+  id           String     @id @default(cuid())
+  engineerId   String
+  engineer     Engineer   @relation(fields: [engineerId], references: [id])
+  firstName    String
+  lastName     String
+  phone        String // normalised E.164
+  email        String?
+  smsOptOut    Boolean    @default(false)
+  gcCustomerId String?
+  createdAt    DateTime   @default(now())
+  properties   Property[]
+  plans        Plan[]
+
+  @@unique([engineerId, phone])
+}
+
+model Property {
+  id           String      @id @default(cuid())
+  customerId   String
+  customer     Customer    @relation(fields: [customerId], references: [id])
+  addressLine1 String
+  addressLine2 String?
+  town         String?
+  postcode     String
+  appliances   Appliance[]
+}
+
+model Appliance {
+  id             String    @id @default(cuid())
+  propertyId     String
+  property       Property  @relation(fields: [propertyId], references: [id])
+  make           String?
+  model          String?
+  type           String?
+  lastServicedAt DateTime?
+}
+
+// Solicitor-approved wording. Seeded; read-only in the app.
+model ClauseTemplate {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  title     String
+  bodyText  String
+  kind      ClauseKind
+  sortOrder Int
+  tiers     TierClause[]
+}
+
+model PlanTier {
+  id                String       @id @default(cuid())
+  engineerId        String
+  engineer          Engineer     @relation(fields: [engineerId], references: [id])
+  name              String
+  priceMonthlyPence Int
+  isRecommended     Boolean      @default(false)
+  sortOrder         Int
+  archived          Boolean      @default(false)
+  clauses           TierClause[]
+  plans             Plan[]
+}
+
+model TierClause {
+  tierId   String
+  clauseId String
+  tier     PlanTier       @relation(fields: [tierId], references: [id], onDelete: Cascade)
+  clause   ClauseTemplate @relation(fields: [clauseId], references: [id])
+
+  @@id([tierId, clauseId])
+}
+
+model Plan {
+  id                     String     @id @default(cuid())
+  ref                    String     @unique
+  engineerId             String
+  engineer               Engineer   @relation(fields: [engineerId], references: [id])
+  customerId             String
+  customer               Customer   @relation(fields: [customerId], references: [id])
+  tierId                 String?
+  tier                   PlanTier?  @relation(fields: [tierId], references: [id])
+  status                 PlanStatus @default(PENDING)
+  priceMonthlyPence      Int?
+  signupToken            String     @unique
+  portalToken            String     @unique
+  linkOpenedAt           DateTime?
+  gcBillingRequestId     String?
+  gcBillingRequestFlowId String?
+  gcMandateId            String?
+  gcSubscriptionId       String?
+  coolingOffEndsAt       DateTime?
+  activatedAt            DateTime?
+  cancelledAt            DateTime?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+}
+
+model GasSafeRecord {
+  regNo      String @id // normalised: digits only
+  name       String
+  company    String
+  categories String
+}
+
+// Analytics + audit, append-only.
+model Event {
+  id        String    @id @default(cuid())
+  name      String
+  actorType ActorType
+  actorId   String?
+  meta      Json?
+  ts        DateTime  @default(now())
+
+  @@index([name, ts])
+}
+
+// Quiet-hours queue + abandon nudges.
+model OutboundSms {
+  id         String       @id @default(cuid())
+  engineerId String
+  toPhone    String
+  senderName String // trading name
+  body       String
+  class      MessageClass
+  status     SmsStatus    @default(QUEUED)
+  sendAfter  DateTime
+  cancelKey  String? // e.g. "nudge:<planId>" — cancelled on activation
+  sentAt     DateTime?
+
+  @@index([status, sendAfter])
+}
+
+// GoCardless webhook idempotency guard.
+model GcWebhookEvent {
+  id           String   @id // GoCardless event id
+  resourceType String
+  action       String
+  payload      Json
+  processedAt  DateTime @default(now())
+}
