@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { cancelGcSubscription } from "@/lib/gocardless";
 import { sendEmail } from "@/lib/email";
+import { cancelScheduledSms } from "@/lib/sms";
 
 export async function POST(_req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
@@ -34,6 +35,8 @@ export async function POST(_req: Request, ctx: { params: Promise<{ token: string
     where: { id: plan.id },
     data: { status: "CANCELLED", cancelledAt: new Date() },
   });
+  // A cancelled plan must not receive "your quote is still open" nudges.
+  await cancelScheduledSms(`nudge:${plan.id}`);
   await track("plan_cancelled", { type: "CUSTOMER", id: plan.customerId }, {
     planId: plan.id,
     ref: plan.ref,
