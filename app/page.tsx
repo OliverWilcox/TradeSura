@@ -1,65 +1,116 @@
-import Image from "next/image";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { requireEngineer } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { activeMonthlyPence } from "@/lib/plans";
+import { AppShell } from "@/components/shells";
+import { Card, Micro, Pill, RowLine, btnClass } from "@/components/ui";
 
-export default function Home() {
+export default async function DashboardPage() {
+  const engineer = await requireEngineer();
+  if (!engineer.gasSafeVerifiedAt) redirect("/onboarding");
+
+  const { totalPence, count } = await activeMonthlyPence(engineer.id);
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const newThisMonth = await prisma.plan.count({
+    where: { engineerId: engineer.id, status: "ACTIVE", activatedAt: { gte: monthStart } },
+  });
+
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const failedRecently = await prisma.event.count({
+    where: {
+      name: "payment_failed",
+      ts: { gte: thirtyDaysAgo },
+      meta: { path: ["engineerId"], equals: engineer.id },
+    },
+  });
+  // ponytail: burner turns amber at 2+ failures in 30 days; tune with real data
+  const healthy = failedRecently < 2;
+
+  const customersTotal = await prisma.customer.count({ where: { engineerId: engineer.id } });
+  const onPlan = await prisma.customer.count({
+    where: { engineerId: engineer.id, plans: { some: { status: "ACTIVE" } } },
+  });
+  const noPlan = customersTotal - onPlan;
+  const avgTier = await prisma.planTier.aggregate({
+    where: { engineerId: engineer.id, archived: false },
+    _avg: { priceMonthlyPence: true },
+  });
+  const avgPence = Math.round(avgTier._avg.priceMonthlyPence ?? 1200);
+  // Opportunity: converting 1 in 5 of the no-plan book at the average tier.
+  const prizeYearlyPence = Math.round((noPlan / 5) * avgPence * 12);
+
+  const monogram = (engineer.tradingName ?? engineer.email)
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <AppShell
+      active="HOME"
+      topRight={
+        <span className="w-7 h-7 rounded-full bg-iron text-white flex items-center justify-center font-mono text-[11px]">
+          {monogram}
+        </span>
+      }
+    >
+      <div className="bg-gradient-to-b from-iron-2 to-iron text-white rounded-[14px] p-4 border border-[#39434f]">
+        <Micro className="!text-[#8FA0B0]">
+          Locked-in income ·{" "}
+          <span
+            className={`inline-block w-2.5 h-2.5 rounded-full align-middle ${healthy ? "bg-flame shadow-[0_0_0_4px_rgba(14,127,208,0.25)] animate-pulse" : "bg-warn shadow-[0_0_0_4px_rgba(221,154,20,0.25)]"}`}
+          />{" "}
+          {healthy ? "Burner lit" : "Check collections"}
+        </Micro>
+        <div className="font-mono text-[34px] font-semibold text-[#F3B27E] leading-tight mt-1">
+          £{(totalPence / 100).toFixed(0)}
+          <span className="text-base text-[#C9A17E]">/mo</span>
+        </div>
+        <p className="text-xs text-[#AEB9C4] mt-0.5">
+          = <b className="text-[#F3B27E]">£{((totalPence * 12) / 100).toFixed(0)} a year</b> ·{" "}
+          {count} active plan{count === 1 ? "" : "s"} · +{newThisMonth} this month
+        </p>
+      </div>
+
+      <Card>
+        <RowLine
+          left="New plans this month"
+          right={<Pill tone={newThisMonth > 0 ? "ok" : "off"}>▲ {newThisMonth} NEW</Pill>}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+        <RowLine
+          left="Failed collections (30 days)"
+          right={
+            failedRecently > 0 ? (
+              <Pill tone="warn">{failedRecently} — retrying</Pill>
+            ) : (
+              <Pill tone="ok">NONE</Pill>
+            )
+          }
+        />
+      </Card>
+
+      {noPlan > 0 && (
+        <Card className="bg-copper-tint border-[#EBCDB8]">
+          <h2 className="text-sm font-semibold text-copper-deep">
+            You&apos;re leaving money on the van
+          </h2>
+          <p className="text-xs text-[#7A4A26] mt-1">
+            {noPlan} customer{noPlan === 1 ? "" : "s"} in your book {noPlan === 1 ? "has" : "have"}{" "}
+            no plan. Converting 1 in 5 adds{" "}
+            <b className="font-mono">£{(prizeYearlyPence / 100).toFixed(0)}/yr</b>.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+        </Card>
+      )}
+
+      <div className="flex-1" />
+      <Link href="/doorstep" className={btnClass("copper")}>
+        Offer a plan — 90 second signup
+      </Link>
+    </AppShell>
   );
 }
