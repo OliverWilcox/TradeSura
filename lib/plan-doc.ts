@@ -1,0 +1,59 @@
+// Plan document assembly — ONLY from the clause templates table
+// (CLAUDE.md §Compliance 1). No free text enters this document.
+import { prisma } from "@/lib/db";
+import { EMERGENCY_LINE } from "@/lib/compliance/interlock";
+
+export function poundsFromPence(pence: number): string {
+  return `£${(pence / 100).toFixed(2)}`;
+}
+
+export async function getPlanDocument(planId: string) {
+  const plan = await prisma.plan.findUniqueOrThrow({
+    where: { id: planId },
+    include: {
+      engineer: true,
+      customer: true,
+      tier: { include: { clauses: { include: { clause: true } } } },
+    },
+  });
+  const clauses = (plan.tier?.clauses ?? [])
+    .map((tc) => tc.clause)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  return { plan, clauses };
+}
+
+export async function planDocumentEmailHtml(planId: string) {
+  const { plan, clauses } = await getPlanDocument(planId);
+  const brand = plan.engineer.tradingName ?? "Your engineer";
+  const price = poundsFromPence(plan.priceMonthlyPence ?? 0);
+  const portalUrl = `${process.env.APP_URL}/portal/${plan.portalToken}`;
+  const coolingOffEnds = plan.coolingOffEndsAt?.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  const clauseHtml = clauses
+    .map((c) => `<h3 style="margin:14px 0 4px">${c.title}</h3><p style="margin:0">${c.bodyText}</p>`)
+    .join("\n");
+
+  return {
+    subject: `Your ${brand} care plan — ${plan.tier?.name ?? ""} (${plan.ref})`,
+    html: `
+<div style="font-family:sans-serif;max-width:560px">
+  <h1 style="margin-bottom:2px">${brand} Care Plans</h1>
+  <p style="color:#5E6975;margin-top:0">Plan ${plan.ref} · ${plan.customer.firstName} ${plan.customer.lastName}</p>
+  <p><b>You're covered on the ${plan.tier?.name} plan</b> — ${price}/month by Direct Debit.</p>
+  <h2>What your plan includes</h2>
+  ${clauseHtml}
+  <h2>Your rights</h2>
+  <p>You have a <b>14-day cooling-off period</b>${coolingOffEnds ? ` (until ${coolingOffEnds})` : ""}:
+  cancel within it for a full refund of any payment taken. You can cancel at any time after that
+  in two taps from your plan page — no phone calls, no hoops. Your payments are protected by the
+  Direct Debit Guarantee.</p>
+  <p><a href="${portalUrl}">View or manage your plan</a></p>
+  <p style="color:#8B95A1;font-size:12px">Smell gas? Call the National Gas Emergency line free: ${EMERGENCY_LINE}.
+  ${brand} Care Plans — powered by Planlock.</p>
+</div>`,
+  };
+}
