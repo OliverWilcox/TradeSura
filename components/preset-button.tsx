@@ -24,7 +24,7 @@ export function PresetButton({ blank = false }: { blank?: boolean }) {
       {busy
         ? "Creating…"
         : blank
-          ? "Add another tier"
+          ? "＋ New plan"
           : "Start with the 3 recommended tiers — Essential £9 / Plus £15 / Complete £22"}
     </button>
   );

@@ -1,5 +1,9 @@
 # Planlock — project instructions
 
+[DECISION 2026-07-07, human] Product renamed **Tradeshura** (logo at
+`public/logo.svg`). All user-facing branding uses Tradeshura; repo/folder/db
+names stay `planlock`. Plan refs are now `TSH-`.
+
 Care-plan platform for UK gas engineers. Engineers build tiered maintenance plans,
 sell them on the doorstep via a link/QR, customers pay by GoCardless Direct Debit,
 Planlock takes a 20% app fee. Full product spec: @docs/design-spec.html

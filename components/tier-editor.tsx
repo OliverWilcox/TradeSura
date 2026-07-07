@@ -186,7 +186,7 @@ export function TierEditor({
         <p className="text-xs text-flame-deep">
           <b>Legal wording locked in.</b> Your plan document assembles only from
           solicitor-approved maintenance-and-priority clauses. Breakdown-repair promises are
-          insurance — Planlock keeps you on the right side of the line automatically.
+          insurance — Tradeshura keeps you on the right side of the line automatically.
         </p>
       </Card>
 
@@ -196,7 +196,7 @@ export function TierEditor({
           <b className="font-mono text-copper">£{((pricePence - fee) / 100).toFixed(2)}/mo</b>
         </div>
         <div className="flex justify-between items-center py-1.5 text-sm border-t border-line-soft">
-          <span>Planlock fee (20%)</span>
+          <span>Tradeshura fee (20%)</span>
           <span className="font-mono">£{(fee / 100).toFixed(2)}/mo</span>
         </div>
         <p className="text-[11px] text-faint mt-1">

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireEngineer } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { activeMonthlyPence } from "@/lib/plans";
+import { dueServices } from "@/lib/reminders";
 import { AppShell } from "@/components/shells";
 import { Card, Micro, Pill, RowLine, btnClass } from "@/components/ui";
 
@@ -43,6 +44,9 @@ export default async function DashboardPage() {
   // Opportunity: converting 1 in 5 of the no-plan book at the average tier.
   const prizeYearlyPence = Math.round((noPlan / 5) * avgPence * 12);
 
+  const now = new Date();
+  const upcoming = (await dueServices(engineer.id)).filter((d) => d.dueDate >= now).slice(0, 3);
+
   const monogram = (engineer.tradingName ?? engineer.email)
     .split(/\s+/)
     .map((w) => w[0])
@@ -61,11 +65,10 @@ export default async function DashboardPage() {
     >
       <div className="bg-gradient-to-b from-iron-2 to-iron text-white rounded-[14px] p-4 border border-[#39434f]">
         <Micro className="!text-[#8FA0B0]">
-          Locked-in income ·{" "}
+          Locked-in income{" "}
           <span
-            className={`inline-block w-2.5 h-2.5 rounded-full align-middle ${healthy ? "bg-flame shadow-[0_0_0_4px_rgba(14,127,208,0.25)] animate-pulse" : "bg-warn shadow-[0_0_0_4px_rgba(221,154,20,0.25)]"}`}
-          />{" "}
-          {healthy ? "Burner lit" : "Check collections"}
+            className={`inline-block w-2.5 h-2.5 rounded-full align-middle ml-1 ${healthy ? "bg-flame shadow-[0_0_0_4px_rgba(14,127,208,0.25)] animate-pulse" : "bg-warn shadow-[0_0_0_4px_rgba(221,154,20,0.25)]"}`}
+          />
         </Micro>
         <div className="font-mono text-[34px] font-semibold text-[#F3B27E] leading-tight mt-1">
           £{(totalPence / 100).toFixed(0)}
@@ -92,6 +95,40 @@ export default async function DashboardPage() {
             )
           }
         />
+      </Card>
+
+      <Card>
+        <div className="flex justify-between items-baseline mb-1">
+          <h2 className="text-sm font-semibold">Upcoming appointments</h2>
+          <Link href="/jobs" className="text-flame-deep text-xs font-semibold">
+            View all →
+          </Link>
+        </div>
+        {upcoming.length === 0 ? (
+          <p className="text-xs text-muted py-1">
+            Nothing booked yet — service dates appear here from plan signups and your customer
+            import.
+          </p>
+        ) : (
+          upcoming.map((d, i) => (
+            <RowLine
+              key={i}
+              left={
+                <>
+                  <b>{d.customerName}</b>
+                  <span className="block font-mono text-[10px] uppercase text-faint">
+                    Annual service{d.tierName ? ` · ${d.tierName} plan` : " · no plan"}
+                  </span>
+                </>
+              }
+              right={
+                <span className="font-mono text-xs">
+                  {d.dueDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                </span>
+              }
+            />
+          ))
+        )}
       </Card>
 
       {noPlan > 0 && (

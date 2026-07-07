@@ -59,7 +59,7 @@ export function btnClass(variant: keyof typeof btnStyles = "flame") {
 
 export function RowLine({ left, right }: { left: ReactNode; right?: ReactNode }) {
   return (
-    <div className="flex justify-between items-center gap-2 py-2 border-b border-line-soft last:border-b-0 text-sm">
+    <div className="flex justify-between items-center gap-2 py-2.5 border-b border-line-soft last:border-b-0 text-sm">
       <span>{left}</span>
       {right !== undefined && <span>{right}</span>}
     </div>
@@ -82,7 +82,7 @@ export function ComingSoon({ title }: { title: string }) {
       <h1 className="font-disp text-3xl uppercase tracking-wide">{title}</h1>
       <Pill tone="info">COMING SOON</Pill>
       <p className="text-sm text-muted max-w-[32ch]">
-        This part of Planlock arrives in the next release.
+        This part of Tradeshura arrives in the next release.
       </p>
       <Link href="/" className="text-flame-deep font-semibold text-sm">
         Back to home

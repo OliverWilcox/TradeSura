@@ -1,11 +1,17 @@
+import Link from "next/link";
 import { requireEngineer } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AppShell } from "@/components/shells";
 import { Card, Micro, Pill } from "@/components/ui";
 import { CsvImport } from "@/components/csv-import";
 
-export default async function CustomersPage() {
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ all?: string }>;
+}) {
   const engineer = await requireEngineer();
+  const { all } = await searchParams;
   const customers = await prisma.customer.findMany({
     where: { engineerId: engineer.id },
     orderBy: { createdAt: "desc" },
@@ -39,7 +45,7 @@ export default async function CustomersPage() {
 
       {withStatus.length > 0 && (
         <Card>
-          {withStatus.slice(0, 50).map((c) => {
+          {(all ? withStatus : withStatus.slice(0, 8)).map((c) => {
             const appliance = c.properties[0]?.appliances[0];
             return (
               <div
@@ -74,6 +80,14 @@ export default async function CustomersPage() {
               </div>
             );
           })}
+          {!all && withStatus.length > 8 && (
+            <Link
+              href="/customers?all=1"
+              className="block text-center text-flame-deep text-sm font-semibold pt-2.5"
+            >
+              View all {withStatus.length} customers →
+            </Link>
+          )}
         </Card>
       )}
 

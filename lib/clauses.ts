@@ -108,8 +108,8 @@ export const TIER_PRESETS = [
   },
 ] as const;
 
-export const PLANLOCK_FEE_RATE = 0.2;
+export const TRADESHURA_FEE_RATE = 0.2;
 
 export function appFeePence(priceMonthlyPence: number): number {
-  return Math.round(priceMonthlyPence * PLANLOCK_FEE_RATE);
+  return Math.round(priceMonthlyPence * TRADESHURA_FEE_RATE);
 }

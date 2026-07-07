@@ -1,4 +1,4 @@
-# Planlock — full P0 loop demo
+# Tradeshura — full P0 loop demo
 
 Takes you from an empty database to: verified engineer → branded 3-tier plan →
 doorstep link → phone signup → **sandbox** mandate + subscription with the 20%
@@ -112,7 +112,7 @@ credentials — the code paths are built and unit-tested.
   Heating Ltd`, slug `smith-heating`.
 - 3 preset tiers created two-tap; blocklist rejected "We fix any breakdown
   free" inline with clause suggestion (screenshot in session log).
-- Doorstep plan `PLK-2882` → SMS printed:
+- Doorstep plan `TSH-2882` → SMS printed:
   `[SMS] from="Smith Heating" to=+447700431902 … /p/smith-heating/signup/…`
   + 2 marketing nudges queued (18:30 same day, day+3 10:00) with STOP suffix.
 - Signup page: white-label header, Gas Safe badge, 3-tier anchor, price on the

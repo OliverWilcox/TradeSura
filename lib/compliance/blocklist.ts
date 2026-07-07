@@ -40,7 +40,7 @@ export function checkWording(text: string): WordingResult {
         ok: false,
         phrase: b.label,
         explanation:
-          "That wording makes this an insurance product. Plans can only promise maintenance and priority service — Planlock keeps you on the right side of the line.",
+          "That wording makes this an insurance product. Plans can only promise maintenance and priority service — Tradeshura keeps you on the right side of the line.",
         suggestion: { code: clause.code, title: clause.title },
       };
     }

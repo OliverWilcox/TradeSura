@@ -7,7 +7,7 @@ export function newToken() {
 
 export async function newPlanRef() {
   for (;;) {
-    const ref = `PLK-${crypto.randomInt(1000, 10000)}`;
+    const ref = `TSH-${crypto.randomInt(1000, 10000)}`;
     if (!(await prisma.plan.findUnique({ where: { ref } }))) return ref;
   }
 }

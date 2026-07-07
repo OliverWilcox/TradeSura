@@ -12,9 +12,8 @@ const TABS = [
 
 export function Brandmark() {
   return (
-    <span className="font-disp font-bold text-lg tracking-wide text-ink">
-      PLAN<em className="not-italic text-flame">LOCK</em>
-    </span>
+    // eslint-disable-next-line @next/next/no-img-element -- static brand asset
+    <img src="/logo.svg" alt="Tradeshura" className="h-8 w-auto rounded-md" />
   );
 }
 
@@ -30,11 +29,11 @@ export function AppShell({
 }) {
   return (
     <div className="flex-1 flex flex-col max-w-md w-full mx-auto min-h-screen bg-panel">
-      <div className="flex justify-between items-center px-4 pt-3 pb-2">
+      <div className="flex justify-between items-center px-4 pt-4 pb-3">
         <Brandmark />
         {topRight}
       </div>
-      <main className="flex-1 flex flex-col gap-2.5 px-4 pb-20">{children}</main>
+      <main className="flex-1 flex flex-col gap-3.5 px-4 pb-24">{children}</main>
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md flex border-t border-line bg-paper">
         {TABS.map((t) => (
           <Link
@@ -73,7 +72,7 @@ export function CustomerShell({
         </div>
         {sub && <div className="text-[11px] text-muted mt-0.5">{sub}</div>}
       </header>
-      <main className="flex-1 flex flex-col gap-2.5 px-4 py-3">{children}</main>
+      <main className="flex-1 flex flex-col gap-3.5 px-4 py-4">{children}</main>
       <footer className="font-mono text-[10px] text-faint text-center px-4 py-3 space-y-1">
         <p>
           Smell gas? Call the National Gas Emergency line free:{" "}
@@ -81,7 +80,7 @@ export function CustomerShell({
             {EMERGENCY_LINE}
           </a>
         </p>
-        <p>powered by Planlock</p>
+        <p>powered by Tradeshura</p>
       </footer>
     </div>
   );

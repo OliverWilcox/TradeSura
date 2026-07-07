@@ -140,7 +140,7 @@ export function OnboardingForm(props: {
         <Card>
           <h2 className="text-sm font-semibold mb-1">Connect GoCardless — step 3</h2>
           <p className="text-xs text-muted mb-2.5">
-            Customers pay you by Direct Debit. GoCardless pays out to your bank — Planlock never
+            Customers pay you by Direct Debit. GoCardless pays out to your bank — Tradeshura never
             holds your money.
           </p>
           {props.gcConnected ? (

@@ -67,7 +67,7 @@ export default async function MorePage() {
           right={<span className="font-mono">£{(totalPence / 100).toFixed(2)}</span>}
         />
         <RowLine
-          left="Planlock fee (20%)"
+          left="Tradeshura fee (20%)"
           right={<span className="font-mono">−£{(fee / 100).toFixed(2)}</span>}
         />
         <RowLine
@@ -94,8 +94,15 @@ export default async function MorePage() {
       </Card>
 
       <Card>
-        <RowLine left={<Link href="/campaigns" className="text-flame-deep">Campaigns</Link>} right={<Pill tone="off">SOON</Pill>} />
-        <RowLine left={<Link href="/payouts" className="text-flame-deep">Payouts detail</Link>} right={<Pill tone="off">SOON</Pill>} />
+        <Link href="/messages" className="block">
+          <RowLine left="Messages & tickets" right={<Pill tone="info">OPEN</Pill>} />
+        </Link>
+        <Link href="/payouts" className="block">
+          <RowLine left="Payouts & collections" right={<Pill tone="info">OPEN</Pill>} />
+        </Link>
+        <Link href="/campaigns" className="block">
+          <RowLine left="Campaigns" right={<Pill tone="off">SOON</Pill>} />
+        </Link>
       </Card>
 
       <SignOutButton />

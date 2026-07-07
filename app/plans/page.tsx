@@ -20,7 +20,7 @@ export default async function PlansPage() {
           <Card className="bg-flame-tint border-[#BBDCF4]">
             <p className="text-xs text-flame-deep">
               <b>Legal wording locked in.</b> Your plan uses solicitor-approved
-              maintenance-and-priority terms. Breakdown-repair promises are insurance — Planlock
+              maintenance-and-priority terms. Breakdown-repair promises are insurance — Tradeshura
               keeps you on the right side of the line automatically.
             </p>
           </Card>

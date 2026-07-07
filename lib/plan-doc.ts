@@ -53,7 +53,7 @@ export async function planDocumentEmailHtml(planId: string) {
   Direct Debit Guarantee.</p>
   <p><a href="${portalUrl}">View or manage your plan</a></p>
   <p style="color:#8B95A1;font-size:12px">Smell gas? Call the National Gas Emergency line free: ${EMERGENCY_LINE}.
-  ${brand} Care Plans — powered by Planlock.</p>
+  ${brand} Care Plans — powered by Tradeshura.</p>
 </div>`,
   };
 }
