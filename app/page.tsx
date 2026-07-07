@@ -58,7 +58,7 @@ export default async function DashboardPage() {
     <AppShell
       active="HOME"
       topRight={
-        <span className="w-7 h-7 rounded-full bg-iron text-white flex items-center justify-center font-mono text-[11px]">
+        <span className="w-8 h-8 rounded-full bg-white/15 text-white flex items-center justify-center font-mono text-[11px]">
           {monogram}
         </span>
       }

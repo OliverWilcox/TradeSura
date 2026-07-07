@@ -12,7 +12,7 @@ export default async function OnboardingPage({
 
   return (
     <div className="flex-1 flex flex-col max-w-md w-full mx-auto min-h-screen bg-panel px-4">
-      <div className="flex justify-between items-center pt-3 pb-2">
+      <div className="flex justify-between items-center -mx-4 px-4 py-3 bg-black">
         <Brandmark />
         <span className="font-mono text-[10px] tracking-[0.1em] uppercase text-faint">
           {engineer.gasSafeVerifiedAt ? "Step 3 of 3" : "Step 2 of 3"}
