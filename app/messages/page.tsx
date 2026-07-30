@@ -1,18 +1,21 @@
 import { requireEngineer } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { checkEmergency } from "@/lib/compliance/interlock";
 import { AppShell } from "@/components/shells";
 import { Card, Micro, Pill } from "@/components/ui";
 
-type Triage = { label: string; tone: "warn" | "info" | "off" };
+type Triage = { label: string; tone: "danger" | "warn" | "info" | "off"; rank: number };
 
-function triage(message: string): Triage {
+// Safety first, then no-heat, then everything else (handover 1.5).
+function triage(message: string, emergency: boolean): Triage {
+  if (emergency) return { label: "EMERGENCY", tone: "danger", rank: 0 };
   if (/no heat|cold|not work|won'?t (start|fire)|no hot water/i.test(message)) {
-    return { label: "NO HEAT — PRIORITY", tone: "warn" };
+    return { label: "NO HEAT — PRIORITY", tone: "warn", rank: 1 };
   }
   if (/reschedul|move|change.*(date|time|day)|cancel.*appointment/i.test(message)) {
-    return { label: "RESCHEDULE", tone: "info" };
+    return { label: "RESCHEDULE", tone: "info", rank: 2 };
   }
-  return { label: "QUESTION", tone: "off" };
+  return { label: "QUESTION", tone: "off", rank: 3 };
 }
 
 export default async function MessagesPage() {
@@ -47,21 +50,26 @@ export default async function MessagesPage() {
 
   const tickets = reports
     .map((r, i) => {
-      const meta = r.meta as { planId?: string; message?: string } | null;
+      const meta = r.meta as { planId?: string; message?: string; emergency?: boolean } | null;
       const plan = meta?.planId ? planById.get(meta.planId) : undefined;
       if (!plan) return null; // another engineer's ticket
+      const message = meta?.message ?? "";
+      // Older rows predate the stored flag — re-run the check so no safety
+      // event is ever mis-tagged.
+      const emergency = meta?.emergency ?? checkEmergency(message).emergency;
       return {
         id: r.id,
         no: reports.length - i,
         ts: r.ts,
-        message: meta?.message ?? "",
+        message,
         customerName: `${plan.customer.firstName} ${plan.customer.lastName}`,
-        covered: plan.status === "ACTIVE",
-        tag: triage(meta?.message ?? ""),
+        // Coverage is irrelevant to a safety event and must never be shown.
+        covered: !emergency && plan.status === "ACTIVE",
+        tag: triage(message, emergency),
       };
     })
     .filter((t): t is NonNullable<typeof t> => t !== null)
-    .sort((a, b) => (a.tag.tone === "warn" ? -1 : 0) - (b.tag.tone === "warn" ? -1 : 0));
+    .sort((a, b) => a.tag.rank - b.tag.rank || b.ts.getTime() - a.ts.getTime());
 
   return (
     <AppShell active="MORE" topRight={<Micro>Messages</Micro>}>
@@ -105,8 +113,9 @@ export default async function MessagesPage() {
       <Card>
         <h2 className="text-sm font-semibold mb-1">Smart triage on every ticket</h2>
         <p className="text-xs text-muted">
-          Tickets auto-tag by type and against the customer&apos;s plan — no-heat cases surface
-          first. Replies go by text from your phone for now; in-app threads are coming.
+          Safety events sort to the top and never carry a coverage tag. Other tickets auto-tag by
+          type and against the customer&apos;s plan. Replies go by text from your phone for now;
+          in-app threads are coming.
         </p>
       </Card>
     </AppShell>

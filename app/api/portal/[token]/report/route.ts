@@ -38,6 +38,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   await track("problem_reported", { type: "CUSTOMER", id: plan.customerId }, {
     planId: plan.id,
     message: parsed.data.message,
+    // Safety events are tagged EMERGENCY on the engineer's ticket list and
+    // never carry a coverage tag (handover 1.5).
+    emergency: check.emergency,
+    matched: check.emergency ? check.matched : undefined,
     emergencyAcknowledged: check.emergency ? parsed.data.acknowledged : undefined,
   });
 

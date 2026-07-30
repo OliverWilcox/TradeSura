@@ -13,7 +13,11 @@ export default async function TierPage({ params }: { params: Promise<{ tierId: s
     include: { clauses: true },
   });
   if (!tier) notFound();
-  const templates = await prisma.clauseTemplate.findMany({ orderBy: { sortOrder: "asc" } });
+  // CARE clauses stay out of the picker until solicitor sign-off (handover §3).
+  const templates = await prisma.clauseTemplate.findMany({
+    where: { status: "SAFE" },
+    orderBy: { sortOrder: "asc" },
+  });
 
   return (
     <AppShell active="PLANS" topRight={<Micro>Plan builder</Micro>}>
@@ -31,6 +35,10 @@ export default async function TierPage({ params }: { params: Promise<{ tierId: s
           code: t.code,
           title: t.title,
           kind: t.kind,
+          category: t.category,
+          upliftPence: t.upliftPence,
+          pricingLabel: t.pricingLabel,
+          highlight: t.highlight,
         }))}
       />
     </AppShell>

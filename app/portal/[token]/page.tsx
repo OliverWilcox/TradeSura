@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { CustomerShell } from "@/components/shells";
-import { Card, Pill, RowLine } from "@/components/ui";
+import { Card, NotIncluded, Pill, RowLine } from "@/components/ui";
 import { poundsFromPence } from "@/lib/plan-doc";
 
 export default async function PortalPage({ params }: { params: Promise<{ token: string }> }) {
@@ -78,6 +78,8 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
           ))}
         </Card>
       )}
+
+      {clauses.length > 0 && <NotIncluded />}
 
       {plan.status === "ACTIVE" && (
         <Card>

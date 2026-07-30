@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { btnClass } from "@/components/ui";
+import { NotIncluded, btnClass } from "@/components/ui";
 
 type Tier = {
   id: string;
@@ -70,6 +70,8 @@ export function SignupTiers({ token, tiers }: { token: string; tiers: Tier[] }) 
           <p className="text-xs text-muted mt-1">{t.lines.join(" · ")}</p>
         </button>
       ))}
+
+      <NotIncluded />
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
