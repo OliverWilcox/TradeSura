@@ -19,6 +19,12 @@ enum ClauseKind {
   ADD
 }
 
+// SAFE ships in the picker; CARE is hidden until solicitor sign-off.
+enum ClauseStatus {
+  SAFE
+  CARE
+}
+
 enum ActorType {
   ENGINEER
   CUSTOMER
@@ -96,13 +102,19 @@ model Appliance {
 
 // Solicitor-approved wording. Seeded; read-only in the app.
 model ClauseTemplate {
-  id        String       @id @default(cuid())
-  code      String       @unique
-  title     String
-  bodyText  String
-  kind      ClauseKind
-  sortOrder Int
-  tiers     TierClause[]
+  id           String       @id @default(cuid())
+  code         String       @unique
+  title        String
+  bodyText     String
+  kind         ClauseKind
+  status       ClauseStatus @default(SAFE)
+  category     String       @default("Core gas servicing")
+  // Suggested monthly uplift in pence; null = core, no charge, or engineer-set.
+  upliftPence  Int?
+  pricingLabel String?
+  highlight    Boolean      @default(false)
+  sortOrder    Int
+  tiers        TierClause[]
 }
 
 model PlanTier {

@@ -5,11 +5,22 @@ import { prisma } from "../lib/db";
 import { CLAUSE_TEMPLATES } from "../lib/clauses";
 
 async function main() {
-  for (const c of CLAUSE_TEMPLATES) {
+  for (const [i, c] of CLAUSE_TEMPLATES.entries()) {
+    const row = {
+      title: c.title,
+      bodyText: c.bodyText,
+      kind: c.kind,
+      status: c.status,
+      category: c.category,
+      upliftPence: c.upliftPence,
+      pricingLabel: c.pricingLabel ?? null,
+      highlight: c.highlight ?? false,
+      sortOrder: i,
+    };
     await prisma.clauseTemplate.upsert({
       where: { code: c.code },
-      update: { title: c.title, bodyText: c.bodyText, kind: c.kind, sortOrder: c.sortOrder },
-      create: { ...c },
+      update: row,
+      create: { code: c.code, ...row },
     });
   }
   console.log(`Seeded ${CLAUSE_TEMPLATES.length} clause templates`);
