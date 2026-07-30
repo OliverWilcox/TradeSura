@@ -1,7 +1,7 @@
 # Planlock — project instructions
 
-[DECISION 2026-07-07, human] Product renamed **Tradeshura** (logo at
-`public/logo.svg`). All user-facing branding uses Tradeshura; repo/folder/db
+[DECISION 2026-07-07, human] Product renamed **TradeSura** (logo at
+`public/logo.svg`). All user-facing branding uses TradeSura; repo/folder/db
 names stay `planlock`. Plan refs are now `TSH-`.
 
 Care-plan platform for UK gas engineers. Engineers build tiered maintenance plans,

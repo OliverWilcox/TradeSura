@@ -47,7 +47,7 @@ export default async function MorePage() {
       </Card>
 
       <Card>
-        <h2 className="text-sm font-semibold mb-1">GoCardless (sandbox)</h2>
+        <h2 className="text-sm font-semibold mb-1">Direct Debit</h2>
         {engineer.gcOrganisationId ? (
           <RowLine
             left="Connection"
@@ -55,7 +55,7 @@ export default async function MorePage() {
           />
         ) : (
           <a href="/api/gc/connect" className="text-flame-deep text-sm font-semibold">
-            Connect GoCardless →
+            Connect Direct Debit →
           </a>
         )}
       </Card>
@@ -67,7 +67,7 @@ export default async function MorePage() {
           right={<span className="font-mono">£{(totalPence / 100).toFixed(2)}</span>}
         />
         <RowLine
-          left="Tradeshura fee (20%)"
+          left="TradeSura fee (20%)"
           right={<span className="font-mono">−£{(fee / 100).toFixed(2)}</span>}
         />
         <RowLine
@@ -99,6 +99,9 @@ export default async function MorePage() {
         </Link>
         <Link href="/payouts" className="block">
           <RowLine left="Payouts & collections" right={<Pill tone="info">OPEN</Pill>} />
+        </Link>
+        <Link href="/trades" className="block">
+          <RowLine left="Trades & TradePacks" right={<Pill tone="info">OPEN</Pill>} />
         </Link>
         <Link href="/campaigns" className="block">
           <RowLine left="Campaigns" right={<Pill tone="off">SOON</Pill>} />

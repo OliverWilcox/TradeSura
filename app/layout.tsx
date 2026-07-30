@@ -21,7 +21,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tradeshura",
+  title: "TradeSura",
   description: "Care plans for gas engineers, collected by Direct Debit",
   manifest: "/manifest.json",
 };

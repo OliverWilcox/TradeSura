@@ -16,8 +16,8 @@ export async function POST(req: Request) {
 
   await sendEmail({
     to: email,
-    subject: "Sign in to Tradeshura",
-    html: `<p>Tap to sign in to Tradeshura:</p><p><a href="${link}">${link}</a></p><p>This link is valid for 15 minutes.</p>`,
+    subject: "Sign in to TradeSura",
+    html: `<p>Tap to sign in to TradeSura:</p><p><a href="${link}">${link}</a></p><p>This link is valid for 15 minutes.</p>`,
   });
 
   // Dev email driver only prints to the server console; surface the link in

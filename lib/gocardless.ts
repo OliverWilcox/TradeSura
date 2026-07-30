@@ -1,5 +1,5 @@
 // GoCardless sandbox integration. Engineer is the merchant: all merchant API
-// calls use the engineer's OAuth org token. Tradeshura never holds funds.
+// calls use the engineer's OAuth org token. TradeSura never holds funds.
 // Endpoints per developer.gocardless.com (checked 2026-07-06).
 import crypto from "node:crypto";
 
@@ -76,7 +76,7 @@ async function gcFetch<T>(
 type GcLinks = Record<string, string | undefined>;
 
 // One billing request carries both the mandate and the monthly subscription
-// with Tradeshura's app fee — GoCardless creates both when the customer
+// with TradeSura's app fee — GoCardless creates both when the customer
 // completes the hosted flow.
 export async function createBillingRequestWithSubscription(
   accessToken: string,

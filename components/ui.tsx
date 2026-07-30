@@ -28,6 +28,7 @@ const pillStyles = {
   warn: "bg-warn-tint text-[#9A6C0C]",
   info: "bg-flame-tint text-flame-deep",
   off: "bg-panel text-faint border border-line",
+  danger: "bg-danger text-white",
 } as const;
 
 export function Pill({
@@ -76,13 +77,30 @@ export function Money({ pence, suffix = "" }: { pence: number; suffix?: string }
   );
 }
 
+// Handover 1.4 — the industry's failure mode is a customer who thinks the plan
+// covers breakdowns. Stated plainly wherever the plan is presented.
+export function NotIncluded() {
+  return (
+    <div className="bg-warn-tint border border-[#EBD98F] rounded-xl px-4 py-3">
+      <p className="font-mono text-[10px] tracking-[0.1em] uppercase text-[#9A6C0C] mb-1">
+        What&apos;s not included
+      </p>
+      <p className="text-xs text-[#7A5E00] leading-relaxed">
+        <b>Breakdown repairs.</b> If something breaks, your engineer prioritises you and repair
+        work is chargeable at your plan discount. This plan is a maintenance &amp; priority
+        agreement, not an insurance policy.
+      </p>
+    </div>
+  );
+}
+
 export function ComingSoon({ title }: { title: string }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-3 py-24 text-center">
       <h1 className="font-disp text-3xl uppercase tracking-wide">{title}</h1>
       <Pill tone="info">COMING SOON</Pill>
       <p className="text-sm text-muted max-w-[32ch]">
-        This part of Tradeshura arrives in the next release.
+        This part of TradeSura arrives in the next release.
       </p>
       <Link href="/" className="text-flame-deep font-semibold text-sm">
         Back to home

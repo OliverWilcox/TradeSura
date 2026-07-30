@@ -1,4 +1,4 @@
-# Tradeshura — full P0 loop demo
+# TradeSura — full P0 loop demo
 
 Takes you from an empty database to: verified engineer → branded 3-tier plan →
 doorstep link → phone signup → **sandbox** mandate + subscription with the 20%

@@ -46,6 +46,10 @@ export async function planDocumentEmailHtml(planId: string) {
   <p><b>You're covered on the ${plan.tier?.name} plan</b> — ${price}/month by Direct Debit.</p>
   <h2>What your plan includes</h2>
   ${clauseHtml}
+  <h2>What's not included</h2>
+  <p style="margin:0"><b>Breakdown repairs.</b> If something breaks, your engineer prioritises you
+  and repair work is chargeable at your plan discount. This plan is a maintenance &amp; priority
+  agreement, not an insurance policy.</p>
   <h2>Your rights</h2>
   <p>You have a <b>14-day cooling-off period</b>${coolingOffEnds ? ` (until ${coolingOffEnds})` : ""}:
   cancel within it for a full refund of any payment taken. You can cancel at any time after that
@@ -53,7 +57,7 @@ export async function planDocumentEmailHtml(planId: string) {
   Direct Debit Guarantee.</p>
   <p><a href="${portalUrl}">View or manage your plan</a></p>
   <p style="color:#8B95A1;font-size:12px">Smell gas? Call the National Gas Emergency line free: ${EMERGENCY_LINE}.
-  ${brand} Care Plans — powered by Tradeshura.</p>
+  ${brand} Care Plans — powered by TradeSura.</p>
 </div>`,
   };
 }

@@ -138,20 +138,20 @@ export function OnboardingForm(props: {
 
       {saved && (
         <Card>
-          <h2 className="text-sm font-semibold mb-1">Connect GoCardless — step 3</h2>
+          <h2 className="text-sm font-semibold mb-1">Connect Direct Debit — step 3</h2>
           <p className="text-xs text-muted mb-2.5">
-            Customers pay you by Direct Debit. GoCardless pays out to your bank — Tradeshura never
+            Customers pay you by Direct Debit. Paid out direct to your bank — TradeSura never
             holds your money.
           </p>
           {props.gcConnected ? (
             <div className="bg-ok-tint border border-[#BCE6CF] rounded-[10px] px-3 py-2.5 text-xs">
-              <b className="text-ok">✓ GoCardless connected (sandbox)</b>
+              <b className="text-ok">✓ Direct Debit connected</b>
             </div>
           ) : (
             <>
               {props.gcStatus === "missing_creds" && (
                 <p className="text-xs text-danger mb-2">
-                  GoCardless sandbox credentials aren&apos;t configured in .env yet — a human task
+                  Payment provider credentials aren&apos;t configured in .env yet — a human task
                   before this step works.
                 </p>
               )}
@@ -161,7 +161,7 @@ export function OnboardingForm(props: {
                 </p>
               )}
               <a href="/api/gc/connect" className={btnClass()}>
-                Connect GoCardless (sandbox)
+                Connect Direct Debit
               </a>
             </>
           )}
@@ -176,7 +176,7 @@ export function OnboardingForm(props: {
         </Link>
       )}
       <p className="font-mono text-[10px] text-faint text-center pt-1">
-        Payouts by GoCardless · Verification refreshed monthly
+        Paid out direct to your bank · Verification refreshed monthly
       </p>
     </div>
   );

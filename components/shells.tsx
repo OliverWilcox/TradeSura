@@ -13,7 +13,7 @@ const TABS = [
 export function Brandmark() {
   return (
     // eslint-disable-next-line @next/next/no-img-element -- static brand asset
-    <img src="/logo.svg" alt="Tradeshura" className="h-8 w-auto rounded-md" />
+    <img src="/logo-mark.svg" alt="TradeSura" className="h-8 w-auto rounded-md" />
   );
 }
 
@@ -80,7 +80,7 @@ export function CustomerShell({
             {EMERGENCY_LINE}
           </a>
         </p>
-        <p>powered by Tradeshura</p>
+        <p>powered by TradeSura</p>
       </footer>
     </div>
   );

@@ -50,18 +50,18 @@ export default async function PayoutsPage() {
           {pounds(totalPence - fee)}
         </div>
         <p className="text-xs text-muted mt-1">
-          {count} active plan{count === 1 ? "" : "s"} · GoCardless → your bank
+          {count} active plan{count === 1 ? "" : "s"} · paid out direct to your bank
         </p>
         <p className="text-[11px] text-faint mt-1">
-          The live payout feed switches on with GoCardless credentials; until then this is the
-          maths of your active plans.
+          The live payout feed switches on once the payment provider is connected; until then
+          this is the maths of your active plans.
         </p>
       </Card>
 
       <Card>
         <Micro className="mb-1.5">This month, transparently</Micro>
         <RowLine left="Plan collections (expected)" right={<span className="font-mono">{pounds(totalPence)}</span>} />
-        <RowLine left="Tradeshura fee (20%)" right={<span className="font-mono">−{pounds(fee)}</span>} />
+        <RowLine left="TradeSura fee (20%)" right={<span className="font-mono">−{pounds(fee)}</span>} />
         <RowLine left="Collections confirmed" right={<span className="font-mono">{confirmed}</span>} />
         <RowLine
           left={<b>To your bank (before DD costs)</b>}
@@ -91,7 +91,7 @@ export default async function PayoutsPage() {
           ))
         )}
         <p className="text-xs text-muted mt-1.5">
-          Smart retries run at GoCardless; most failures recover themselves.
+          Smart retries run automatically; most failures recover themselves.
         </p>
       </Card>
 
