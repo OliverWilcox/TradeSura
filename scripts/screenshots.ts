@@ -31,7 +31,12 @@ async function main() {
   });
   const page = await browser.newPage();
 
-  // Sign-in page (logged out), then authenticate via the dev magic link.
+  // Logged-out surface first, then authenticate via the dev magic link.
+  // Clear cookies so the welcome screen captures the true first-open state.
+  const cdp = await page.createCDPSession();
+  await cdp.send("Network.clearBrowserCookies");
+  await page.goto(`${BASE}/welcome`, { waitUntil: "networkidle0" });
+  await shot(page, "00-welcome");
   await page.goto(`${BASE}/signin`, { waitUntil: "networkidle0" });
   await shot(page, "01-signin");
   const devLink = await page.evaluate(async (email) => {
@@ -48,13 +53,14 @@ async function main() {
     ["/", "02-dashboard"],
     ["/onboarding", "03-onboarding"],
     ["/plans", "04-plans"],
-    ["/doorstep", "06-doorstep"],
+    ["/offer", "06-offer"],
     ["/customers", "09-customers"],
     ["/jobs", "10-jobs"],
     ["/messages", "11-messages"],
     ["/payouts", "12-payouts"],
     ["/more", "13-more"],
-    ["/campaigns", "14-campaigns-stub"],
+    ["/trades", "14-trades"],
+    ["/campaigns", "20-campaigns-stub"],
   ];
   for (const [path, name] of simple) {
     await page.goto(`${BASE}${path}`, { waitUntil: "networkidle0" });
@@ -76,23 +82,23 @@ async function main() {
     await shot(page, "05b-tier-editor-blocked");
   }
 
-  // Doorstep live + QR (pending plan), celebration (active plan)
+  // Offer live + QR (pending plan), celebration (active plan)
   if (pending) {
-    await page.goto(`${BASE}/doorstep/${pending.id}`, { waitUntil: "networkidle0" });
+    await page.goto(`${BASE}/offer/${pending.id}`, { waitUntil: "networkidle0" });
     await page.$$eval("button", (btns) =>
       btns.find((x) => x.textContent?.includes("Show QR"))?.click(),
     );
     await page.waitForSelector('img[alt="Signup QR code"]');
-    await shot(page, "07-doorstep-live-qr");
+    await shot(page, "07-offer-live-qr");
     await page.goto(`${BASE}/p/${engineer.slug}/signup/${pending.signupToken}`, {
       waitUntil: "networkidle0",
     });
     await shot(page, "15-signup-tiers");
   }
   if (active) {
-    await page.goto(`${BASE}/doorstep/${active.id}`, { waitUntil: "networkidle0" });
-    await page.waitForFunction(() => document.body.textContent?.includes("Flame lit"));
-    await shot(page, "08-doorstep-celebration");
+    await page.goto(`${BASE}/offer/${active.id}`, { waitUntil: "networkidle0" });
+    await page.waitForFunction(() => document.body.textContent?.includes("Plan active"));
+    await shot(page, "08-plan-active");
     await page.goto(`${BASE}/p/${engineer.slug}/signup/${active.signupToken}/confirmed`, {
       waitUntil: "networkidle0",
     });
