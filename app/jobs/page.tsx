@@ -196,7 +196,7 @@ export default async function JobsPage({
         </div>
       </Card>
 
-      <Link href="/doorstep" className={btnClass("copper")}>
+      <Link href="/offer" className={btnClass("copper")}>
         Offer a plan to a no-plan customer
       </Link>
     </AppShell>

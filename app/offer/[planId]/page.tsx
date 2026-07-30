@@ -4,9 +4,9 @@ import { requireEngineer } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AppShell } from "@/components/shells";
 import { Micro } from "@/components/ui";
-import { DoorstepLive } from "@/components/doorstep-live";
+import { OfferLive } from "@/components/offer-live";
 
-export default async function DoorstepLivePage({
+export default async function OfferLivePage({
   params,
 }: {
   params: Promise<{ planId: string }>;
@@ -22,8 +22,8 @@ export default async function DoorstepLivePage({
   const qrDataUrl = await QRCode.toDataURL(link, { width: 280, margin: 1 });
 
   return (
-    <AppShell active="HOME" topRight={<Micro>Doorstep</Micro>}>
-      <DoorstepLive planId={plan.id} link={link} qrDataUrl={qrDataUrl} />
+    <AppShell active="HOME" topRight={<Micro>Offer a plan</Micro>}>
+      <OfferLive planId={plan.id} link={link} qrDataUrl={qrDataUrl} />
     </AppShell>
   );
 }

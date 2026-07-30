@@ -8,7 +8,7 @@ type Customer = { id: string; firstName: string; lastName: string; phone: string
 
 const inputCls = "w-full border border-line rounded-[10px] px-3 py-2.5 text-sm bg-paper";
 
-export function DoorstepStart({ customers }: { customers: Customer[] }) {
+export function OfferStart({ customers }: { customers: Customer[] }) {
   const router = useRouter();
   const [mode, setMode] = useState<"new" | "existing">(customers.length ? "existing" : "new");
   const [customerId, setCustomerId] = useState(customers[0]?.id ?? "");
@@ -28,7 +28,7 @@ export function DoorstepStart({ customers }: { customers: Customer[] }) {
     setBusy(true);
     setError(null);
     const body = mode === "existing" ? { customerId } : form;
-    const res = await fetch("/api/doorstep", {
+    const res = await fetch("/api/offer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -39,7 +39,7 @@ export function DoorstepStart({ customers }: { customers: Customer[] }) {
       setError(data.error ?? "Could not send the link.");
       return;
     }
-    router.push(`/doorstep/${data.planId}`);
+    router.push(`/offer/${data.planId}`);
   }
 
   return (

@@ -78,7 +78,7 @@ export async function POST(req: Request) {
   const link = `${process.env.APP_URL}/p/${engineer.slug}/signup/${plan.signupToken}`;
   const brand = engineer.tradingName ?? engineer.slug;
 
-  // Signup link is customer-requested on the doorstep → transactional.
+  // Signup link is customer-requested at the end of the job → transactional.
   await sendSms({
     engineerId,
     to: customer.phone,
@@ -106,7 +106,7 @@ export async function POST(req: Request) {
     });
   }
 
-  await track("doorstep_link_sent", { type: "ENGINEER", id: engineerId }, {
+  await track("offer_link_sent", { type: "ENGINEER", id: engineerId }, {
     planId: plan.id,
     ref: plan.ref,
     customerId: customer.id,

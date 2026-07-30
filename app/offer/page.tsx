@@ -3,9 +3,9 @@ import { requireEngineer } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AppShell } from "@/components/shells";
 import { Card, Micro } from "@/components/ui";
-import { DoorstepStart } from "@/components/doorstep-start";
+import { OfferStart } from "@/components/offer-start";
 
-export default async function DoorstepPage() {
+export default async function OfferPage() {
   const engineer = await requireEngineer();
   const customers = await prisma.customer.findMany({
     where: { engineerId: engineer.id },
@@ -18,7 +18,7 @@ export default async function DoorstepPage() {
   });
 
   return (
-    <AppShell active="HOME" topRight={<Micro>Doorstep</Micro>}>
+    <AppShell active="HOME" topRight={<Micro>Offer a plan</Micro>}>
       <Card className="text-center py-5">
         <Micro>Average signup time</Micro>
         <div className="font-mono text-4xl font-semibold text-flame-deep mt-1">0:84</div>
@@ -35,7 +35,7 @@ export default async function DoorstepPage() {
           </p>
         </Card>
       ) : (
-        <DoorstepStart customers={customers} />
+        <OfferStart customers={customers} />
       )}
     </AppShell>
   );

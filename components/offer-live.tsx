@@ -25,7 +25,7 @@ function stepIndex(s: Status) {
   return 0;
 }
 
-export function DoorstepLive({
+export function OfferLive({
   planId,
   link,
   qrDataUrl,
@@ -59,8 +59,21 @@ export function DoorstepLive({
   if (s?.status === "ACTIVE") {
     return (
       <div className="fixed inset-0 z-50 bg-iron text-white flex flex-col items-center justify-center gap-4 px-8 text-center">
-        <div className="text-6xl animate-bounce">🔥</div>
-        <h1 className="font-disp text-4xl uppercase tracking-wide">Flame lit</h1>
+        {/* Brand tick, never an orange flame. */}
+        <svg viewBox="0 0 64 64" className="w-16 h-16" aria-hidden="true">
+          <circle cx="32" cy="32" r="30" fill="#1966CC" />
+          <path
+            d="M19 33.5 L28 42 L45 24"
+            fill="none"
+            stroke="#F2F5F8"
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <h1 className="font-disp text-4xl uppercase tracking-wide">
+          Plan active — +£{((s.priceMonthlyPence ?? 0) / 100).toFixed(0)}/mo locked in
+        </h1>
         <p className="text-sm text-[#C7D0D9]">
           {s.customerFirstName} {s.customerLastName} is on a plan at{" "}
           <Money pence={s.priceMonthlyPence ?? 0} suffix="/mo" />.
@@ -131,7 +144,7 @@ export function DoorstepLive({
             <b className="font-mono">
               £{(((s.incomeMonthlyPence + (s.priceMonthlyPence ?? 1500)) / 100) | 0)}/mo
             </b>
-            . One doorstep. Forever-ish.
+            . One job. Forever-ish.
           </p>
         </Card>
       )}

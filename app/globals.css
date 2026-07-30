@@ -23,6 +23,14 @@
   --color-danger-tint: #fbe9e9;
   --color-line: #d9dee4;
   --color-line-soft: #e7ebef;
+  /* Welcome / auth surface (handover §2 approved palette) */
+  --color-night: #0b0f14;
+  --color-night-card: #121a24;
+  --color-brand-blue: #1966cc;
+  --color-brand-blue-lift: #4d94f0;
+  --color-brand-copper: #c9803f;
+  --color-night-text: #f2f5f8;
+  --color-night-muted: #96a3b1;
   --font-sans: var(--font-barlow), sans-serif;
   --font-disp: var(--font-barlow-condensed), sans-serif;
   --font-mono: var(--font-plex-mono), monospace;

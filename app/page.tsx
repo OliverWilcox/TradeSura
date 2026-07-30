@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { requireEngineer } from "@/lib/auth";
+import { getEngineerId, requireEngineer } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { activeMonthlyPence } from "@/lib/plans";
 import { dueServices } from "@/lib/reminders";
@@ -8,6 +9,10 @@ import { AppShell } from "@/components/shells";
 import { Card, Micro, Pill, RowLine, btnClass } from "@/components/ui";
 
 export default async function DashboardPage() {
+  // First open lands on the welcome screen; after that, straight to sign-in.
+  if (!(await getEngineerId())) {
+    redirect((await cookies()).get("ts_welcome") ? "/signin" : "/welcome");
+  }
   const engineer = await requireEngineer();
   if (!engineer.gasSafeVerifiedAt) redirect("/onboarding");
 
@@ -145,8 +150,8 @@ export default async function DashboardPage() {
       )}
 
       <div className="flex-1" />
-      <Link href="/doorstep" className={btnClass("copper")}>
-        Offer a plan — 90 second signup
+      <Link href="/offer" className={btnClass("copper")}>
+        Offer a plan — signed in 90 seconds
       </Link>
     </AppShell>
   );

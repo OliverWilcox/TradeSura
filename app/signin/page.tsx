@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Brandmark } from "@/components/shells";
-import { Card, btnClass } from "@/components/ui";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
-export default function SignInPage() {
+// Auth surface is dark so the brand logo sits on a dark ground, never in a
+// black box on white (handover 1.6). Swap to the light-variant asset and a
+// light page here if/when that artwork lands.
+function SignInInner() {
+  const isNew = useSearchParams().get("new") === "1";
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [devLink, setDevLink] = useState<string | null>(null);
@@ -31,44 +34,65 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col max-w-md w-full mx-auto min-h-screen bg-panel px-4">
-      <div className="pt-16 pb-8 text-center">
-        <Brandmark />
-        <p className="text-sm text-muted mt-2">
-          Care plans, sold on the doorstep, collected by Direct Debit.
+    <div className="flex-1 flex flex-col min-h-screen bg-night text-night-text">
+      <div className="flex-1 flex flex-col justify-center max-w-md w-full mx-auto px-6 py-10 gap-6">
+        {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+        <img src="/logo-mark.svg" alt="TradeSura" className="h-10 w-auto self-start" />
+
+        <div className="bg-night-card border border-[#22303F] rounded-[16px] p-5">
+          {sent ? (
+            <div className="space-y-3">
+              <h1 className="font-semibold">Check your email</h1>
+              <p className="text-sm text-night-muted">
+                We&apos;ve sent a sign-in link to <b className="text-night-text">{email}</b>.
+                It&apos;s valid for 15 minutes.
+              </p>
+              {devLink && (
+                <a
+                  href={devLink}
+                  className="block text-center border-[1.5px] border-brand-blue text-brand-blue-lift font-semibold rounded-[10px] px-4 py-3"
+                >
+                  Dev: open the sign-in link
+                </a>
+              )}
+            </div>
+          ) : (
+            <form onSubmit={submit} className="space-y-3">
+              <h1 className="font-semibold">
+                {isNew ? "Create your account" : "Sign in or create your account"}
+              </h1>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.co.uk"
+                className="w-full border border-[#2A3A4C] rounded-[10px] px-3 py-3 text-sm bg-night text-night-text placeholder:text-night-muted"
+              />
+              {error && <p className="text-sm text-danger">{error}</p>}
+              <button
+                type="submit"
+                disabled={busy}
+                className="block w-full text-center bg-brand-blue text-white font-semibold rounded-[10px] px-4 py-3.5 disabled:opacity-50"
+              >
+                {busy ? "Sending…" : "Email me a sign-in link"}
+              </button>
+            </form>
+          )}
+        </div>
+
+        <p className="text-xs text-night-muted text-center">
+          Care plans your customers sign at the end of the job, collected by Direct Debit.
         </p>
       </div>
-      <Card>
-        {sent ? (
-          <div className="space-y-3">
-            <h1 className="font-semibold">Check your email</h1>
-            <p className="text-sm text-muted">
-              We&apos;ve sent a sign-in link to <b>{email}</b>. It&apos;s valid for 15 minutes.
-            </p>
-            {devLink && (
-              <a href={devLink} className={btnClass("ghost")}>
-                Dev: open the sign-in link
-              </a>
-            )}
-          </div>
-        ) : (
-          <form onSubmit={submit} className="space-y-3">
-            <h1 className="font-semibold">Sign in or create your account</h1>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.co.uk"
-              className="w-full border border-line rounded-[10px] px-3 py-3 text-sm bg-paper"
-            />
-            {error && <p className="text-sm text-danger">{error}</p>}
-            <button type="submit" disabled={busy} className={btnClass()}>
-              {busy ? "Sending…" : "Email me a sign-in link"}
-            </button>
-          </form>
-        )}
-      </Card>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense>
+      <SignInInner />
+    </Suspense>
   );
 }
