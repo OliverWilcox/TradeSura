@@ -72,11 +72,16 @@ export default function SignUp() {
     setOtpBusy(true);
     setOtpError(null);
     try {
-      const data = await api<{ requestToken: string }>("/api/onboarding/phone/start", {
-        method: "POST",
-        body: JSON.stringify({ phone }),
-      });
+      const data = await api<{ requestToken: string; devCode?: string }>(
+        "/api/onboarding/phone/start",
+        { method: "POST", body: JSON.stringify({ phone }) },
+      );
       setOtpRequestToken(data.requestToken);
+      // Twilio isn't configured (yet) — the backend hands the code straight
+      // back instead of only logging it server-side, mirroring the sign-in/
+      // sign-up devLink pattern. Pre-filled, not auto-submitted, so it's
+      // obvious this is standing in for a real text, not a passwordless skip.
+      if (data.devCode) setOtpCode(data.devCode);
     } catch (e) {
       setOtpError(e instanceof ApiError ? e.message : "Couldn't send the code.");
     } finally {

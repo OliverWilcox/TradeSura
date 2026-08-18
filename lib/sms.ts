@@ -42,7 +42,16 @@ function alphanumericSenderId(name: string): string {
 // reply (currently just the platform-sent OTP code, which shares its number
 // with the inbound STOP webhook so the compliance line above points somewhere
 // real).
-async function deliver(senderName: string, to: string, body: string, opts: { fromLongCode?: boolean } = {}) {
+// Returns whether the message actually went out via Twilio — false means it
+// only hit the console.log dev driver, which callers can use to decide
+// whether it's safe to hand the plaintext code/link back to the client (see
+// sendVerificationCode below).
+async function deliver(
+  senderName: string,
+  to: string,
+  body: string,
+  opts: { fromLongCode?: boolean } = {},
+): Promise<boolean> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const fromNumber = process.env.TWILIO_SMS_NUMBER;
@@ -50,7 +59,7 @@ async function deliver(senderName: string, to: string, body: string, opts: { fro
   if (!accountSid || !authToken || !fromNumber) {
     // Dev driver. Real provider keys are a human task.
     console.log(`[SMS] from="${senderName}" to=${to}\n      ${body}`);
-    return;
+    return false;
   }
 
   const from = opts.fromLongCode ? fromNumber : alphanumericSenderId(senderName);
@@ -64,7 +73,9 @@ async function deliver(senderName: string, to: string, body: string, opts: { fro
   });
   if (!res.ok) {
     console.error(`[SMS] Twilio send to ${to} failed (${res.status}): ${await res.text()}`);
+    return false;
   }
+  return true;
 }
 
 // Signup-time phone verification code. Sent from the platform itself, not an
@@ -72,13 +83,17 @@ async function deliver(senderName: string, to: string, body: string, opts: { fro
 // flow) — so this bypasses sendSms()'s engineer lookup, OutboundSms logging,
 // and marketing-class rules (quiet hours / STOP suffix) entirely: it's a
 // transactional code the user just asked for, not a marketing send.
-export async function sendVerificationCode(to: string, code: string) {
-  await deliver(
+// Returns `devCode` (the plaintext code) only when Twilio isn't configured,
+// so callers can surface it in dev the same way /api/auth/request's devLink
+// stands in for real email delivery — never once Twilio is really sending.
+export async function sendVerificationCode(to: string, code: string): Promise<{ devCode?: string }> {
+  const delivered = await deliver(
     "TradeSura",
     to,
     `Your TradeSura verification code is ${code}. It expires in 10 minutes.`,
     { fromLongCode: true },
   );
+  return delivered ? {} : { devCode: code };
 }
 
 export async function sendSms(opts: {

@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const codeHash = createHash("sha256").update(code).digest("hex");
   const requestToken = await signToken({ phone, codeHash }, "10m");
-  await sendVerificationCode(phone, code);
+  const { devCode } = await sendVerificationCode(phone, code);
 
-  return NextResponse.json({ requestToken });
+  return NextResponse.json({ requestToken, ...(devCode ? { devCode } : {}) });
 }
