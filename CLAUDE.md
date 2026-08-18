@@ -20,19 +20,30 @@ Planlock takes a 20% app fee. Full product spec: @docs/design-spec.html
   [DECISION 2026-07-06, human] Scope extended post-P0: Screen 07 (service
   calendar + reminder engine, lite: no self-book slots) and a working "More"
   hub (settings, GC status, payouts summary, sign out) are now in scope.
+  [DECISION 2026-08-03, human] During the Expo rewrite, Messages & tickets,
+  Trades & TradePacks, and the full Payouts & Collections screen (all three
+  had already been built beyond original P0 scope in earlier handovers) were
+  briefly stubbed as "coming soon" and then explicitly restored to mobile
+  scope — Messages carries the engineer's only visibility into the
+  gas-emergency interlock firing, which makes it more than a nicety. Campaigns,
+  cancel/save flow, and referrals remain out of scope, still stubbed.
 - When the spec and this file conflict, this file wins. When unsure between two
   approaches, present both briefly and ask — do not decide architecture alone.
 
 ## Stack  [DECISION — swap only if the assigned dev prefers otherwise, then update this file]
-- Next.js (App Router) + TypeScript (strict). One repo, one app.
+- Next.js (App Router) + TypeScript (strict), at the repo root.
 - Postgres + Prisma. Tailwind for styling — implement the spec's design tokens
   (Flue Iron #232A33, Burner Blue #0E7FD0, Copper #C2622E; Barlow / Barlow
   Condensed / IBM Plex Mono) as Tailwind theme values.
-- Engineer surface = **mobile-first responsive web app (installable PWA)**, not
-  native, for v1. Customer surface = plain web pages from tokenised links, no
-  accounts, no app. [DECISION] Mobile packaging: engineer surface ships as an
-  installable PWA now and gets a Capacitor wrap after this build is proven;
-  customer surface stays plain web, no accounts, no app.
+- [DECISION 2026-08-03, human] Engineer surface is a native app built with
+  Expo/React Native, in a sibling `mobile/` folder (own `package.json`, no
+  workspace tooling) — supersedes the earlier PWA-now/Capacitor-later plan.
+  Next.js is now the JSON API backend for that app, plus the customer web
+  surface — the repo root's `app/` holds only `app/p/**`, `app/portal/**`,
+  and `app/api/**`. See `mobile/CLAUDE.md` for the mobile app's own
+  conventions and setup gotchas.
+- Customer surface = plain web pages from tokenised links, no accounts, no
+  app — unchanged by the above.
 - SMS and email behind thin provider interfaces (`lib/sms.ts`, `lib/email.ts`)
   with a console/dev driver; real provider keys are a human task, not yours.
 

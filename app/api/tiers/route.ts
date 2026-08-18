@@ -4,6 +4,29 @@ import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { CLAUSE_TEMPLATES, TIER_PRESETS } from "@/lib/clauses";
 
+// Mobile counterpart to the tier list query in app/plans/page.tsx.
+export async function GET() {
+  const engineerId = await getEngineerId();
+  if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+
+  const tiers = await prisma.planTier.findMany({
+    where: { engineerId, archived: false },
+    orderBy: { sortOrder: "asc" },
+    include: { clauses: { include: { clause: true } }, _count: { select: { plans: true } } },
+  });
+  return NextResponse.json(
+    tiers.map((t) => ({
+      id: t.id,
+      name: t.name,
+      priceMonthlyPence: t.priceMonthlyPence,
+      isRecommended: t.isRecommended,
+      customLabels: t.customLabels,
+      clauseTitles: t.clauses.map((tc) => tc.clause.title),
+      planCount: t._count.plans,
+    })),
+  );
+}
+
 // POST /api/tiers { preset: true } → create the 3 recommended tiers (two-tap).
 // POST /api/tiers {} → create one blank tier.
 export async function POST(req: Request) {

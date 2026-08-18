@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "c035cd9b-f17f-4f29-8d23-614c3ff5179c"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.oliverwilcox.planlock",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

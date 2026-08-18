@@ -46,8 +46,16 @@ model Engineer {
   id                String     @id @default(cuid())
   email             String     @unique
   slug              String     @unique
+  firstName         String?
+  lastName          String?
+  phone             String?    @unique // E.164, verified by SMS OTP at signup
+  phoneVerifiedAt   DateTime?
   tradingName       String?
   logoUrl           String?
+  businessType      String? // sole_trader | ltd | partnership
+  companyNumber     String?
+  postcode          String? // business postcode, not shown to customers
+  marketingConsent  Boolean    @default(false)
   gasSafeNo         String?
   gasSafeName       String?
   gasSafeCompany    String?

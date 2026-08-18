@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 
 export function Card({
@@ -90,21 +89,6 @@ export function NotIncluded() {
         work is chargeable at your plan discount. This plan is a maintenance &amp; priority
         agreement, not an insurance policy.
       </p>
-    </div>
-  );
-}
-
-export function ComingSoon({ title }: { title: string }) {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-3 py-24 text-center">
-      <h1 className="font-disp text-3xl uppercase tracking-wide">{title}</h1>
-      <Pill tone="info">COMING SOON</Pill>
-      <p className="text-sm text-muted max-w-[32ch]">
-        This part of TradeSura arrives in the next release.
-      </p>
-      <Link href="/" className="text-flame-deep font-semibold text-sm">
-        Back to home
-      </Link>
     </div>
   );
 }

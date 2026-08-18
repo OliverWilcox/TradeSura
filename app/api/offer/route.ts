@@ -18,6 +18,21 @@ const Body = z.object({
   postcode: z.string().max(12).optional().or(z.literal("")),
 });
 
+// Mobile counterpart to the customer-picker query in app/offer/page.tsx.
+export async function GET() {
+  const engineerId = await getEngineerId();
+  if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+
+  const customers = await prisma.customer.findMany({
+    where: { engineerId },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    select: { id: true, firstName: true, lastName: true, phone: true },
+  });
+  const tierCount = await prisma.planTier.count({ where: { engineerId, archived: false } });
+  return NextResponse.json({ customers, tierCount });
+}
+
 export async function POST(req: Request) {
   const engineerId = await getEngineerId();
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });

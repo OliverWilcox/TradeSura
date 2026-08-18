@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local-only tooling (cloudflared tunnel binary/logs)
+.bin/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
