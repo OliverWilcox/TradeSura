@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { prisma } from "@/lib/db";
 import { signToken, verifyToken } from "@/lib/auth";
-import { sendEmail } from "@/lib/email";
+import { uniqueSlug } from "@/lib/slug";
+import { track } from "@/lib/track";
 
-// Everything the sign-up wizard (steps 1-3) collects, bundled into the
-// magic-link token itself so mobile-callback can create a fully-populated
-// Engineer on first click — no separate "pending signup" table needed, same
-// stateless pattern as the token itself. Returning users calling this route
-// for a plain sign-in just omit `signup` entirely.
+// Everything the sign-up wizard (steps 1-3) collects.
 const SignupData = z.object({
   firstName: z.string().min(2).max(60),
   lastName: z.string().min(2).max(60),
@@ -32,6 +30,16 @@ const Body = z.object({
   signup: SignupData.optional(),
 });
 
+// [DECISION — human, instant-login] No email click-through: this endpoint
+// authenticates and returns a live bearer token directly instead of emailing
+// a magic link. For sign-up that's a deliberate trade — phone number (OTP)
+// and Gas Safe registration are both already verified by this point, so the
+// email step was only ever the token-minting mechanism, not an identity
+// check. For plain sign-in (no `signup` payload) this means knowing an
+// engineer's email address is now sufficient on its own to obtain a session
+// for their account — there is no possession-of-inbox or password check left
+// anywhere in this flow. Revisit before any real engineer/customer data is
+// at stake; this is fine for the current pre-launch, sandbox-only stage.
 export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -39,8 +47,13 @@ export async function POST(req: Request) {
   }
   const email = parsed.data.email.toLowerCase();
 
-  let pending: string | undefined;
-  if (parsed.data.signup) {
+  let engineer = await prisma.engineer.findUnique({ where: { email } });
+  let trades: string[] = [];
+
+  if (!engineer) {
+    if (!parsed.data.signup) {
+      return NextResponse.json({ error: "No account found for that email." }, { status: 404 });
+    }
     const { phoneToken, ...rest } = parsed.data.signup;
     // The phone itself is never trusted from the client directly — only the
     // number embedded in a token that /api/onboarding/phone/verify signed
@@ -52,23 +65,31 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    pending = JSON.stringify({ ...rest, phone: phonePayload.phone });
+    trades = rest.trades;
+    const slug = await uniqueSlug(email.split("@")[0]);
+    engineer = await prisma.engineer.create({
+      data: {
+        email,
+        slug,
+        firstName: rest.firstName,
+        lastName: rest.lastName,
+        phone: phonePayload.phone,
+        phoneVerifiedAt: new Date(),
+        tradingName: rest.tradingName,
+        businessType: rest.businessType,
+        companyNumber: rest.companyNumber,
+        postcode: rest.postcode,
+        marketingConsent: rest.marketingConsent,
+        gasSafeNo: rest.gasSafeNo,
+        gasSafeName: rest.gasSafeName,
+        gasSafeCompany: rest.gasSafeCompany,
+        gasSafeCategories: rest.gasSafeCategories,
+        gasSafeVerifiedAt: new Date(),
+      },
+    });
+    await track("engineer_signed_up", { type: "ENGINEER", id: engineer.id }, { slug });
   }
 
-  const token = await signToken({ email, ...(pending ? { pending } : {}) }, "15m");
-  // Only the Expo app signs in now — the callback mints a bearer token and
-  // hands it back via the app's deep-link scheme (see mobile-callback).
-  const link = `${process.env.APP_URL}/api/auth/mobile-callback?token=${token}`;
-
-  await sendEmail({
-    to: email,
-    subject: pending ? "Confirm your TradeSura account" : "Sign in to TradeSura",
-    html: `<p>Tap to ${pending ? "finish creating your" : "sign in to your"} TradeSura account:</p><p><a href="${link}">${link}</a></p><p>This link is valid for 15 minutes.</p>`,
-  });
-
-  // lib/email.ts has no real provider wired up yet (console-log stub only,
-  // in every environment) — surface the link directly until one exists.
-  // NODE_ENV isn't the right gate here: Vercel always builds in production
-  // mode, so that check silently dropped the only way to reach the link.
-  return NextResponse.json({ ok: true, devLink: link });
+  const token = await signToken({ engineerId: engineer.id }, "30d");
+  return NextResponse.json({ token, trades });
 }

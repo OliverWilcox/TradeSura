@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { View, Text, TextInput, ScrollView, Pressable, ActivityIndicator, Linking } from "react-native";
-import { Link } from "expo-router";
+import { View, Text, TextInput, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { Link, router } from "expo-router";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 
 type Verified = { regNo: string; name: string; company: string; categories: string };
 type BusinessType = "sole_trader" | "ltd" | "partnership";
@@ -24,6 +25,7 @@ const inputCls =
 const labelCls = "mb-1.5 mt-3.5 font-sans-semibold text-[13px] text-night-muted";
 
 export default function SignUp() {
+  const { signIn } = useAuth();
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // Step 1 — account basics
@@ -55,8 +57,6 @@ export default function SignUp() {
   // Submit
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState(false);
-  const [devLink, setDevLink] = useState<string | null>(null);
 
   function onPhoneChange(v: string) {
     setPhone(v);
@@ -130,11 +130,15 @@ export default function SignUp() {
     setInterestTrades(next);
   }
 
+  // [DECISION — human, instant-login] No email click-through: the backend
+  // hands back a live bearer token directly instead of emailing a magic
+  // link, since phone (OTP) and Gas Safe are both already verified by this
+  // point in the wizard.
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      const data = await api<{ ok: boolean; devLink?: string }>("/api/auth/request", {
+      const data = await api<{ token: string; trades: string[] }>("/api/auth/request", {
         method: "POST",
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
@@ -155,8 +159,16 @@ export default function SignUp() {
           },
         }),
       });
-      setSent(true);
-      setDevLink(data.devLink ?? null);
+      await signIn(data.token);
+      for (const code of data.trades) {
+        await api("/api/trades/interest", {
+          method: "POST",
+          body: JSON.stringify({ code }),
+        }).catch(() => {
+          // best-effort — a missed interest registration isn't worth blocking signup over
+        });
+      }
+      router.replace("/(tabs)");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Something went wrong.");
     } finally {
@@ -169,28 +181,6 @@ export default function SignUp() {
   const step2Valid = Boolean(gasSafeMatch);
   const step3Valid =
     tradingName.trim().length >= 2 && postcode.trim().length >= 4 && termsConsent;
-
-  if (sent) {
-    return (
-      <View className="flex-1 items-center justify-center gap-4 bg-night px-6">
-        <Text className="font-disp-bold text-3xl text-night-text uppercase tracking-wide">
-          TradeSura
-        </Text>
-        <Text className="font-sans-semibold text-night-text">Check your email</Text>
-        <Text className="text-center font-sans text-sm text-night-muted">
-          We&apos;ve sent a link to <Text className="text-night-text">{email}</Text> to finish
-          creating your account. It&apos;s valid for 15 minutes.
-        </Text>
-        {devLink && (
-          <Pressable onPress={() => Linking.openURL(devLink)}>
-            <Text className="text-center font-mono text-xs text-brand-blue-lift underline">
-              DEV: open sign-up link
-            </Text>
-          </Pressable>
-        )}
-      </View>
-    );
-  }
 
   return (
     <View className="flex-1 bg-night">
