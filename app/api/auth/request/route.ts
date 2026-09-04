@@ -7,6 +7,7 @@ import { track } from "@/lib/track";
 import { normaliseClaimCode, resolveClaimCode } from "@/lib/claim";
 import { sendEmail } from "@/lib/email";
 import { engineerWelcomeEmailHtml } from "@/lib/engineer-welcome-email";
+import { notifyEngineer } from "@/lib/sms";
 
 // Everything the sign-up wizard (steps 1-3) collects.
 const SignupData = z.object({
@@ -183,6 +184,12 @@ export async function POST(req: Request) {
         await track("referral_signup", { type: "ENGINEER", id: referrer.id }, {
           inviteeId: engineer.id,
         });
+        // review #6 — the £50-paid ping already existed (checkReferralBounty);
+        // this is the earlier "signed up" stage ping the review also asked for.
+        await notifyEngineer(
+          referrer.id,
+          `👋 ${engineer.tradingName ?? engineer.firstName ?? "Someone"} just signed up with your referral link.`,
+        );
       }
     }
   }

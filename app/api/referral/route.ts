@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import QRCode from "qrcode";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import {
@@ -34,8 +35,12 @@ export async function GET() {
     }),
   );
 
+  const link = `${process.env.APP_URL}/r/${engineer.slug}`;
+  const qrDataUrl = await QRCode.toDataURL(link, { width: 280, margin: 1 });
+
   return NextResponse.json({
-    link: `${process.env.APP_URL}/r/${engineer.slug}`,
+    link,
+    qrDataUrl,
     cardUrl: `${process.env.APP_URL}/api/referral/card?slug=${engineer.slug}`,
     bountyPence: REFERRAL_BOUNTY_PENCE,
     requiredPlans: REFERRAL_REQUIRED_PLANS,

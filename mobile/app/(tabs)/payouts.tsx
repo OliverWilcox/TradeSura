@@ -170,7 +170,10 @@ export default function Payouts() {
               <RowLine
                 left={`Processing (${data.confirmed} × ~32p)`}
                 right={
-                  <Text className="font-mono text-danger">−{pounds(data.processingPence)}</Text>
+                  <Text className="font-mono text-danger">
+                    {data.processingPence > 0 ? "−" : ""}
+                    {pounds(data.processingPence)}
+                  </Text>
                 }
               />
               <RowLine

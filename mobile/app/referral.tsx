@@ -2,6 +2,8 @@ import { useCallback, useState } from "react";
 import { View, Text, ScrollView, Share, Linking, Image } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, Button } from "@/components/ui";
 
@@ -14,6 +16,7 @@ type Invitee = {
 };
 type Data = {
   link: string;
+  qrDataUrl: string;
   cardUrl: string;
   bountyPence: number;
   requiredPlans: number;
@@ -24,6 +27,7 @@ type Data = {
 export default function Referral() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cardBusy, setCardBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -47,6 +51,29 @@ export default function Referral() {
     const canWa = await Linking.canOpenURL(wa);
     if (canWa) return Linking.openURL(wa);
     await Share.share({ message: msg });
+  }
+
+  // Review #6 — the name-stamped income card was only ever previewed on
+  // screen, never actually attached to a share. This is the "post it in the
+  // group" flex (spec Screen 13), distinct from the WhatsApp invite text
+  // above — download it locally first since the native share sheet can't
+  // hand a remote URL to WhatsApp/Instagram as an image attachment.
+  async function shareCard() {
+    if (!data) return;
+    setCardBusy(true);
+    try {
+      const destination = new File(Paths.cache, "tradesura-referral-card.png");
+      const file = await File.downloadFileAsync(data.cardUrl, destination, { idempotent: true });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(file.uri, { mimeType: "image/png" });
+      } else {
+        await Share.share({ message: data.link });
+      }
+    } catch {
+      setError("Couldn't share the card — try again.");
+    } finally {
+      setCardBusy(false);
+    }
   }
 
   const bounty = data ? `£${(data.bountyPence / 100).toFixed(0)}` : "£50";
@@ -80,7 +107,26 @@ export default function Referral() {
                 resizeMode="cover"
               />
               <Text className="mt-2 font-sans text-[11px] text-faint">
-                This is what your invite link shows.
+                Post it in the group — let them ask.
+              </Text>
+              <Button
+                variant="ghost"
+                onPress={shareCard}
+                disabled={cardBusy}
+                className="mt-3 w-full"
+              >
+                {cardBusy ? "Preparing…" : "Share my income card"}
+              </Button>
+            </Card>
+
+            <Card className="items-center py-4">
+              <Image
+                source={{ uri: data.qrDataUrl }}
+                style={{ width: 140, height: 140 }}
+                resizeMode="contain"
+              />
+              <Text className="mt-2 font-sans text-[11px] text-faint">
+                Or let them scan your invite link.
               </Text>
             </Card>
 
