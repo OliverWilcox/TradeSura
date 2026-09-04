@@ -16,6 +16,7 @@ export default function ImportContacts() {
   const [status, setStatus] = useState<"loading" | "denied" | "ready" | "importing">("loading");
   const [contacts, setContacts] = useState<PickedContact[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
 
@@ -67,6 +68,7 @@ export default function ImportContacts() {
           method: "POST",
           body: JSON.stringify({
             contacts: picked.map((c) => ({ name: c.name, phone: c.phone, email: c.email })),
+            confirmOwn: true,
           }),
         },
       );
@@ -80,7 +82,7 @@ export default function ImportContacts() {
   if (status === "loading") {
     return (
       <View className="flex-1 items-center justify-center bg-panel">
-        <ActivityIndicator color="#1966CC" />
+        <ActivityIndicator color="#5FA3F0" />
       </View>
     );
   }
@@ -140,8 +142,25 @@ export default function ImportContacts() {
         )}
       />
       {error && <Text className="px-4 pb-2 font-sans text-sm text-danger">{error}</Text>}
-      <View className="absolute bottom-0 left-0 right-0 border-t border-line bg-paper p-4">
-        <Button onPress={importSelected} disabled={selected.size === 0 || status === "importing"}>
+      <View className="absolute bottom-0 left-0 right-0 gap-2.5 border-t border-line bg-paper p-4">
+        <Pressable
+          onPress={() => setConfirmed((v) => !v)}
+          className="flex-row items-start gap-2.5"
+        >
+          <View
+            className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${confirmed ? "border-flame bg-flame" : "border-line"}`}
+          >
+            {confirmed && <Text className="text-[11px] text-white">✓</Text>}
+          </View>
+          <Text className="flex-1 font-sans text-[13px] text-muted">
+            These are my own customers — people I&apos;ve done work for or who&apos;ve asked me
+            to.
+          </Text>
+        </Pressable>
+        <Button
+          onPress={importSelected}
+          disabled={selected.size === 0 || !confirmed || status === "importing"}
+        >
           {status === "importing"
             ? "Importing…"
             : `Import ${selected.size} contact${selected.size === 1 ? "" : "s"}`}

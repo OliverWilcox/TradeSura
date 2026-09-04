@@ -60,7 +60,7 @@ export default function Blast() {
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
         {done ? (
-          <Card className="border-[#BFE8D2] bg-ok-tint">
+          <Card className="border-ok-tint bg-ok-tint">
             <Text className="font-semibold text-sm text-ok">
               Sent to {done.sent} customer{done.sent === 1 ? "" : "s"}
             </Text>
@@ -118,7 +118,7 @@ export default function Blast() {
               </Pressable>
 
               {data.results && (
-                <Card className="border-[#E1E8F0] bg-copper-tint">
+                <Card className="border-copper-tint bg-copper-tint">
                   <Micro className="text-copper-deep">Your last campaign</Micro>
                   <Text className="mt-0.5 font-sans text-xs text-copper-deep">
                     {data.results.sent} sent · {data.results.visits} page visit

@@ -174,7 +174,7 @@ export default function Onboarding() {
                 value={packAddress}
                 onChangeText={setPackAddress}
                 placeholder="Full postal address"
-                placeholderTextColor="#8B95A1"
+                placeholderTextColor="#6E86A3"
                 multiline
                 className="min-h-[64px] rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-sm text-ink"
               />

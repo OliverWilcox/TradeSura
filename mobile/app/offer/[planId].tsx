@@ -108,7 +108,7 @@ export default function OfferLive() {
           {infoError ? (
             <Text className="font-sans text-sm text-danger">{infoError}</Text>
           ) : !info ? (
-            <ActivityIndicator color="#1966CC" />
+            <ActivityIndicator color="#5FA3F0" />
           ) : (
             <>
               <Text selectable className="font-mono text-xs text-muted">
@@ -162,7 +162,7 @@ export default function OfferLive() {
         </Card>
 
         {status && (
-          <Card className="border-[#E1E8F0] bg-copper-tint">
+          <Card className="border-copper-tint bg-copper-tint">
             <Text className="font-sans text-xs text-copper-deep">
               {status.customerFirstName} signs at{" "}
               <Text className="font-mono font-semibold">

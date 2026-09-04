@@ -33,7 +33,7 @@ const OTHER_TRADES = [
 ] as const;
 
 const inputCls =
-  "rounded-[10px] border border-[#E1E8F0] bg-night-card px-3.5 py-3 font-sans text-[15px] text-night-text";
+  "rounded-[10px] border border-line bg-night-card px-3.5 py-3 font-sans text-[15px] text-night-text";
 const labelCls = "mb-1.5 mt-3.5 font-semibold text-[13px] text-night-muted";
 
 export default function SignUp() {
@@ -257,7 +257,7 @@ export default function SignUp() {
             STEP {step} OF 3
           </Text>
         </View>
-        <View className="mb-5 h-[5px] overflow-hidden rounded-full bg-[#E1E8F0]">
+        <View className="mb-5 h-[5px] overflow-hidden rounded-full bg-line-strong">
           <View className="h-full rounded-full bg-brand-blue" style={{ width: `${(step / 3) * 100}%` }} />
         </View>
 
@@ -270,7 +270,7 @@ export default function SignUp() {
               Takes about 2 minutes. No card needed.
             </Text>
 
-            <View className="rounded-[14px] border border-[#E1E8F0] bg-night-card p-4">
+            <View className="rounded-[14px] border border-line bg-night-card p-4">
               <View className="flex-row gap-2.5">
                 <View className="flex-1">
                   <Text className={labelCls}>First name</Text>
@@ -278,7 +278,7 @@ export default function SignUp() {
                     value={firstName}
                     onChangeText={setFirstName}
                     placeholder="Dave"
-                    placeholderTextColor="#8B95A1"
+                    placeholderTextColor="#6E86A3"
                     className={inputCls}
                   />
                 </View>
@@ -288,7 +288,7 @@ export default function SignUp() {
                     value={lastName}
                     onChangeText={setLastName}
                     placeholder="Smith"
-                    placeholderTextColor="#8B95A1"
+                    placeholderTextColor="#6E86A3"
                     className={inputCls}
                   />
                 </View>
@@ -299,7 +299,7 @@ export default function SignUp() {
                 value={phone}
                 onChangeText={onPhoneChange}
                 placeholder="07123 456789"
-                placeholderTextColor="#8B95A1"
+                placeholderTextColor="#6E86A3"
                 keyboardType="phone-pad"
                 editable={!phoneToken}
                 className={inputCls}
@@ -310,8 +310,8 @@ export default function SignUp() {
               </Text>
 
               {phoneToken ? (
-                <View className="mt-2.5 rounded-[10px] border border-[#BFE8D2] bg-[#E7F7EF] px-3.5 py-2.5">
-                  <Text className="font-semibold text-[13.5px] text-[#0E9F5B]">
+                <View className="mt-2.5 rounded-[10px] border border-ok-tint bg-ok-tint px-3.5 py-2.5">
+                  <Text className="font-semibold text-[13.5px] text-ok">
                     ✓ Mobile verified
                   </Text>
                 </View>
@@ -324,7 +324,7 @@ export default function SignUp() {
                     value={otpCode}
                     onChangeText={setOtpCode}
                     placeholder="123456"
-                    placeholderTextColor="#8B95A1"
+                    placeholderTextColor="#6E86A3"
                     keyboardType="number-pad"
                     className={inputCls}
                   />
@@ -364,7 +364,7 @@ export default function SignUp() {
                 value={email}
                 onChangeText={setEmail}
                 placeholder="dave@smithheating.co.uk"
-                placeholderTextColor="#8B95A1"
+                placeholderTextColor="#6E86A3"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -375,8 +375,8 @@ export default function SignUp() {
               </Text>
 
               {claim?.valid && claim.personalised ? (
-                <View className="mt-3 rounded-[10px] border border-[#BFE8D2] bg-[#E7F7EF] px-3.5 py-2.5">
-                  <Text className="font-semibold text-[13px] text-[#0E9F5B]">
+                <View className="mt-3 rounded-[10px] border border-ok-tint bg-ok-tint px-3.5 py-2.5">
+                  <Text className="font-semibold text-[13px] text-ok">
                     ✓ Claiming the account reserved for {claim.businessName}
                   </Text>
                 </View>
@@ -388,7 +388,7 @@ export default function SignUp() {
                   <Pressable
                     key={o.value}
                     onPress={() => setHeardVia(o.value)}
-                    className={`rounded-full border-[1.5px] px-3.5 py-2 ${heardVia === o.value ? "border-brand-blue bg-[#EAF2FC]" : "border-[#E1E8F0]"}`}
+                    className={`rounded-full border-[1.5px] px-3.5 py-2 ${heardVia === o.value ? "border-brand-blue bg-flame-tint" : "border-line"}`}
                   >
                     <Text className="font-sans text-[13px] text-night-text">{o.label}</Text>
                   </Pressable>
@@ -401,7 +401,7 @@ export default function SignUp() {
                     value={referralCode}
                     onChangeText={setReferralCode}
                     placeholder="e.g. dave-smith"
-                    placeholderTextColor="#8B95A1"
+                    placeholderTextColor="#6E86A3"
                     autoCapitalize="none"
                     autoCorrect={false}
                     className={inputCls}
@@ -415,9 +415,9 @@ export default function SignUp() {
             <Pressable
               onPress={() => setStep(2)}
               disabled={!step1Valid}
-              className={`mt-4 items-center rounded-xl bg-brand-blue py-3.5 ${step1Valid ? "" : "opacity-50"}`}
+              className={`mt-4 items-center rounded-xl bg-white py-3.5 ${step1Valid ? "" : "opacity-50"}`}
             >
-              <Text className="font-bold text-[16.5px] text-white">Continue</Text>
+              <Text className="font-bold text-[16.5px] text-night-text">Continue</Text>
             </Pressable>
             <Link href="/sign-in" asChild>
               <Pressable className="mt-3">
@@ -439,7 +439,7 @@ export default function SignUp() {
               closer.
             </Text>
 
-            <View className="rounded-[14px] border border-[#E1E8F0] bg-night-card p-4">
+            <View className="rounded-[14px] border border-line bg-night-card p-4">
               <Text className={`${labelCls} mt-0`}>Your trade</Text>
               <View className="rounded-[10px] border-[1.5px] border-brand-blue bg-night-card px-3 py-2.5">
                 <Text className="font-sans text-sm text-night-text">✓ Gas / Heating</Text>
@@ -451,7 +451,7 @@ export default function SignUp() {
                     <Pressable
                       key={t.code}
                       onPress={() => toggleInterest(t.code)}
-                      className={`flex-[1_1_47%] flex-row items-center gap-1.5 rounded-[10px] border-[1.5px] px-3 py-2.5 ${on ? "border-brand-blue" : "border-[#E1E8F0]"}`}
+                      className={`flex-[1_1_47%] flex-row items-center gap-1.5 rounded-[10px] border-[1.5px] px-3 py-2.5 ${on ? "border-brand-blue" : "border-line"}`}
                     >
                       <Text className="font-sans text-[13.5px] text-night-text">{t.name}</Text>
                       <Text className="ml-auto font-mono text-[8.5px] text-night-muted">SOON</Text>
@@ -471,13 +471,13 @@ export default function SignUp() {
                   setGasSafeMatch(null);
                 }}
                 placeholder="584123"
-                placeholderTextColor="#8B95A1"
+                placeholderTextColor="#6E86A3"
                 keyboardType="number-pad"
                 className={inputCls}
               />
               {gasSafeMatch ? (
-                <View className="mt-2.5 rounded-[10px] border border-[#BFE8D2] bg-[#E7F7EF] px-3.5 py-2.5">
-                  <Text className="font-semibold text-[13px] text-[#0E9F5B]">
+                <View className="mt-2.5 rounded-[10px] border border-ok-tint bg-ok-tint px-3.5 py-2.5">
+                  <Text className="font-semibold text-[13px] text-ok">
                     ✓ Verified against the register — {gasSafeMatch.name} · {gasSafeMatch.company} ·{" "}
                     {gasSafeMatch.categories}
                   </Text>
@@ -501,9 +501,9 @@ export default function SignUp() {
             <Pressable
               onPress={() => setStep(3)}
               disabled={!step2Valid}
-              className={`mt-4 items-center rounded-xl bg-brand-blue py-3.5 ${step2Valid ? "" : "opacity-50"}`}
+              className={`mt-4 items-center rounded-xl bg-white py-3.5 ${step2Valid ? "" : "opacity-50"}`}
             >
-              <Text className="font-bold text-[16.5px] text-white">Continue</Text>
+              <Text className="font-bold text-[16.5px] text-night-text">Continue</Text>
             </Pressable>
             <Pressable onPress={() => setStep(1)} className="mt-3">
               <Text className="text-center font-sans text-sm text-night-muted">← Back</Text>
@@ -520,13 +520,13 @@ export default function SignUp() {
               This is the name your customers see on their plan.
             </Text>
 
-            <View className="rounded-[14px] border border-[#E1E8F0] bg-night-card p-4">
+            <View className="rounded-[14px] border border-line bg-night-card p-4">
               <Text className={`${labelCls} mt-0`}>Trading name</Text>
               <TextInput
                 value={tradingName}
                 onChangeText={setTradingName}
                 placeholder="Smith Heating"
-                placeholderTextColor="#8B95A1"
+                placeholderTextColor="#6E86A3"
                 className={inputCls}
               />
               {tradingName ? (
@@ -547,7 +547,7 @@ export default function SignUp() {
                   <Pressable
                     key={value}
                     onPress={() => setBusinessType(value)}
-                    className={`flex-1 items-center rounded-[10px] border-[1.5px] px-2 py-2.5 ${businessType === value ? "border-brand-blue" : "border-[#E1E8F0]"}`}
+                    className={`flex-1 items-center rounded-[10px] border-[1.5px] px-2 py-2.5 ${businessType === value ? "border-brand-blue" : "border-line"}`}
                   >
                     <Text className="font-sans text-[12.5px] text-night-text">{label}</Text>
                   </Pressable>
@@ -561,7 +561,7 @@ export default function SignUp() {
                     value={companyNumber}
                     onChangeText={setCompanyNumber}
                     placeholder="12345678"
-                    placeholderTextColor="#8B95A1"
+                    placeholderTextColor="#6E86A3"
                     className={inputCls}
                   />
                 </>
@@ -572,7 +572,7 @@ export default function SignUp() {
                 value={postcode}
                 onChangeText={setPostcode}
                 placeholder="HD9 2TT"
-                placeholderTextColor="#8B95A1"
+                placeholderTextColor="#6E86A3"
                 autoCapitalize="characters"
                 className={inputCls}
               />
@@ -585,7 +585,7 @@ export default function SignUp() {
                 className="mt-4 flex-row items-start gap-2.5"
               >
                 <View
-                  className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${termsConsent ? "border-brand-blue bg-brand-blue" : "border-[#E1E8F0]"}`}
+                  className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${termsConsent ? "border-brand-blue bg-brand-blue" : "border-line"}`}
                 >
                   {termsConsent && <Text className="text-[11px] text-white">✓</Text>}
                 </View>
@@ -598,7 +598,7 @@ export default function SignUp() {
                 className="mt-2.5 flex-row items-start gap-2.5"
               >
                 <View
-                  className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${marketingConsent ? "border-brand-blue bg-brand-blue" : "border-[#E1E8F0]"}`}
+                  className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${marketingConsent ? "border-brand-blue bg-brand-blue" : "border-line"}`}
                 >
                   {marketingConsent && <Text className="text-[11px] text-white">✓</Text>}
                 </View>
@@ -612,12 +612,12 @@ export default function SignUp() {
             <Pressable
               onPress={submit}
               disabled={busy || !step3Valid}
-              className={`mt-4 items-center rounded-xl bg-brand-blue py-3.5 ${busy || !step3Valid ? "opacity-50" : ""}`}
+              className={`mt-4 items-center rounded-xl bg-white py-3.5 ${busy || !step3Valid ? "opacity-50" : ""}`}
             >
               {busy ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color="#0F2140" />
               ) : (
-                <Text className="font-bold text-[16.5px] text-white">Create my account</Text>
+                <Text className="font-bold text-[16.5px] text-night-text">Create my account</Text>
               )}
             </Pressable>
             <Pressable onPress={() => setStep(2)} className="mt-3">

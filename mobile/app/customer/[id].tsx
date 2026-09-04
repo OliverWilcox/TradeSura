@@ -129,7 +129,7 @@ export default function CustomerDetail() {
   if (!c) {
     return (
       <View className="flex-1 items-center justify-center bg-panel">
-        <ActivityIndicator color="#1966CC" />
+        <ActivityIndicator color="#5FA3F0" />
       </View>
     );
   }

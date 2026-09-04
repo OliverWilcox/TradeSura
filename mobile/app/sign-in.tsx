@@ -63,24 +63,25 @@ export default function SignIn() {
               autoCorrect={false}
               keyboardType="email-address"
               placeholder="you@example.com"
-              placeholderTextColor="#8B95A1"
+              placeholderTextColor="#6E86A3"
               className="rounded-xl border border-iron bg-night-card px-4 py-3 font-sans text-night-text"
             />
             {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
+            {/* v2: primary is white-on-navy, the brightest thing on screen. */}
             <Pressable
               onPress={signInNow}
               disabled={!canSubmit}
-              className={`items-center rounded-xl bg-brand-blue py-3.5 ${canSubmit ? "" : "opacity-50"}`}
+              className={`items-center rounded-xl bg-white py-3.5 ${canSubmit ? "" : "opacity-50"}`}
             >
               {busy ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color="#0F2140" />
               ) : (
-                <Text className="font-semibold text-white">Sign in</Text>
+                <Text className="font-semibold text-night-text">Sign in</Text>
               )}
             </Pressable>
             <Link href="/sign-up" asChild>
-              <Pressable className="items-center rounded-xl border-[1.5px] border-iron py-3.5">
-                <Text className="font-semibold text-night-text">Create an account</Text>
+              <Pressable className="items-center rounded-xl border-[1.5px] border-white/55 py-3.5">
+                <Text className="font-semibold text-white">Create an account</Text>
               </Pressable>
             </Link>
           </View>

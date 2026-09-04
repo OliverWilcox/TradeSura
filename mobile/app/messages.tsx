@@ -62,7 +62,7 @@ export default function Messages() {
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
         {recentEmergencies > 0 && (
-          <View className="rounded-[10px] border border-[#E1E8F0] bg-danger-tint px-3 py-2.5">
+          <View className="rounded-[10px] border border-[rgba(255,107,107,.4)] bg-danger-tint px-3 py-2.5">
             <Text className="font-semibold text-xs text-danger">
               ⚠ GAS EMERGENCY WORDING TRIGGERED this week — the customer was shown the emergency
               script and told to call 0800 111 999 before anything else.

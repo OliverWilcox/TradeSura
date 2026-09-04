@@ -59,7 +59,7 @@ export default function Trades() {
       >
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
-        <Card className="border-[#E1E8F0] bg-flame-tint">
+        <Card className="border-flame-tint bg-flame-tint">
           <Text className="font-sans text-xs text-flame-deep">
             <Text className="font-semibold">One pack per trade.</Text> A trade only gets a
             care plan where a recurring service event anchors it — that annual visit is what makes

@@ -22,7 +22,7 @@ export default function Demo() {
       // A slim presentation the engineer can hand over and take back.
       presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
       showTitle: false,
-      toolbarColor: "#14202E",
+      toolbarColor: "#0B1A2E",
     });
   }
 

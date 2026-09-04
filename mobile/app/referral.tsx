@@ -61,7 +61,7 @@ export default function Referral() {
 
         {data && (
           <>
-            <Card className="items-center border-[#BFE8D2] bg-ok-tint py-5">
+            <Card className="items-center border-ok-tint bg-ok-tint py-5">
               <Text className="font-mono font-semibold text-4xl text-ok">{bounty}</Text>
               <Text className="mt-1 font-semibold text-sm text-ink">
                 for every engineer you bring in
