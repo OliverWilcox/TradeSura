@@ -76,7 +76,7 @@ export default function SignIn() {
               {busy ? (
                 <ActivityIndicator color="#0F2140" />
               ) : (
-                <Text className="font-semibold text-night-text">Sign in</Text>
+                <Text className="font-semibold text-on-light">Sign in</Text>
               )}
             </Pressable>
             <Link href="/sign-up" asChild>

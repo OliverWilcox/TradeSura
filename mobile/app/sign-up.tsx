@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, Text, TextInput, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -255,7 +256,8 @@ export default function SignUp() {
 
   return (
     <View className="flex-1 bg-night">
-      <ScrollView className="flex-1" contentContainerClassName="px-6 pb-10 pt-14 gap-1">
+      <SafeAreaView edges={["top", "bottom"]} className="flex-1">
+      <ScrollView className="flex-1" contentContainerClassName="px-6 pb-10 pt-4 gap-1">
         <View className="mb-3.5 flex-row items-center justify-between">
           <Text className="font-bold text-[22px] text-night-text uppercase tracking-wide">
             Trade<Text className="text-brand-blue-lift">Sura</Text>
@@ -424,7 +426,7 @@ export default function SignUp() {
               disabled={!step1Valid}
               className={`mt-4 items-center rounded-xl bg-white py-3.5 ${step1Valid ? "" : "opacity-50"}`}
             >
-              <Text className="font-bold text-[16.5px] text-night-text">Continue</Text>
+              <Text className="font-bold text-[16.5px] text-on-light">Continue</Text>
             </Pressable>
             <Link href="/sign-in" asChild>
               <Pressable className="mt-3">
@@ -510,7 +512,7 @@ export default function SignUp() {
               disabled={!step2Valid}
               className={`mt-4 items-center rounded-xl bg-white py-3.5 ${step2Valid ? "" : "opacity-50"}`}
             >
-              <Text className="font-bold text-[16.5px] text-night-text">Continue</Text>
+              <Text className="font-bold text-[16.5px] text-on-light">Continue</Text>
             </Pressable>
             <Pressable onPress={() => setStep(1)} className="mt-3">
               <Text className="text-center font-sans text-sm text-night-muted">← Back</Text>
@@ -633,7 +635,7 @@ export default function SignUp() {
               {busy ? (
                 <ActivityIndicator color="#0F2140" />
               ) : (
-                <Text className="font-bold text-[16.5px] text-night-text">Create my account</Text>
+                <Text className="font-bold text-[16.5px] text-on-light">Create my account</Text>
               )}
             </Pressable>
             <Pressable onPress={() => setStep(2)} className="mt-3">
@@ -646,6 +648,7 @@ export default function SignUp() {
           GAS SAFE VERIFIED MEMBERS · PAYOUTS DIRECT TO YOUR BANK · NO CARD REQUIRED
         </Text>
       </ScrollView>
+      </SafeAreaView>
     </View>
   );
 }

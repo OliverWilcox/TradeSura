@@ -94,7 +94,7 @@ export default function FirstPayout() {
             onPress={share}
             className="min-h-[56px] items-center justify-center rounded-2xl bg-white"
           >
-            <Text className="text-base font-extrabold text-night-text">Share this</Text>
+            <Text className="text-base font-extrabold text-on-light">Share this</Text>
           </Pressable>
           <Pressable
             onPress={() => router.replace("/(tabs)")}

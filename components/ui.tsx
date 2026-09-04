@@ -85,8 +85,8 @@ export function Pill({
 // signature, one per screen. Green is reserved for the customer's "Join" and
 // the engineer's WhatsApp share. Disabled is opacity, never a colour swap.
 const btnStyles = {
-  flame: "bg-white text-night-text",
-  copper: "bg-white text-night-text", // legacy alias → primary
+  flame: "bg-white text-on-light",
+  copper: "bg-white text-on-light", // legacy alias → primary
   green: "bg-ok text-[#052614]",
   ghost: "bg-transparent text-white border-[1.5px] border-white/55",
   dangerghost: "bg-transparent text-danger border-[1.5px] border-danger",

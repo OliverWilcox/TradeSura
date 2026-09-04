@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { View, Text, Pressable } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 
 // RN port of ../../components/ui.tsx — same primitives, same tokens.
@@ -41,28 +40,29 @@ export function Card({
   className?: string;
   variant?: "flat" | "raised" | "hero";
 }) {
+  // Plain solid-colour Views, not a gradient — expo-linear-gradient needs a
+  // native rebuild to work (it showed as "Unimplemented component" on a
+  // binary built before the dependency was added), so this uses each
+  // gradient's midpoint colour as a flat approximation that works in any
+  // already-built binary. Revisit once a fresh dev/production build exists.
   if (variant === "hero") {
     return (
-      <LinearGradient
-        colors={["#1a3a66", "#122540", "#0f2140"]}
-        start={{ x: 0.15, y: 0 }}
-        end={{ x: 0.85, y: 1 }}
-        style={{ borderRadius: 16 }}
-        className={`border border-line-strong p-4 ${className}`}
+      <View
+        style={{ backgroundColor: "#152e52" }}
+        className={`rounded-2xl border border-line-strong p-4 ${className}`}
       >
         {children}
-      </LinearGradient>
+      </View>
     );
   }
   if (variant === "raised") {
     return (
-      <LinearGradient
-        colors={["#193150", "#122540"]}
-        style={{ borderRadius: 16 }}
-        className={`border border-line-strong p-4 ${className}`}
+      <View
+        style={{ backgroundColor: "#1b2d48" }}
+        className={`rounded-2xl border border-line-strong p-4 ${className}`}
       >
         {children}
-      </LinearGradient>
+      </View>
     );
   }
   return (
@@ -143,8 +143,8 @@ export function Money({
 // reserved for the customer's "Join" and the engineer's WhatsApp share, the
 // only two green buttons in the app. Disabled is opacity, never a colour swap.
 const btnVariants = {
-  flame: { container: "bg-white", text: "text-night-text" },
-  copper: { container: "bg-white", text: "text-night-text" }, // legacy alias → primary
+  flame: { container: "bg-white", text: "text-on-light" },
+  copper: { container: "bg-white", text: "text-on-light" }, // legacy alias → primary
   green: { container: "bg-ok", text: "text-[#052614]" },
   ghost: { container: "border-[1.5px] border-white/55 bg-transparent", text: "text-white" },
   dangerghost: { container: "border-[1.5px] border-danger bg-transparent", text: "text-danger" },

@@ -1,10 +1,94 @@
 import { Redirect, Tabs, router } from "expo-router";
-import { View, ActivityIndicator, Text, Pressable, type ColorValue } from "react-native";
+import type { ComponentProps } from "react";
+import { View, ActivityIndicator, Text, Pressable } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui";
 
-function TabIcon({ glyph, color }: { glyph: string; color: ColorValue }) {
-  return <Text style={{ fontSize: 18, color }}>{glyph}</Text>;
+const TAB_ICONS: Record<string, string> = {
+  index: "⌂",
+  customers: "👥",
+  jobs: "🔔",
+  payouts: "£",
+};
+const TAB_LABELS: Record<string, string> = {
+  index: "Home",
+  customers: "Customers",
+  jobs: "Reminders",
+  payouts: "Payouts",
+};
+const VISIBLE_TABS = ["index", "customers", "jobs", "payouts"];
+
+// The real BottomTabBarProps type, extracted structurally from Tabs' own
+// `tabBar` prop rather than imported from @react-navigation/bottom-tabs —
+// that package isn't a direct dependency here (only reachable transitively
+// through expo-router) and isn't a reliably resolvable import path; see
+// mobile/CLAUDE.md's note on packages that need to be direct deps to
+// resolve reliably. This sidesteps needing the import at all.
+type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
+
+// Custom tab bar so the "offer" FAB gets a real, reserved flex slot between
+// Customers and Reminders instead of floating absolutely-centered over a
+// 4-item bar — which put it dead on the boundary between those two tabs,
+// overlapping both (the bug this replaced).
+function CustomTabBar({ state, navigation }: TabBarProps) {
+  const routes = state.routes.filter((r) => VISIBLE_TABS.includes(r.name));
+  const activeName = state.routes[state.index]?.name;
+  const leftTabs = routes.slice(0, 2);
+  const rightTabs = routes.slice(2);
+
+  function renderTab(route: { key: string; name: string }) {
+    const focused = route.name === activeName;
+    const color = focused ? "#5FA3F0" : "#6E86A3";
+    return (
+      <Pressable
+        key={route.key}
+        onPress={() => {
+          const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
+          if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
+        }}
+        className="flex-1 items-center justify-center gap-0.5 py-1.5"
+      >
+        <Text style={{ fontSize: 18, color }}>{TAB_ICONS[route.name]}</Text>
+        <Text style={{ fontSize: 10, fontWeight: "600", color }}>{TAB_LABELS[route.name]}</Text>
+      </Pressable>
+    );
+  }
+
+  return (
+    <View
+      style={{
+        backgroundColor: "rgba(8,19,33,0.97)",
+        borderTopWidth: 1,
+        borderTopColor: "rgba(255,255,255,0.10)",
+      }}
+    >
+      <SafeAreaView edges={["bottom"]}>
+        <View className="flex-row items-center px-2 pt-1">
+          {leftTabs.map(renderTab)}
+          {/* Reserved slot for the FAB — a real flex child sized like the
+              other tabs, so it can never sit on top of one. */}
+          <View className="flex-1 items-center justify-center">
+            <Pressable
+              onPress={() => router.push("/offer")}
+              className="h-14 w-14 items-center justify-center rounded-full bg-white"
+              style={{
+                marginTop: -30,
+                elevation: 6,
+                shadowColor: "#000",
+                shadowOpacity: 0.5,
+                shadowRadius: 10,
+                shadowOffset: { width: 0, height: 6 },
+              }}
+            >
+              <Text className="text-[26px] leading-none text-on-light">+</Text>
+            </Pressable>
+          </View>
+          {rightTabs.map(renderTab)}
+        </View>
+      </SafeAreaView>
+    </View>
+  );
 }
 
 export default function TabsLayout() {
@@ -43,63 +127,14 @@ export default function TabsLayout() {
   if (me && !me.stripeConnected && !stripeSkipped) return <Redirect href="/onboarding" />;
 
   return (
-    <View className="flex-1">
-      <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarActiveTintColor: "#5FA3F0",
-          tabBarInactiveTintColor: "#6E86A3",
-          tabBarStyle: {
-            borderTopColor: "rgba(255,255,255,0.10)",
-            backgroundColor: "rgba(8,19,33,0.97)",
-          },
-          tabBarLabelStyle: { fontSize: 10, fontWeight: "600" },
-        }}
-      >
-        <Tabs.Screen
-          name="index"
-          options={{ title: "Home", tabBarIcon: ({ color }) => <TabIcon glyph="⌂" color={color} /> }}
-        />
-        <Tabs.Screen
-          name="customers"
-          options={{
-            title: "Customers",
-            tabBarIcon: ({ color }) => <TabIcon glyph="👥" color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="jobs"
-          options={{
-            title: "Reminders",
-            tabBarIcon: ({ color }) => <TabIcon glyph="🔔" color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="payouts"
-          options={{
-            title: "Payouts",
-            tabBarIcon: ({ color }) => <TabIcon glyph="£" color={color} />,
-          }}
-        />
-        {/* Reachable from the money card, More hub and onboarding — not a tab slot. */}
-        <Tabs.Screen name="plans" options={{ href: null }} />
-        <Tabs.Screen name="more" options={{ href: null }} />
-      </Tabs>
-      {/* Send an offer — the app's primary action, one tap from every tab.
-          White fab: the brightest object on every screen (v2 nav rule). */}
-      <Pressable
-        onPress={() => router.push("/offer")}
-        className="absolute bottom-[26px] h-14 w-14 items-center justify-center self-center rounded-full bg-white"
-        style={{
-          elevation: 6,
-          shadowColor: "#000",
-          shadowOpacity: 0.5,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 6 },
-        }}
-      >
-        <Text className="text-[26px] leading-none text-night-text">+</Text>
-      </Pressable>
-    </View>
+    <Tabs tabBar={(props) => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
+      <Tabs.Screen name="index" options={{ title: "Home" }} />
+      <Tabs.Screen name="customers" options={{ title: "Customers" }} />
+      <Tabs.Screen name="jobs" options={{ title: "Reminders" }} />
+      <Tabs.Screen name="payouts" options={{ title: "Payouts" }} />
+      {/* Reachable from the money card, More hub and onboarding — not a tab slot. */}
+      <Tabs.Screen name="plans" options={{ href: null }} />
+      <Tabs.Screen name="more" options={{ href: null }} />
+    </Tabs>
   );
 }

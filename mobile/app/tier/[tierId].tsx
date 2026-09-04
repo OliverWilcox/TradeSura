@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
 import { View, Text, TextInput, ScrollView, Switch, Pressable, ActivityIndicator, Share } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { api, ApiError } from "@/lib/api";
-import { Card, Micro, Pill, Button } from "@/components/ui";
+import { AppHeader, Card, Micro, Pill, Button } from "@/components/ui";
 
 type Template = {
   id: string;
@@ -187,19 +188,29 @@ export default function TierEditor() {
 
   if (loadError) {
     return (
-      <View className="flex-1 items-center justify-center gap-3 bg-panel px-6">
-        <Text className="font-sans text-sm text-danger">{loadError}</Text>
-        <Button onPress={load} variant="ghost" className="w-full">
-          Try again
-        </Button>
+      <View className="flex-1 bg-panel">
+        <SafeAreaView edges={["top"]} className="bg-iron">
+          <AppHeader title="Plan" />
+        </SafeAreaView>
+        <View className="flex-1 items-center justify-center gap-3 px-6">
+          <Text className="font-sans text-sm text-danger">{loadError}</Text>
+          <Button onPress={load} variant="ghost" className="w-full">
+            Try again
+          </Button>
+        </View>
       </View>
     );
   }
 
   if (!tier) {
     return (
-      <View className="flex-1 items-center justify-center bg-panel">
-        <ActivityIndicator color="#5FA3F0" />
+      <View className="flex-1 bg-panel">
+        <SafeAreaView edges={["top"]} className="bg-iron">
+          <AppHeader title="Plan" />
+        </SafeAreaView>
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#5FA3F0" />
+        </View>
       </View>
     );
   }
@@ -208,38 +219,44 @@ export default function TierEditor() {
   // separate publish step), so this is a confirmation, not a wait.
   if (liveUrl) {
     return (
-      <View className="flex-1 items-center justify-center gap-4 bg-panel px-6">
-        <View className="h-16 w-16 items-center justify-center rounded-full bg-ok-tint">
-          <Text className="text-3xl text-ok">✓</Text>
-        </View>
-        <Text className="text-center font-extrabold text-xl text-ink">
-          {name} is live{fresh ? "" : " — updated"}
-        </Text>
-        <Card className="w-full">
-          <Micro>Your customer page</Micro>
-          <Text className="mt-1 font-mono font-semibold text-sm text-flame">{liveUrl}</Text>
-        </Card>
-        <View className="w-full gap-2">
-          <Button
-            onPress={() =>
-              Share.share({ message: `https://${liveUrl}`, url: `https://${liveUrl}` }).catch(() => {})
-            }
-          >
-            Share my customer page
-          </Button>
-          <Button variant="ghost" onPress={() => router.push("/offer")}>
-            Offer it to a customer now
-          </Button>
-          <Button variant="ghost" onPress={() => router.replace("/(tabs)/plans")}>
-            Back to my plans
-          </Button>
-        </View>
+      <View className="flex-1 bg-panel">
+        <SafeAreaView edges={["top", "bottom"]} className="flex-1 items-center justify-center gap-4 px-6">
+          <View className="h-16 w-16 items-center justify-center rounded-full bg-ok-tint">
+            <Text className="text-3xl text-ok">✓</Text>
+          </View>
+          <Text className="text-center font-extrabold text-xl text-ink">
+            {name} is live{fresh ? "" : " — updated"}
+          </Text>
+          <Card className="w-full">
+            <Micro>Your customer page</Micro>
+            <Text className="mt-1 font-mono font-semibold text-sm text-flame">{liveUrl}</Text>
+          </Card>
+          <View className="w-full gap-2">
+            <Button
+              onPress={() =>
+                Share.share({ message: `https://${liveUrl}`, url: `https://${liveUrl}` }).catch(() => {})
+              }
+            >
+              Share my customer page
+            </Button>
+            <Button variant="ghost" onPress={() => router.push("/offer")}>
+              Offer it to a customer now
+            </Button>
+            <Button variant="ghost" onPress={() => router.replace("/(tabs)/plans")}>
+              Back to my plans
+            </Button>
+          </View>
+        </SafeAreaView>
       </View>
     );
   }
 
   return (
-    <ScrollView className="flex-1 bg-panel" contentContainerClassName="gap-2.5 px-4 pb-8 pt-4">
+    <View className="flex-1 bg-panel">
+      <SafeAreaView edges={["top"]} className="bg-iron">
+        <AppHeader title={fresh ? "New plan" : name} />
+      </SafeAreaView>
+      <ScrollView className="flex-1" contentContainerClassName="gap-2.5 px-4 pb-8 pt-4">
       <Card>
         <View className="mb-2 flex-row items-center justify-between gap-2">
           <TextInput
@@ -395,6 +412,7 @@ export default function TierEditor() {
       <Button onPress={save} disabled={busy || selected.size === 0}>
         {busy ? "Making it live…" : fresh ? "Make it live" : "Save changes"}
       </Button>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }

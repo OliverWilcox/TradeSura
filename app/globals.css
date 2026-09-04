@@ -44,6 +44,10 @@
   --color-brand-copper: #3dd68c;
   --color-night-text: #f3f7fb;
   --color-night-muted: #9fb6d0;
+  /* Dark navy text for the white primary button — the inverse of
+     ink/night-text (light text for dark surfaces). Bug fix: those were
+     wrongly reused for this and rendered as white-on-white. */
+  --color-on-light: #0f2140;
   --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --font-disp: "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;

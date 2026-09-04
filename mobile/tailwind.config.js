@@ -56,6 +56,11 @@ module.exports = {
         "brand-copper": "#3dd68c",
         "night-text": "#f3f7fb",
         "night-muted": "#9fb6d0",
+        // Dark navy text for the white primary button / white FAB — the
+        // inverse of `ink`/`night-text` (light text for dark surfaces).
+        // Bug fix: those were wrongly reused for this and rendered as
+        // white-on-white.
+        "on-light": "#0f2140",
       },
       fontFamily: {
         // System font (Build Spec §1: "No custom webfonts"). Weight comes from

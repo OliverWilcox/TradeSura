@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, Animated, AccessibilityInfo, AppState } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, getHasSignedInBefore } from "@/lib/api";
@@ -96,7 +95,8 @@ export default function Welcome() {
   // useState initializer (not useRef().current) — same "stable mutable
   // container" idiom, but doesn't trip the react-hooks/refs rule, which
   // treats any .current read outside an effect/handler as unsafe.
-  const [bgScale] = useState(() => new Animated.Value(1));
+  // (No background scale-loop: that animated a gradient/photo that isn't
+  // there — see the flat background note below.)
   const [brandAnim] = useState(() => new Animated.Value(0));
   const [heroAnim] = useState(() => new Animated.Value(0));
   const [proofAnim] = useState(() => new Animated.Value(0));
@@ -107,17 +107,11 @@ export default function Welcome() {
       [brandAnim, heroAnim, proofAnim, ctaAnim].forEach((v) => v.setValue(1));
       return;
     }
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(bgScale, { toValue: 1.03, duration: 8000, useNativeDriver: true }),
-        Animated.timing(bgScale, { toValue: 1, duration: 8000, useNativeDriver: true }),
-      ]),
-    ).start();
     const stagger = [brandAnim, heroAnim, proofAnim, ctaAnim].map((v) =>
       Animated.timing(v, { toValue: 1, duration: 260, useNativeDriver: true }),
     );
     Animated.stagger(80, stagger).start();
-  }, [reduceMotion, bgScale, brandAnim, heroAnim, proofAnim, ctaAnim]);
+  }, [reduceMotion, brandAnim, heroAnim, proofAnim, ctaAnim]);
 
   const fadeRise = (v: Animated.Value) => ({
     opacity: v,
@@ -147,20 +141,11 @@ export default function Welcome() {
   }
 
   return (
+    // Flat navy background, not the gradient/scale-loop the spec describes —
+    // expo-linear-gradient needs a native rebuild this binary doesn't have
+    // yet (see components/ui.tsx's Card for the same note). Revisit once a
+    // fresh build exists.
     <View className="flex-1 bg-bg">
-      <Animated.View
-        style={{ transform: [{ scale: bgScale }] }}
-        className="absolute inset-0"
-        pointerEvents="none"
-      >
-        <LinearGradient
-          colors={["#0E2547", "#0B1A2E", "#081321"]}
-          start={{ x: 0.2, y: 0 }}
-          end={{ x: 0.85, y: 1 }}
-          style={{ flex: 1 }}
-        />
-      </Animated.View>
-
       <SafeAreaView edges={["top", "bottom"]} className="flex-1 justify-between px-6 pb-6 pt-10">
         <Animated.View style={fadeRise(brandAnim)}>
           <Text className="font-mono text-[11px] font-medium uppercase tracking-[3px] text-brand-blue-lift">
@@ -224,7 +209,7 @@ export default function Welcome() {
                 onPress={goSignIn}
                 className="min-h-[56px] items-center justify-center rounded-2xl bg-white"
               >
-                <Text className="text-base font-extrabold text-night-text">Sign in</Text>
+                <Text className="text-base font-extrabold text-on-light">Sign in</Text>
               </Pressable>
               <Pressable
                 onPress={startPrimary}
@@ -239,7 +224,7 @@ export default function Welcome() {
                 onPress={startPrimary}
                 className="min-h-[56px] items-center justify-center rounded-2xl bg-white"
               >
-                <Text className="text-base font-extrabold text-night-text">
+                <Text className="text-base font-extrabold text-on-light">
                   {personalisedName ? "Claim my free account" : "Start now — it's free"}
                 </Text>
               </Pressable>
