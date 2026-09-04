@@ -1,0 +1,50 @@
+import { ImageResponse } from "next/og";
+import { prisma } from "@/lib/db";
+import { activeMonthlyPence } from "@/lib/plans";
+
+export const dynamic = "force-dynamic";
+
+// E10 — the WhatsApp share image, name-stamped with the referrer's business
+// and their locked-in annual income. Rendered with next/og (no extra dep).
+export async function GET(req: Request) {
+  const slug = new URL(req.url).searchParams.get("slug") ?? "";
+  const engineer = await prisma.engineer.findUnique({ where: { slug } });
+  if (!engineer) return new Response("Not found", { status: 404 });
+
+  const { totalPence } = await activeMonthlyPence(engineer.id);
+  const yearly = Math.round((totalPence * 12) / 100).toLocaleString();
+  const brand = engineer.tradingName ?? engineer.slug;
+
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          padding: "80px",
+          background: "#232A33",
+          color: "#fff",
+          fontFamily: "sans-serif",
+        }}
+      >
+        <div style={{ fontSize: 30, color: "#5FB2EE", letterSpacing: 2 }}>
+          {brand.toUpperCase()} RECOMMENDS
+        </div>
+        <div style={{ fontSize: 84, fontWeight: 800, marginTop: 8 }}>TradeSura</div>
+        <div style={{ fontSize: 96, fontWeight: 800, color: "#F3B27E", marginTop: 24 }}>
+          £{yearly}/yr
+        </div>
+        <div style={{ fontSize: 34, color: "#AEB9C4", marginTop: 8 }}>
+          locked in with care plans
+        </div>
+        <div style={{ fontSize: 26, color: "#AEB9C4", marginTop: 40 }}>
+          Free account · you keep 80% · paid weekly · tradesura.com/r/{slug}
+        </div>
+      </div>
+    ),
+    { width: 1200, height: 630 },
+  );
+}

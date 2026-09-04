@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { signToken, verifyToken } from "@/lib/auth";
 import { uniqueSlug } from "@/lib/slug";
 import { track } from "@/lib/track";
+import { normaliseClaimCode, resolveClaimCode } from "@/lib/claim";
 
 // Everything the sign-up wizard (steps 1-3) collects.
 const SignupData = z.object({
@@ -23,6 +24,18 @@ const SignupData = z.object({
   companyNumber: z.string().max(20).optional(),
   postcode: z.string().min(4).max(10),
   marketingConsent: z.boolean().default(false),
+  // E1 — "How did you hear about us?" + optional referral code. Pre-filled and
+  // hidden when arriving from a claim/referral link (Blocks 2 & 4).
+  attribution: z
+    .object({
+      heardVia: z.enum(["letter", "engineer", "online", "other"]).optional(),
+      referralCode: z.string().max(40).optional(),
+      letterBatch: z.string().max(40).optional(),
+      variantCell: z.string().max(8).optional(),
+    })
+    .optional(),
+  // C5 — letter claim code, resolved + redeemed server-side.
+  claimCode: z.string().max(20).optional(),
 });
 
 const Body = z.object({
@@ -67,6 +80,21 @@ export async function POST(req: Request) {
     }
     trades = rest.trades;
     const slug = await uniqueSlug(email.split("@")[0]);
+
+    // Resolve a claim code (C5): fold the letter cell into attribution so it
+    // reaches the account, even if the client didn't pass it explicitly.
+    const claim = rest.claimCode ? await resolveClaimCode(rest.claimCode) : null;
+    const attribution: Record<string, string> = {};
+    if (rest.attribution?.heardVia) attribution.heardVia = rest.attribution.heardVia;
+    if (rest.attribution?.referralCode) attribution.referralCode = rest.attribution.referralCode;
+    if (rest.attribution?.letterBatch) attribution.letterBatch = rest.attribution.letterBatch;
+    if (rest.attribution?.variantCell) attribution.variantCell = rest.attribution.variantCell;
+    if (claim?.valid) {
+      attribution.heardVia = "letter";
+      attribution.letterBatch = claim.letterBatch;
+      attribution.variantCell = claim.variantCell;
+    }
+    if (!attribution.heardVia) attribution.heardVia = "other";
     engineer = await prisma.engineer.create({
       data: {
         email,
@@ -85,9 +113,47 @@ export async function POST(req: Request) {
         gasSafeCompany: rest.gasSafeCompany,
         gasSafeCategories: rest.gasSafeCategories,
         gasSafeVerifiedAt: new Date(),
+        attribution,
       },
     });
-    await track("engineer_signed_up", { type: "ENGINEER", id: engineer.id }, { slug });
+    await track("engineer_signed_up", { type: "ENGINEER", id: engineer.id }, {
+      slug,
+      heardVia: attribution.heardVia,
+      referralCode: attribution.referralCode,
+      letterBatch: attribution.letterBatch,
+      variantCell: attribution.variantCell,
+    });
+
+    if (rest.claimCode && claim?.valid) {
+      await prisma.claimCode
+        .update({
+          where: { code: normaliseClaimCode(rest.claimCode) },
+          data: { redeemedByEngineerId: engineer.id, redeemedAt: new Date() },
+        })
+        .catch(() => {
+          // Already redeemed by another account — attribution is still on this
+          // engineer's record, which is what the split test measures.
+        });
+    }
+
+    // E10 — link the referrer by slug (self-referral is ignored).
+    if (attribution.referralCode) {
+      const referrer = await prisma.engineer.findUnique({
+        where: { slug: attribution.referralCode.toLowerCase() },
+      });
+      if (referrer && referrer.id !== engineer.id) {
+        engineer = await prisma.engineer.update({
+          where: { id: engineer.id },
+          data: { referrerId: referrer.id },
+        });
+        await track("referral_signup", { type: "ENGINEER", id: engineer.id }, {
+          referrerId: referrer.id,
+        });
+        await track("referral_signup", { type: "ENGINEER", id: referrer.id }, {
+          inviteeId: engineer.id,
+        });
+      }
+    }
   }
 
   const token = await signToken({ engineerId: engineer.id }, "30d");
