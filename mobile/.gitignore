@@ -9,6 +9,9 @@ dist/
 web-build/
 expo-env.d.ts
 
+# Stray build artifact (not a Next.js project) — seen accumulating here once
+.next/
+
 # Native
 .kotlin/
 *.orig.*
