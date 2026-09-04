@@ -92,32 +92,38 @@ export default function Home() {
           {me?.firstName ? `Hello, ${me.firstName}` : "Hello"}
         </Text>
         <Text className="-mt-2 text-sm text-muted">
-          Offer a plan on the doorstep — most take under 90 seconds.
+          Offer a plan at the end of the job — most take under 90 seconds.
         </Text>
 
         {loading && !data && !error && (
           <View className="items-center py-10">
-            <ActivityIndicator color="#1966CC" />
+            <ActivityIndicator color="#5FA3F0" />
           </View>
         )}
 
         {error && <Text className="text-sm text-danger">{error}</Text>}
         {data && (
           <>
-            <Card>
+            <Card variant="hero">
               <Micro>Your plan income</Micro>
               <Text className="mt-0.5 text-[36px] font-extrabold leading-none text-copper">
                 £{(data.totalPence / 100).toFixed(0)}
                 <Text className="text-base font-bold text-muted"> /month</Text>
               </Text>
               <Text className="mt-1 text-[12.5px] text-muted">
-                {data.count} active plan{data.count === 1 ? "" : "s"}
-                {data.newThisMonth > 0 && (
-                  <Text className="font-bold text-ok"> · +{data.newThisMonth} this month</Text>
+                {data.count === 0 ? (
+                  "Your first plan changes this"
+                ) : (
+                  <>
+                    {data.count} active plan{data.count === 1 ? "" : "s"}
+                    {data.newThisMonth > 0 && (
+                      <Text className="font-bold text-ok"> · +{data.newThisMonth} this month</Text>
+                    )}
+                  </>
                 )}
               </Text>
               {data.nextPayoutPence !== null && (
-                <View className="mt-2.5 flex-row items-center justify-between border-t border-line pt-2.5">
+                <View className="mt-2.5 flex-row items-center justify-between border-t border-line-strong pt-2.5">
                   <Text className="text-[12.5px] text-muted">Next payout</Text>
                   <Text className="font-mono font-bold text-copper">
                     £{(data.nextPayoutPence / 100).toFixed(2)}
@@ -129,8 +135,21 @@ export default function Home() {
               )}
             </Card>
 
+            {data.count === 0 && (
+              <Card>
+                <Micro>Get started</Micro>
+                <Text className="mt-1 text-[15px] font-bold text-ink">Send your first offer</Text>
+                <Text className="mt-1 text-[12.5px] text-muted">
+                  One customer on a plan and this card becomes your income.
+                </Text>
+                <Button className="mt-3" onPress={() => router.push("/offer")}>
+                  Offer a plan
+                </Button>
+              </Card>
+            )}
+
             {data.noPlan >= 5 && (
-              <Card className="border-[#EAD8AE] bg-warn-tint">
+              <Card className="border-[rgba(242,184,75,.3)] bg-warn-tint">
                 <View className="flex-row items-center justify-between">
                   <View className="shrink">
                     <Text className="font-mono font-bold text-warn">

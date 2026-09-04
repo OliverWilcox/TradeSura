@@ -4,7 +4,12 @@ import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { activatePlan } from "@/lib/activate";
 import { sendSms, notifyEngineer } from "@/lib/sms";
-import { constructWebhookEvent, accountStatusFrom, getStripe } from "@/lib/stripe";
+import {
+  constructWebhookEvent,
+  accountStatusFrom,
+  getStripe,
+  computeApplicationFeePence,
+} from "@/lib/stripe";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 // One endpoint for both platform events (checkout, invoices, subscriptions)
@@ -71,6 +76,38 @@ async function handleEvent(event: Stripe.Event) {
           accountId: account.id,
         });
       }
+      return;
+    }
+
+    // Build Spec v1 S1/Q2: set the real per-invoice fee (20% + ~32p Bacs
+    // processing) on every invoice for our plan subscriptions, including the
+    // first one — this only works while the invoice is still a draft, before
+    // Stripe auto-finalizes it, so a late/already-finalized invoice is
+    // logged and left alone rather than failing the webhook.
+    case "invoice.created": {
+      const invoice = event.data.object as Stripe.Invoice;
+      if (!invoice.id) return;
+      const subscriptionId = subscriptionIdFromInvoice(invoice);
+      if (!subscriptionId) return;
+      const sub = await getStripe().subscriptions.retrieve(subscriptionId);
+      if (!sub.metadata?.planId) return; // not one of our destination-charge plans
+      const destination = sub.transfer_data?.destination;
+      const destinationId = typeof destination === "string" ? destination : destination?.id;
+      if (!destinationId) return;
+      if (invoice.status !== "draft") {
+        console.warn(
+          `[stripe-webhook] invoice.created ${invoice.id} already ${invoice.status} — too late to set application_fee_amount`,
+        );
+        return;
+      }
+      // Stripe docs (connect/subscriptions#subscription-invoices): a
+      // destination-charge invoice update must carry transfer_data alongside
+      // application_fee_amount in the same call — it isn't inherited from
+      // the subscription automatically.
+      await getStripe().invoices.update(invoice.id, {
+        application_fee_amount: computeApplicationFeePence(invoice.total),
+        transfer_data: { destination: destinationId },
+      });
       return;
     }
 

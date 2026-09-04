@@ -153,7 +153,7 @@ export default function More() {
           <Text className="mb-1 font-semibold text-sm text-ink">Your business</Text>
           <View className="py-1.5">
             {me?.gasSafeNo && me.gasSafeVerifiedAt ? (
-              <View className="flex-row items-center gap-1.5 self-start rounded-md border border-[#EBD98F] bg-[#FFF6D6] px-2 py-0.5">
+              <View className="flex-row items-center gap-1.5 self-start rounded-md border border-warn-tint bg-warn-tint px-2 py-0.5">
                 <Text className="font-semibold text-[10.5px] text-warn">
                   ▲ GAS SAFE VERIFIED {me.gasSafeNo}
                 </Text>
@@ -292,7 +292,8 @@ export default function More() {
           </Card>
         )}
 
-        {data && (
+        {/* Dev-only tooling — never shown in a production build. */}
+        {__DEV__ && data && (
           <Card>
             <Text className="mb-1 font-semibold text-sm text-ink">Message queue (dev)</Text>
             <RowLine
@@ -309,6 +310,9 @@ export default function More() {
         )}
 
         <Card>
+          <Pressable onPress={() => router.push("/(tabs)/plans")}>
+            <RowLine left="My plans" right={<Pill tone="info">OPEN</Pill>} />
+          </Pressable>
           <Pressable onPress={() => router.push("/messages")}>
             <RowLine left="Messages & tickets" right={<Pill tone="info">OPEN</Pill>} />
           </Pressable>
@@ -317,9 +321,6 @@ export default function More() {
           </Pressable>
           <Pressable onPress={() => router.push("/referral")}>
             <RowLine left="Refer an engineer · £50" right={<Pill tone="ok">OPEN</Pill>} />
-          </Pressable>
-          <Pressable onPress={() => router.push("/customers/blast")}>
-            <RowLine left="Offer campaign" right={<Pill tone="info">OPEN</Pill>} />
           </Pressable>
           <Pressable onPress={() => router.push("/trades")}>
             <RowLine left="Trades & TradePacks" right={<Pill tone="info">OPEN</Pill>} />

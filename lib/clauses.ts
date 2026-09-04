@@ -533,6 +533,14 @@ export const NOT_INCLUDED_COPY =
 
 export const TRADESURA_FEE_RATE = 0.2;
 
+// The engineer's own display estimate (plan builder earnings preview) — the
+// real per-invoice deduction taken via Stripe also includes the Bacs
+// processing cost; see BACS_PROCESSING_FEE_PENCE and lib/stripe.ts.
 export function appFeePence(priceMonthlyPence: number): number {
   return Math.round(priceMonthlyPence * TRADESURA_FEE_RATE);
 }
+
+// Build Spec v1 S1/Q2: the flat 20% app fee is refined to "20% + ~32p
+// processing" borne by the engineer, applied per invoice via Stripe's
+// application_fee_amount (see lib/stripe.ts's computeApplicationFeePence).
+export const BACS_PROCESSING_FEE_PENCE = 32;

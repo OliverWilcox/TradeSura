@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { View, Text, TextInput, ScrollView, Switch, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, ScrollView, Switch, Pressable, ActivityIndicator, Share } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { api, ApiError } from "@/lib/api";
 import { Card, Micro, Pill, Button } from "@/components/ui";
@@ -49,10 +49,11 @@ function upliftLabel(t: Template) {
 }
 
 export default function TierEditor() {
-  const { tierId } = useLocalSearchParams<{ tierId: string }>();
+  const { tierId, fresh } = useLocalSearchParams<{ tierId: string; fresh?: string }>();
   const [tier, setTier] = useState<TierDetail | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [liveUrl, setLiveUrl] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [pricePence, setPricePence] = useState(1200);
@@ -154,7 +155,7 @@ export default function TierEditor() {
     setError(null);
     try {
       const clauseCodes = templates.filter((t) => selected.has(t.id)).map((t) => t.code);
-      await api(`/api/tiers/${tierId}`, {
+      const result = await api<{ ok: true; slug: string | null }>(`/api/tiers/${tierId}`, {
         method: "PUT",
         body: JSON.stringify({
           name,
@@ -164,7 +165,9 @@ export default function TierEditor() {
           customLabels,
         }),
       });
-      router.back();
+      // E6 "Make it live" — show the confirmation with the live URL instead
+      // of just popping back, same as any other save.
+      setLiveUrl(result.slug ? `tradesura.com/p/${result.slug}` : null);
     } catch (e) {
       const body = e instanceof ApiError ? (e.body as
         | { explanation?: string; suggestion?: { title: string } }
@@ -193,7 +196,41 @@ export default function TierEditor() {
   if (!tier) {
     return (
       <View className="flex-1 items-center justify-center bg-panel">
-        <ActivityIndicator color="#1966CC" />
+        <ActivityIndicator color="#5FA3F0" />
+      </View>
+    );
+  }
+
+  // E6 — "Make it live": the plan is already live the moment it saves (no
+  // separate publish step), so this is a confirmation, not a wait.
+  if (liveUrl) {
+    return (
+      <View className="flex-1 items-center justify-center gap-4 bg-panel px-6">
+        <View className="h-16 w-16 items-center justify-center rounded-full bg-ok-tint">
+          <Text className="text-3xl text-ok">✓</Text>
+        </View>
+        <Text className="text-center font-extrabold text-xl text-ink">
+          {name} is live{fresh ? "" : " — updated"}
+        </Text>
+        <Card className="w-full">
+          <Micro>Your customer page</Micro>
+          <Text className="mt-1 font-mono font-semibold text-sm text-flame">{liveUrl}</Text>
+        </Card>
+        <View className="w-full gap-2">
+          <Button
+            onPress={() =>
+              Share.share({ message: `https://${liveUrl}`, url: `https://${liveUrl}` }).catch(() => {})
+            }
+          >
+            Share my customer page
+          </Button>
+          <Button variant="ghost" onPress={() => router.push("/offer")}>
+            Offer it to a customer now
+          </Button>
+          <Button variant="ghost" onPress={() => router.replace("/(tabs)/plans")}>
+            Back to my plans
+          </Button>
+        </View>
       </View>
     );
   }
@@ -323,8 +360,8 @@ export default function TierEditor() {
         </Card>
       )}
 
-      <Card className="border-[#E1E8F0] bg-flame-tint">
-        <Text className="font-sans text-xs text-flame-deep">
+      <Card className="border-flame-tint bg-flame-tint">
+        <Text className="font-sans text-xs text-flame">
           <Text className="font-semibold">Legal wording locked in.</Text> Your plan document
           assembles only from solicitor-approved maintenance-and-priority clauses.
           Breakdown-repair promises are insurance — TradeSura keeps you on the right side of the
@@ -351,7 +388,7 @@ export default function TierEditor() {
 
       {error && <Text className="px-1 font-sans text-sm text-danger">{error}</Text>}
       <Button onPress={save} disabled={busy || selected.size === 0}>
-        {busy ? "Saving…" : "Save tier"}
+        {busy ? "Making it live…" : fresh ? "Make it live" : "Save changes"}
       </Button>
     </ScrollView>
   );

@@ -27,7 +27,9 @@ export async function GET() {
   );
 }
 
-// POST /api/tiers { preset: true } → create the 3 recommended tiers (two-tap).
+// POST /api/tiers { template: "Boiler Care" } → create that one named preset
+// (E6: pick a template, then customise and publish).
+// POST /api/tiers { preset: true } → create all 3 recommended tiers (two-tap).
 // POST /api/tiers {} → create one blank tier.
 export async function POST(req: Request) {
   const engineerId = await getEngineerId();
@@ -40,6 +42,28 @@ export async function POST(req: Request) {
   const existing = await prisma.planTier.count({ where: { engineerId, archived: false } });
   if (existing >= 3) {
     return NextResponse.json({ error: "You already have three tiers." }, { status: 400 });
+  }
+
+  if (typeof body.template === "string") {
+    const p = TIER_PRESETS.find((t) => t.name === body.template);
+    if (!p) return NextResponse.json({ error: "Unknown template." }, { status: 400 });
+    const tier = await prisma.planTier.create({
+      data: {
+        engineerId,
+        name: p.name,
+        priceMonthlyPence: p.priceMonthlyPence,
+        isRecommended: p.isRecommended,
+        sortOrder: existing,
+        clauses: { create: p.clauseCodes.map((code) => ({ clauseId: byCode.get(code)! })) },
+      },
+    });
+    await track("tier_created", { type: "ENGINEER", id: engineerId }, {
+      tierId: tier.id,
+      name: tier.name,
+      priceMonthlyPence: tier.priceMonthlyPence,
+      template: p.name,
+    });
+    return NextResponse.json({ ok: true, id: tier.id });
   }
 
   if (body.preset) {

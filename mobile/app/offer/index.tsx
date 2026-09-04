@@ -123,26 +123,18 @@ export default function OfferStart() {
         </View>
       ) : customers === null || tierCount === null ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#1966CC" />
+          <ActivityIndicator color="#5FA3F0" />
         </View>
       ) : (
         <ScrollView className="flex-1" contentContainerClassName="gap-3.5 px-4 pb-8 pt-4">
-          <Card className="items-center py-5">
-            <Micro>Average signup time</Micro>
-            <Text className="mt-1 font-mono font-semibold text-4xl text-flame-deep">0:84</Text>
-            <Text className="mt-1 font-sans text-xs text-muted">
-              Offer it while the boiler&apos;s still warm.
-            </Text>
-          </Card>
-
           {tierCount > 0 && (
-            <Card className="border-[#E3CE8F] bg-[#FFF9E8]">
+            <Card className="border-warn-tint bg-warn-tint">
               <Pressable
                 onPress={() => setScriptOpen((v) => !v)}
                 className="flex-row items-center justify-between"
               >
-                <Micro className="text-[#9A7B1B]">What to say 💬</Micro>
-                <Text className="font-sans text-xs text-[#9A7B1B]">{scriptOpen ? "Hide" : "Show"}</Text>
+                <Micro className="text-warn">What to say 💬</Micro>
+                <Text className="font-sans text-xs text-warn">{scriptOpen ? "Hide" : "Show"}</Text>
               </Pressable>
               {scriptOpen && (
                 <Text className="mt-1.5 font-sans text-[13px] text-ink">{SCRIPT}</Text>

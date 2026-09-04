@@ -100,5 +100,11 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
     name: parsed.data.name,
     priceMonthlyPence: parsed.data.priceMonthlyPence,
   });
-  return NextResponse.json({ ok: true });
+  // The plan is live at this URL the moment it's saved — no separate publish
+  // step — so the client can show it straight away (E6's "Make it live").
+  const engineer = await prisma.engineer.findUnique({
+    where: { id: engineerId },
+    select: { slug: true },
+  });
+  return NextResponse.json({ ok: true, slug: engineer?.slug ?? null });
 }

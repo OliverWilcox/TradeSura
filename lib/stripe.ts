@@ -10,7 +10,7 @@
 //   docs.stripe.com/billing/subscriptions/bacs-debit (Bacs mandate + delayed settlement)
 //   docs.stripe.com/connect/express-accounts (account links onboarding)
 import Stripe from "stripe";
-import { TRADESURA_FEE_RATE } from "@/lib/clauses";
+import { TRADESURA_FEE_RATE, BACS_PROCESSING_FEE_PENCE } from "@/lib/clauses";
 
 // CLAUDE.md: test/sandbox only. Go-live is a human sign-off — a hard stop,
 // not a config toggle. Mirrors the old assertSandbox() guard.
@@ -116,9 +116,12 @@ export function accountStatusFrom(a: Stripe.Account): ConnectAccountStatus {
 // Customer plan — Bacs Direct Debit subscription as a destination charge
 // ---------------------------------------------------------------------------
 
-export function appFeeBasisPoints(): number {
-  // Stripe wants application_fee_percent as a plain number 0–100.
-  return Number((TRADESURA_FEE_RATE * 100).toFixed(2));
+// Build Spec v1 S1/Q2: 20% + ~32p Bacs processing, borne by the engineer.
+// Applied per invoice (not as a flat subscription-level percent) via the
+// invoice.created webhook handler, which can still edit a draft invoice
+// before Stripe finalizes it — see app/api/stripe/webhook/route.ts.
+export function computeApplicationFeePence(invoiceTotalPence: number): number {
+  return Math.round(invoiceTotalPence * TRADESURA_FEE_RATE) + BACS_PROCESSING_FEE_PENCE;
 }
 
 export function publishableKey(): string {
@@ -168,7 +171,9 @@ export async function createEmbeddedSubscription(opts: {
       payment_method_types: ["bacs_debit"],
       save_default_payment_method: "on_subscription",
     },
-    application_fee_percent: appFeeBasisPoints(),
+    // No flat application_fee_percent here — the invoice.created webhook sets
+    // application_fee_amount per invoice (20% + Bacs processing), so every
+    // month's invoice (including this first one) gets it before finalization.
     transfer_data: { destination: opts.engineerAccountId },
     on_behalf_of: opts.engineerAccountId,
     metadata: { planId: opts.planId, planRef: opts.planRef },
