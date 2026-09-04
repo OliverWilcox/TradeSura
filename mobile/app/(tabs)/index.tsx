@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, ActivityIndicator, Pressable } from "react-native";
+import { View, Text, ScrollView, RefreshControl, ActivityIndicator, Pressable, Image } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
@@ -76,9 +76,13 @@ export default function Home() {
           right={
             <Pressable
               onPress={() => router.push("/more")}
-              className="h-8 w-8 items-center justify-center rounded-full bg-flame-tint"
+              className="h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-flame-tint"
             >
-              <Text className="text-[11px] font-bold text-flame-deep">{monogram}</Text>
+              {me?.logoUrl ? (
+                <Image source={{ uri: me.logoUrl }} className="h-8 w-8" />
+              ) : (
+                <Text className="text-[11px] font-bold text-flame-deep">{monogram}</Text>
+              )}
             </Pressable>
           }
         />

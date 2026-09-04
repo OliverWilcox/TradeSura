@@ -21,6 +21,7 @@ export type Me = {
   companyNumber: string | null;
   postcode: string | null;
   tradingName: string | null;
+  logoUrl: string | null;
   slug: string;
   gasSafeVerifiedAt: string | null;
   gasSafeReviewRequestedAt: string | null;
