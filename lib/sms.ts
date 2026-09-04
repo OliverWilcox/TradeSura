@@ -4,6 +4,7 @@
 // opt-outs honoured platform-wide; no sends 20:00–08:00 (queued instead).
 import { prisma } from "@/lib/db";
 import type { MessageClass } from "@/lib/generated/prisma/enums";
+import { isSuppressed } from "@/lib/suppression";
 
 // Alphanumeric sender IDs (used below for every engineer-branded send) are
 // one-way on real networks — Twilio's own STOP-keyword filtering doesn't
@@ -96,11 +97,27 @@ export async function sendVerificationCode(to: string, code: string): Promise<{ 
   return delivered ? {} : { devCode: code };
 }
 
+// Service notification to the engineer's own verified mobile (plan signup,
+// payment issue, referral progress). Not a marketing send — no OutboundSms
+// row, no STOP suffix, no quiet hours; it goes to the account holder about
+// their own account. Sent from the shared long code so it comes from a real
+// number. No-op if the engineer has no verified phone or Twilio is unset.
+export async function notifyEngineer(engineerId: string, body: string) {
+  const engineer = await prisma.engineer.findUnique({
+    where: { id: engineerId },
+    select: { phone: true },
+  });
+  if (!engineer?.phone) return;
+  await deliver("TradeSura", engineer.phone, body, { fromLongCode: true });
+}
+
 export async function sendSms(opts: {
   engineerId: string;
   to: string;
   body: string;
   messageClass: MessageClass;
+  // plan-member-transactional | engineer-initiated | marketing
+  consentBasis?: string;
   sendAfter?: Date; // for scheduled nudges
   cancelKey?: string;
 }) {
@@ -112,13 +129,17 @@ export async function sendSms(opts: {
 
   let body = opts.body;
   if (opts.messageClass === "MARKETING") {
-    if (
-      await prisma.customer.findFirst({ where: { phone: opts.to, smsOptOut: true } })
-    ) {
-      return { sent: false, reason: "opted-out" as const };
-    }
+    // Per-book flag OR the platform-wide suppression store.
+    const optedOut =
+      (await prisma.customer.findFirst({ where: { phone: opts.to, smsOptOut: true } })) ||
+      (await isSuppressed("sms", opts.to));
+    if (optedOut) return { sent: false, reason: "opted-out" as const };
     if (!body.includes(STOP_SUFFIX)) body = `${body} ${STOP_SUFFIX}`;
   }
+
+  const consentBasis =
+    opts.consentBasis ??
+    (opts.messageClass === "MARKETING" ? "marketing" : "engineer-initiated");
 
   const now = new Date();
   let sendAfter = opts.sendAfter ?? now;
@@ -134,6 +155,7 @@ export async function sendSms(opts: {
       senderName,
       body,
       class: opts.messageClass,
+      consentBasis,
       sendAfter,
       cancelKey: opts.cancelKey,
       ...(sendAfter <= now ? { status: "SENT" as const, sentAt: now } : {}),

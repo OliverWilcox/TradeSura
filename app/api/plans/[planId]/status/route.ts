@@ -19,7 +19,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ planId: string
     status: plan.status,
     opened: Boolean(plan.linkOpenedAt),
     tierChosen: Boolean(plan.tierId),
-    bankStarted: Boolean(plan.gcBillingRequestId),
+    bankStarted: Boolean(plan.stripeSubscriptionId),
     priceMonthlyPence: plan.priceMonthlyPence,
     customerFirstName: plan.customer.firstName,
     customerLastName: plan.customer.lastName,

@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
-import { cancelGcSubscription } from "@/lib/gocardless";
+import { cancelStripeSubscription } from "@/lib/stripe";
 import { sendEmail } from "@/lib/email";
-import { cancelScheduledSms } from "@/lib/sms";
+import { cancelScheduledSms, notifyEngineer } from "@/lib/sms";
 
-export async function POST(_req: Request, ctx: { params: Promise<{ token: string }> }) {
+const Body = z.object({ reason: z.string().max(40).nullable().optional() });
+
+export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
+  const reason = Body.safeParse(await req.json().catch(() => ({}))).data?.reason ?? null;
   const plan = await prisma.plan.findUnique({
     where: { portalToken: token },
     include: { engineer: true, customer: true, tier: true },
@@ -14,15 +18,17 @@ export async function POST(_req: Request, ctx: { params: Promise<{ token: string
   if (!plan) return NextResponse.json({ error: "Not found." }, { status: 404 });
   if (plan.status === "CANCELLED") return NextResponse.json({ ok: true });
 
-  // Cancel the subscription at GoCardless first — the DD must actually stop.
-  if (plan.gcSubscriptionId && plan.engineer.gcAccessToken) {
+  // Cancel the subscription at Stripe first — the DD must actually stop.
+  if (plan.stripeSubscriptionId) {
     try {
-      await cancelGcSubscription(plan.engineer.gcAccessToken, plan.gcSubscriptionId);
+      await cancelStripeSubscription(plan.stripeSubscriptionId);
     } catch (err) {
-      // Already-cancelled at GC is fine; anything else must not silently pass.
-      const msg = err instanceof Error ? err.message : "";
-      if (!/cancelled|422|404/.test(msg)) {
-        console.error("[cancel] GC subscription cancel failed:", err);
+      // Already-cancelled / not-found at Stripe is fine; anything else must
+      // not silently pass.
+      const code = (err as { code?: string; statusCode?: number })?.code;
+      const status = (err as { statusCode?: number })?.statusCode;
+      if (code !== "resource_missing" && status !== 404) {
+        console.error("[cancel] Stripe subscription cancel failed:", err);
         return NextResponse.json(
           { error: "Could not cancel with the payment provider — try again in a minute." },
           { status: 502 },
@@ -33,7 +39,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ token: string
 
   await prisma.plan.update({
     where: { id: plan.id },
-    data: { status: "CANCELLED", cancelledAt: new Date() },
+    data: { status: "CANCELLED", cancelledAt: new Date(), mandateStatus: "inactive" },
   });
   // A cancelled plan gets no nudges and no service reminders.
   await cancelScheduledSms(`nudge:${plan.id}`);
@@ -42,7 +48,12 @@ export async function POST(_req: Request, ctx: { params: Promise<{ token: string
     planId: plan.id,
     ref: plan.ref,
     reason: "customer_portal",
+    reasonChip: reason,
   });
+  await notifyEngineer(
+    plan.engineerId,
+    `${plan.customer.firstName} ${plan.customer.lastName} cancelled their ${plan.tier?.name ?? "care"} plan${reason ? ` (${reason})` : ""}.`,
+  );
 
   const brand = plan.engineer.tradingName ?? plan.engineer.slug;
   if (plan.customer.email) {

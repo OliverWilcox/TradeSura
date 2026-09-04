@@ -16,6 +16,9 @@ const Body = z.object({
   addressLine1: z.string().max(120).optional().or(z.literal("")),
   town: z.string().max(60).optional().or(z.literal("")),
   postcode: z.string().max(12).optional().or(z.literal("")),
+  // 'sms' sends our branded text now; 'whatsapp' skips it (the engineer shares
+  // the link himself) but still queues the follow-up nudges.
+  channel: z.enum(["sms", "whatsapp"]).default("sms"),
 });
 
 // Mobile counterpart to the customer-picker query in app/offer/page.tsx.
@@ -29,8 +32,11 @@ export async function GET() {
     take: 100,
     select: { id: true, firstName: true, lastName: true, phone: true },
   });
-  const tierCount = await prisma.planTier.count({ where: { engineerId, archived: false } });
-  return NextResponse.json({ customers, tierCount });
+  const [tierCount, offersSent] = await Promise.all([
+    prisma.planTier.count({ where: { engineerId, archived: false } }),
+    prisma.plan.count({ where: { engineerId } }),
+  ]);
+  return NextResponse.json({ customers, tierCount, offersSent });
 }
 
 export async function POST(req: Request) {
@@ -94,12 +100,16 @@ export async function POST(req: Request) {
   const brand = engineer.tradingName ?? engineer.slug;
 
   // Signup link is customer-requested at the end of the job → transactional.
-  await sendSms({
-    engineerId,
-    to: customer.phone,
-    body: `Hi ${customer.firstName} — your ${brand} care plan link: ${link}`,
-    messageClass: "TRANSACTIONAL",
-  });
+  // On the WhatsApp path the engineer shares it himself, so skip our text.
+  if (b.channel === "sms") {
+    await sendSms({
+      engineerId,
+      to: customer.phone,
+      body: `Hi ${customer.firstName} — your ${brand} care plan link: ${link}`,
+      messageClass: "TRANSACTIONAL",
+      consentBasis: "engineer-initiated",
+    });
+  }
 
   // Abandon nudges (spec Screen 04): that evening + 3 days later. Marketing
   // class → STOP suffix + quiet hours in lib/sms. Cancelled on activation.
@@ -126,6 +136,16 @@ export async function POST(req: Request) {
     ref: plan.ref,
     customerId: customer.id,
   });
+  await track("offer_sent", { type: "ENGINEER", id: engineerId }, {
+    planId: plan.id,
+    customerId: customer.id,
+    channel: b.channel,
+  });
 
-  return NextResponse.json({ ok: true, planId: plan.id });
+  return NextResponse.json({
+    ok: true,
+    planId: plan.id,
+    link,
+    customerFirstName: customer.firstName,
+  });
 }

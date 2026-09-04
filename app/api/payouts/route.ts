@@ -3,14 +3,16 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { activeMonthlyPence } from "@/lib/plans";
 import { appFeePence } from "@/lib/clauses";
+import { getPayoutSummary, stripeConfigured, type PayoutSummary } from "@/lib/stripe";
 
-// Mobile counterpart to app/payouts/page.tsx (restored — see CLAUDE.md's
-// 2026-08-03 scope note). The More hub's inline card is just the summary;
-// this is the fuller breakdown + failed-collection recovery list.
+// E11 — Payouts & collections. When the engineer's Stripe account is live this
+// returns real balance + payout history; until then it falls back to the
+// maths of their active plans.
 export async function GET() {
   const engineerId = await getEngineerId();
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
+  const engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
   const { totalPence, count } = await activeMonthlyPence(engineerId);
   const fee = appFeePence(totalPence);
 
@@ -20,7 +22,7 @@ export async function GET() {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const [confirmed, failedEvents] = await Promise.all([
+  const [confirmed, failedEvents, referralBonuses] = await Promise.all([
     prisma.event.count({
       where: {
         name: "payment_confirmed",
@@ -36,7 +38,21 @@ export async function GET() {
       },
       orderBy: { ts: "desc" },
     }),
+    prisma.event.findMany({
+      where: {
+        name: "referral_activated",
+        ts: { gte: monthStart },
+        meta: { path: ["referrerId"], equals: engineerId },
+      },
+    }),
   ]);
+
+  const referralBonusPence = referralBonuses.reduce(
+    (sum, e) => sum + ((e.meta as { bountyPence?: number } | null)?.bountyPence ?? 5000),
+    0,
+  );
+  // ~32p per Bacs collection (1% + 20p capped £4), estimated on confirmed count.
+  const processingPence = confirmed * 32;
 
   const failedPlanIds = [
     ...new Set(
@@ -46,15 +62,32 @@ export async function GET() {
     ),
   ];
   const failedPlans = await prisma.plan.findMany({
-    where: { id: { in: failedPlanIds } },
+    where: { id: { in: failedPlanIds }, status: { not: "CANCELLED" } },
     include: { customer: true },
   });
+
+  let stripe: PayoutSummary | null = null;
+  let stripeError = false;
+  if (stripeConfigured() && engineer.stripeAccountId && engineer.stripePayoutsEnabled) {
+    try {
+      stripe = await getPayoutSummary(engineer.stripeAccountId);
+    } catch (err) {
+      console.error("[payouts] Stripe summary failed:", err);
+      stripeError = true;
+    }
+  }
 
   return NextResponse.json({
     totalPence,
     count,
     fee,
     confirmed,
+    referralBonusPence,
+    processingPence,
+    bankLast4: stripe?.bankLast4 ?? null,
+    stripe,
+    stripeError,
+    accountRestricted: Boolean(engineer.stripeAccountId) && !engineer.stripeChargesEnabled,
     failedPlans: failedPlans.map((p) => ({
       id: p.id,
       customerName: `${p.customer.firstName} ${p.customer.lastName}`,

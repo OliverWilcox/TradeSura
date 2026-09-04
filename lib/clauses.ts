@@ -471,62 +471,59 @@ export function suggestedPricePence(upliftsPence: (number | null)[]): number {
   return SUGGESTED_BASE_PENCE + upliftsPence.reduce<number>((a, b) => a + (b ?? 0), 0);
 }
 
-// Two-tap tier presets (spec Screen 03: Essential ~£9 / Plus ~£15 / Complete ~£22).
+// Two-tap tier presets (Build Spec v1 E6: Boiler Care ~£12 / Boiler + Controls
+// ~£15 / Landlord Care ~£15). Each is a starting point the engineer re-prices
+// and re-scopes; wording still assembles only from the clause templates.
 export const TIER_PRESETS = [
   {
-    name: "Essential",
-    priceMonthlyPence: 900,
+    name: "Boiler Care",
+    priceMonthlyPence: 1200,
     isRecommended: false,
     clauseCodes: [
       "ANNUAL_SERVICE",
       "PRIORITY_48H",
+      "NO_CALLOUT_FEE",
       "SERVICE_HISTORY",
       "ANNUAL_REMINDER",
       "CO_ALARM_TEST",
-      "NO_CALLOUT_FEE",
     ],
   },
   {
-    name: "Plus",
+    name: "Boiler + Controls",
     priceMonthlyPence: 1500,
     isRecommended: true,
     clauseCodes: [
       "ANNUAL_SERVICE",
       "PRIORITY_48H",
+      "NO_CALLOUT_FEE",
       "SERVICE_HISTORY",
       "ANNUAL_REMINDER",
       "CO_ALARM_TEST",
-      "NO_CALLOUT_FEE",
+      "SMART_THERMOSTAT",
       "HEALTH_CHECK",
-      "MAGNETIC_FILTER",
-      "WARRANTY_VALID",
-      "LABOUR_DISCOUNT_15",
-      "DIRECT_LINE",
+      "BOILER_TUNE",
     ],
   },
   {
-    name: "Complete",
-    priceMonthlyPence: 2200,
+    name: "Landlord Care",
+    priceMonthlyPence: 1500,
     isRecommended: false,
     clauseCodes: [
       "ANNUAL_SERVICE",
       "PRIORITY_48H",
+      "NO_CALLOUT_FEE",
       "SERVICE_HISTORY",
       "ANNUAL_REMINDER",
-      "CO_ALARM_TEST",
-      "NO_CALLOUT_FEE",
-      "HEALTH_CHECK",
-      "MAGNETIC_FILTER",
-      "WARRANTY_VALID",
-      "LABOUR_DISCOUNT_15",
-      "DIRECT_LINE",
-      "PARTS_DISCOUNT",
-      "SAMEDAY_PRIORITY",
-      "HEALTH_REPORT",
-      "LOYALTY_CREDIT",
+      "CP12",
+      "SMOKE_CO_CHECKS",
+      "CERT_STORAGE",
     ],
   },
 ] as const;
+
+// E6 price stepper bounds (Build Spec v1: £8–£25).
+export const TIER_PRICE_MIN_PENCE = 800;
+export const TIER_PRICE_MAX_PENCE = 2500;
 
 // Expectation management (handover 1.4). One source of truth — shown on the
 // signup page, the customer portal and in the plan document email.

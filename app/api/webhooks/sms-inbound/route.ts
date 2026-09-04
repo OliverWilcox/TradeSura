@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
+import { suppress, unsuppress } from "@/lib/suppression";
 
 // Twilio's request-signing algorithm: HMAC-SHA1, keyed by the Auth Token, of
 // the exact webhook URL with every POST param's key+value appended in
@@ -53,11 +54,13 @@ export async function POST(req: Request) {
   // matching row gets updated, not just one.
   if (STOP_KEYWORDS.has(keyword)) {
     await prisma.customer.updateMany({ where: { phone: from }, data: { smsOptOut: true } });
+    await suppress("sms", from, "sms_stop");
     await track("sms_opted_out", { type: "CUSTOMER" }, { phone: from });
     return twiml("You've been unsubscribed from TradeSura care plan texts. Reply START to resubscribe.");
   }
   if (START_KEYWORDS.has(keyword)) {
     await prisma.customer.updateMany({ where: { phone: from }, data: { smsOptOut: false } });
+    await unsuppress("sms", from);
     await track("sms_opted_in", { type: "CUSTOMER" }, { phone: from });
     return twiml("You're resubscribed to TradeSura care plan texts.");
   }

@@ -73,7 +73,7 @@ export async function POST(req: Request) {
     data: {
       engineerId,
       name: `Tier ${existing + 1}`,
-      priceMonthlyPence: 900,
+      priceMonthlyPence: 1200,
       sortOrder: existing,
       clauses: { create: core.map((code) => ({ clauseId: byCode.get(code)! })) },
     },

@@ -6,7 +6,7 @@ function csvField(s: string) {
 }
 
 // Accountant-ready plan export. Payment-level rows arrive with the live
-// GoCardless feed.
+// Stripe payouts feed.
 export async function GET() {
   const engineerId = await getEngineerId();
   if (!engineerId) return new Response("Not signed in.", { status: 401 });

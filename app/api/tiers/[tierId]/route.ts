@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
+import { track } from "@/lib/track";
 import { checkWording } from "@/lib/compliance/blocklist";
+import { TIER_PRICE_MIN_PENCE, TIER_PRICE_MAX_PENCE } from "@/lib/clauses";
 
 const Body = z.object({
   name: z.string().min(2).max(40),
-  priceMonthlyPence: z.number().int().min(100).max(20000),
+  priceMonthlyPence: z.number().int().min(TIER_PRICE_MIN_PENCE).max(TIER_PRICE_MAX_PENCE),
   isRecommended: z.boolean(),
   clauseCodes: z.array(z.string()).min(1).max(20),
   customLabels: z.array(z.string().min(2).max(80)).max(5),
@@ -93,5 +95,10 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
       },
     }),
   ]);
+  await track("plan_published", { type: "ENGINEER", id: engineerId }, {
+    tierId,
+    name: parsed.data.name,
+    priceMonthlyPence: parsed.data.priceMonthlyPence,
+  });
   return NextResponse.json({ ok: true });
 }
