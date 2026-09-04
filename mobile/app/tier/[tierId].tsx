@@ -369,19 +369,21 @@ export default function TierEditor() {
         </Text>
       </Card>
 
-      <Card>
-        <Micro className="mb-1">What you&apos;ll earn</Micro>
-        <Text className="font-mono font-semibold text-[15px] text-copper">
+      {/* E6 — the earnings preview is the screen's money moment, so it gets
+          the hero treatment, same as the dashboard's income card. */}
+      <Card variant="hero">
+        <Micro>What you&apos;ll earn</Micro>
+        <Text className="mt-0.5 font-mono font-semibold text-[15px] text-copper">
           £{((pricePence - fee) / 100).toFixed(2)} per customer per month
         </Text>
-        <Text className="mt-0.5 font-sans text-[11px] text-faint">
+        <Text className="mt-0.5 font-sans text-[11px] text-night-muted">
           50 customers = £{(((pricePence - fee) * 12 * 50) / 100).toLocaleString()}/year
         </Text>
-        <View className="mt-2 flex-row items-center justify-between border-t border-line-soft pt-2">
-          <Text className="font-sans text-sm text-ink">TradeSura fee (20%)</Text>
-          <Text className="font-mono text-ink">£{(fee / 100).toFixed(2)}/mo</Text>
+        <View className="mt-2 flex-row items-center justify-between border-t border-line-strong pt-2">
+          <Text className="font-sans text-sm text-white">TradeSura fee (20%)</Text>
+          <Text className="font-mono text-white">£{(fee / 100).toFixed(2)}/mo</Text>
         </View>
-        <Text className="mt-1 font-sans text-[11px] text-faint">
+        <Text className="mt-1 font-sans text-[11px] text-night-muted">
           You keep 80%. Direct Debit processing (~32p per collection) comes out of your share.
         </Text>
       </Card>

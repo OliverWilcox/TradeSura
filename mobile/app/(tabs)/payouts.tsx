@@ -1,8 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View, Text, ScrollView, RefreshControl, Share } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { api, apiText, ApiError } from "@/lib/api";
+import { api, apiText, ApiError, getHasSeenFirstPayout, setHasSeenFirstPayout } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, RowLine, Button } from "@/components/ui";
 
 type FailedPlan = { id: string; customerName: string; priceMonthlyPence: number };
@@ -57,6 +57,26 @@ export default function Payouts() {
     }, [load]),
   );
 
+  // E11b — the first time this account has exactly one real Stripe payout,
+  // show the celebration once, ever, then never again.
+  useEffect(() => {
+    const history = data?.stripe?.history;
+    if (!history || history.length !== 1) return;
+    getHasSeenFirstPayout().then((seen) => {
+      if (seen || !data) return;
+      setHasSeenFirstPayout();
+      router.push({
+        pathname: "/first-payout",
+        params: {
+          amountPence: String(history[0].amountPence),
+          plans: String(data.count),
+          monthlyPence: String(data.totalPence - data.fee),
+          ...(data.bankLast4 ? { bankLast4: data.bankLast4 } : {}),
+        },
+      });
+    });
+  }, [data]);
+
   async function onRefresh() {
     setRefreshing(true);
     await load();
@@ -105,20 +125,21 @@ export default function Payouts() {
 
         {data && (
           <>
-            <Card>
-              <Micro className="mb-1">
+            {/* E11 — the next-payout figure is the screen's money moment. */}
+            <Card variant="hero">
+              <Micro>
                 {s?.nextPayout ? `Next payout · ${shortDate(s.nextPayout.arrivalDate)}` : "Expected monthly payout"}
               </Micro>
-              <Text className="font-mono font-semibold text-3xl text-copper">
+              <Text className="mt-0.5 font-mono font-semibold text-3xl text-copper">
                 {pounds(s?.nextPayout ? s.nextPayout.amountPence : expectedToBank)}
               </Text>
-              <Text className="mt-1 font-sans text-xs text-muted">
+              <Text className="mt-1 font-sans text-xs text-night-muted">
                 {s
                   ? `${pounds(s.availablePence)} available · ${pounds(s.pendingPence)} still clearing`
                   : `${data.count} active plan${data.count === 1 ? "" : "s"} · paid out direct to your bank`}
               </Text>
               {!s && !data.stripeError && (
-                <Text className="mt-1 font-sans text-[11px] text-faint">
+                <Text className="mt-1 font-sans text-[11px] text-night-muted">
                   The live Stripe payout feed switches on once your first collections clear; until
                   then this is the maths of your active plans.
                 </Text>

@@ -25,22 +25,22 @@ export async function GET(req: Request) {
           flexDirection: "column",
           justifyContent: "center",
           padding: "80px",
-          background: "#232A33",
+          background: "#0B1A2E",
           color: "#fff",
           fontFamily: "sans-serif",
         }}
       >
-        <div style={{ fontSize: 30, color: "#5FB2EE", letterSpacing: 2 }}>
+        <div style={{ fontSize: 30, color: "#5FA3F0", letterSpacing: 2 }}>
           {brand.toUpperCase()} RECOMMENDS
         </div>
         <div style={{ fontSize: 84, fontWeight: 800, marginTop: 8 }}>TradeSura</div>
-        <div style={{ fontSize: 96, fontWeight: 800, color: "#F3B27E", marginTop: 24 }}>
+        <div style={{ fontSize: 96, fontWeight: 800, color: "#3DD68C", marginTop: 24 }}>
           £{yearly}/yr
         </div>
-        <div style={{ fontSize: 34, color: "#AEB9C4", marginTop: 8 }}>
+        <div style={{ fontSize: 34, color: "#9FB6D0", marginTop: 8 }}>
           locked in with care plans
         </div>
-        <div style={{ fontSize: 26, color: "#AEB9C4", marginTop: 40 }}>
+        <div style={{ fontSize: 26, color: "#9FB6D0", marginTop: 40 }}>
           Free account · you keep 80% · paid weekly · tradesura.com/r/{slug}
         </div>
       </div>

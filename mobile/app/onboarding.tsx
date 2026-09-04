@@ -32,10 +32,15 @@ function StepCard({
   children?: ReactNode;
 }) {
   return (
-    <Card className={state === "next" ? "border-[1.5px] border-flame" : ""}>
+    <Card
+      variant={state === "next" ? "raised" : "flat"}
+      className={
+        state === "next" ? "border-[1.5px] border-flame" : state === "later" ? "opacity-60" : ""
+      }
+    >
       <View className="flex-row items-start justify-between gap-2">
         <View className="shrink">
-          <Micro className={state === "done" ? "text-ok" : state === "next" ? "text-flame-deep" : ""}>
+          <Micro className={state === "done" ? "text-ok" : state === "next" ? "text-flame" : ""}>
             {state === "done" ? "✓ Done" : `Step ${n}`}
           </Micro>
           <Text className="mt-0.5 font-semibold text-[15px] text-ink">{title}</Text>

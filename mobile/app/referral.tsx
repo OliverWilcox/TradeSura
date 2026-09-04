@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, Share, Linking } from "react-native";
+import { View, Text, ScrollView, Share, Linking, Image } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
@@ -61,13 +61,26 @@ export default function Referral() {
 
         {data && (
           <>
-            <Card className="items-center border-ok-tint bg-ok-tint py-5">
-              <Text className="font-mono font-semibold text-4xl text-ok">{bounty}</Text>
-              <Text className="mt-1 font-semibold text-sm text-ink">
+            {/* E10 — the £50 hero card, the screen's money moment. */}
+            <Card variant="hero" className="items-center py-5">
+              <Text className="font-mono font-semibold text-4xl text-copper">{bounty}</Text>
+              <Text className="mt-1 font-semibold text-sm text-white">
                 for every engineer you bring in
               </Text>
-              <Text className="mt-0.5 font-sans text-xs text-muted">
+              <Text className="mt-0.5 font-sans text-xs text-night-muted">
                 Paid into your payout when they get {data.requiredPlans} plans live
+              </Text>
+            </Card>
+
+            {/* Share card preview — the branded image your invite link shows. */}
+            <Card className="items-center border-line-strong py-4">
+              <Image
+                source={{ uri: data.cardUrl }}
+                style={{ width: 260, height: 137, borderRadius: 10 }}
+                resizeMode="cover"
+              />
+              <Text className="mt-2 font-sans text-[11px] text-faint">
+                This is what your invite link shows.
               </Text>
             </Card>
 

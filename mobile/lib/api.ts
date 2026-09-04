@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 const TOKEN_KEY = "ts_engineer_token";
 const STRIPE_SKIPPED_KEY = "ts_stripe_skipped";
 const HAS_SIGNED_IN_KEY = "ts_has_signed_in_before";
+const HAS_SEEN_FIRST_PAYOUT_KEY = "ts_has_seen_first_payout";
 
 // process.env.EXPO_PUBLIC_* is inlined by Metro at build time — see .env.example.
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -45,6 +46,16 @@ export async function getHasSignedInBefore(): Promise<boolean> {
 
 export async function setHasSignedInBefore(): Promise<void> {
   await SecureStore.setItemAsync(HAS_SIGNED_IN_KEY, "1");
+}
+
+// E11b — the one-time first-payout celebration. Shown once, ever, the first
+// time payouts.tsx sees exactly one payout in the Stripe history.
+export async function getHasSeenFirstPayout(): Promise<boolean> {
+  return (await SecureStore.getItemAsync(HAS_SEEN_FIRST_PAYOUT_KEY)) === "1";
+}
+
+export async function setHasSeenFirstPayout(): Promise<void> {
+  await SecureStore.setItemAsync(HAS_SEEN_FIRST_PAYOUT_KEY, "1");
 }
 
 export class ApiError extends Error {
