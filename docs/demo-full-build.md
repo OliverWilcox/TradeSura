@@ -1,27 +1,35 @@
 # TradeSura — full P0 loop demo
 
 Takes you from an empty database to: verified engineer → branded 3-tier plan →
-doorstep link → phone signup → **sandbox** mandate + subscription with the 20%
-app fee → plan-document email → portal cancellation. No manual DB edits.
+doorstep link → phone signup → **test-mode** Bacs mandate + subscription with
+the 20% app fee → plan-document email → portal cancellation. No manual DB edits.
 
 ## 0. One-time prerequisites (human tasks)
 
-1. **GoCardless sandbox partner app** — create at
-   https://manage-sandbox.gocardless.com → Developers → Create → App.
-   - Redirect URI: `<APP_URL>/api/gc/callback`
-   - Put the client id/secret into `.env` (`GC_OAUTH_CLIENT_ID`, `GC_OAUTH_CLIENT_SECRET`).
-2. **Webhook endpoint** — Developers → Webhook endpoints → create, URL
-   `<APP_URL>/api/gc/webhook`; put its secret into `.env` (`GC_WEBHOOK_SECRET`).
-3. **Public tunnel** (needed for webhooks + the real-phone step):
+1. **Stripe integration** — `vercel integration add stripe` (accept the
+   Marketplace terms in the browser when prompted), then `vercel env pull`.
+   That populates `STRIPE_SECRET_KEY` (`sk_test_…`) and
+   `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (`pk_test_…`). `lib/stripe.ts` refuses
+   any non-test key.
+   - In the Stripe dashboard: **Connect** → enable Express accounts; complete
+     the platform profile so **Bacs Direct Debit** is an available method.
+2. **Webhook endpoint** — Stripe dashboard → Developers → Webhooks → add
+   endpoint `<APP_URL>/api/stripe/webhook`, **with "Listen to events on
+   Connected accounts" enabled**; events: `account.updated`,
+   `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`,
+   `customer.subscription.deleted`. Put the signing secret into `.env`
+   (`STRIPE_WEBHOOK_SECRET`). Local dev: `stripe listen --forward-to
+   localhost:3000/api/stripe/webhook` prints a `whsec_…` to use instead.
+3. **Public tunnel** (needed for the real-phone step; the Stripe CLI covers
+   webhooks locally):
    ```
    cloudflared tunnel --url http://localhost:3000
    ```
-   Set `APP_URL` in `.env` to the printed `https://…trycloudflare.com` URL and
-   use that URL in the GoCardless redirect URI + webhook endpoint. Restart the
-   dev server after changing `.env`.
+   Set `APP_URL` in `.env` to the printed `https://…trycloudflare.com` URL.
+   Restart the dev server after changing `.env`.
    *(Local-only dry run? Leave `APP_URL=http://localhost:3000` — activation
-   still works because the confirmed page actively polls the billing request;
-   only the real-phone step and webhooks need the tunnel.)*
+   still works because the confirmed page actively polls the Checkout session;
+   only the real-phone step needs the tunnel.)*
 4. Real Gas Safe extract at `data/gas_safe.csv` if you have it — the repo ships
    a synthetic one (fictional engineers; reg no `584123` = "D. Smith, Smith
    Heating Ltd").
@@ -35,7 +43,7 @@ npx prisma migrate deploy
 npm run db:seed          # 8 solicitor-approved clause templates
 npm run import:gas-safe  # Gas Safe register lookup table
 npm run dev              # or preview server "planlock"
-npm run test && npm run typecheck && npm run lint   # 53 tests green
+npm run test && npm run typecheck && npm run lint   # tests green
 ```
 
 ## 2. Engineer: verify + brand (Screen 01)
@@ -44,8 +52,9 @@ npm run test && npm run typecheck && npm run lint   # 53 tests green
    driver also prints the link to the server console).
 2. Onboarding: Gas Safe no. `584 123` → **Check the register** → autofills
    "D. Smith · Smith Heating Ltd" → trading name `Smith Heating` → **Save**.
-3. Step 3: **Connect GoCardless (sandbox)** → approve on the GC sandbox page →
-   back with "✓ GoCardless connected".
+3. Step 3: **Set up payments** → complete the Stripe Connect Express test-mode
+   onboarding → back with "✓ Payments ready" (`/api/me` syncs the account
+   status; `account.updated` webhook confirms it out of band).
 
 Events so far: `engineer_signed_up`, `gas_safe_verified`.
 
@@ -63,23 +72,29 @@ insurance explanation + nearest approved clause. Events: `tier_created` ×3.
    server console; **Show QR on my screen instead** for the phone.
 2. Scan the QR with a real phone (needs the tunnel URL as `APP_URL`).
 3. On the phone: tier cards show the full monthly price; pick **Plus** — the
-   button restates "£15/month by Direct Debit" *before* the GoCardless page.
-4. GoCardless hosted flow — sandbox test bank details:
-   sort code `20-00-00`, account `55779911`, any UK address.
+   button restates "£15/month by Direct Debit" *before* the Stripe checkout.
+4. Stripe Checkout (Bacs) — test bank details, use the 3-minute-delay account
+   to mirror live timing: sort code `10-88-00`, account `90012345`, any name
+   and email.
 5. Watch the engineer screen: LINK SENT → OPENED → CHOOSING TIER → BANK
-   DETAILS → **ACTIVE** with the full-screen flame-lit celebration.
+   DETAILS. Bacs settles on a delay — the screen holds at BANK DETAILS until
+   the first collection clears (~3 min for the delayed test account), then
+   flips to **ACTIVE** with the full-screen celebration.
 
 Events: `doorstep_link_sent`, `signup_opened`, `tier_selected`,
-`mandate_active`. Two abandon nudges are queued at link-send and cancelled on
+`checkout_completed`, then `mandate_active` + `payment_confirmed` on
+`invoice.paid`. Two abandon nudges are queued at link-send and cancelled on
 activation (verify: `OutboundSms` rows with `cancelKey = nudge:<planId>`).
 
-## 5. Verify the money (GC sandbox dashboard)
+## 5. Verify the money (Stripe test dashboard)
 
-In https://manage-sandbox.gocardless.com **as the connected engineer org**:
-- Customers → the mandate (ACTIVE)
-- Subscriptions → "Smith Heating — Plus care plan", £15.00 monthly, and on the
-  subscription/first payment the **app fee of £3.00 (20%)** payable to the
-  partner app. **If the app fee is missing, stop — do not work around it.**
+In the Stripe dashboard (test mode), on the **platform** account:
+- Payments / Subscriptions → "Smith Heating — Plus care plan", £15.00/month.
+- The subscription's first invoice → charge of £15.00 with an **application
+  fee of £3.00 (20%)** and a transfer of £12.00 to the connected (engineer)
+  account. **If the application fee is missing, stop — do not work around it.**
+- Connect → the engineer's Express account shows the £12.00 balance and the
+  weekly payout schedule.
 
 ## 6. Plan-document email + portal (Screen 10)
 
@@ -93,8 +108,8 @@ In https://manage-sandbox.gocardless.com **as the connected engineer org**:
 ## 7. Cancel (2 taps)
 
 Portal → Manage or cancel plan → **Cancel my plan** (tap 1) → **Yes, cancel my
-plan** (tap 2) → subscription cancelled via the GC API (check the sandbox
-dashboard: subscription = cancelled), confirmation email sent, queued nudges
+plan** (tap 2) → subscription cancelled via the Stripe API (check the test
+dashboard: subscription = canceled), confirmation email sent, queued nudges
 cancelled, `plan_cancelled` logged.
 
 ## 8. Housekeeping
@@ -102,11 +117,13 @@ cancelled, `plan_cancelled` logged.
 - Quiet-hours / nudge queue flush (dev): `curl -X POST <APP_URL>/api/jobs/flush-sms`
 - Event audit: `SELECT name, ts FROM "Event" ORDER BY ts;`
 
-## Evidence from the dry run (2026-07-06, no GC creds yet)
+## Evidence from the dry run (2026-07-06, GoCardless era — superseded)
 
-Everything below was exercised live in a browser against a clean DB; the
-GC-dependent steps (§2 step 3, §4 steps 4–5, §5, §7 GC side) await the `.env`
-credentials — the code paths are built and unit-tested.
+The earlier dry run below was against the GoCardless flow, before the
+2026-08-28 swap to Stripe (`docs/build-spec-v1-plan.md`). The
+provider-independent parts (verification, tiers, blocklist, SMS nudges,
+interlock, cancel) still hold; the payment-dependent steps (§2 step 3, §4
+steps 4–5, §5, §7 provider side) need re-running against Stripe test mode.
 
 - Engineer `dave@smithheating.co.uk` verified as `584123 · D. Smith · Smith
   Heating Ltd`, slug `smith-heating`.
@@ -116,9 +133,19 @@ credentials — the code paths are built and unit-tested.
   `[SMS] from="Smith Heating" to=+447700431902 … /p/smith-heating/signup/…`
   + 2 marketing nudges queued (18:30 same day, day+3 10:00) with STOP suffix.
 - Signup page: white-label header, Gas Safe badge, 3-tier anchor, price on the
-  button; choose-with-no-GC-creds fails honestly ("hasn't finished their
-  payment setup").
+  button; choosing a tier before the engineer's payment setup is finished
+  fails honestly ("hasn't finished their payment setup").
 - Interlock: `emergency_interlock_triggered` events logged with
   `matched: "smell of gas"`, report stored with `emergencyAcknowledged: true`.
 - 2-tap cancel on a second plan → `plan_cancelled` event + confirmation email.
-- `next build` clean; 53 unit tests, typecheck, lint all green.
+- `next build` clean; unit tests, typecheck, lint all green.
+
+## After the Stripe swap (2026-08-28)
+
+- `lib/gocardless.ts` + `app/api/gc/**` + `GcWebhookEvent` removed; `lib/stripe.ts`,
+  `app/api/stripe/{connect-link,webhook}`, migration `0005_stripe`, and
+  `tests/stripe.test.ts` added.
+- `next build` clean; root + mobile typecheck and lint green; 101 unit tests
+  pass (the 2 `gas-safe` integration tests need a live DB — pre-existing).
+- Not yet walked against live Stripe test mode — needs the integration
+  installed (`vercel integration add stripe`) and the §0 dashboard steps.

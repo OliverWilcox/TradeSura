@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TradeSura — Screen Designs v2 · Full Dark</title>
+<style>
+  :root{
+    --bg:#0B1A2E; --bg-deep:#081321; --surface:#122540; --surface2:#193150; --surface3:#213C60;
+    --line:rgba(255,255,255,.10); --line2:rgba(255,255,255,.18);
+    --text:#F3F7FB; --muted:#9FB6D0; --dim:#6E86A3;
+    --blue:#5FA3F0; --blue-deep:#1966CC; --blue-tint:rgba(95,163,240,.16);
+    --money:#3DD68C; --money-tint:rgba(61,214,140,.14);
+    --amber:#F2B84B; --amber-tint:rgba(242,184,75,.14);
+    --red:#FF6B6B; --red-tint:rgba(255,107,107,.14);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font:14px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif;background:#05090F;color:var(--text);padding-bottom:80px}
+  .head{background:linear-gradient(135deg,#0E2547,#081321);color:#fff;padding:40px 32px;border-bottom:1px solid var(--line)}
+  .head h1{font-size:28px;font-weight:800;letter-spacing:-.01em}
+  .head p{color:var(--muted);margin-top:6px;max-width:760px}
+  .sect{max-width:1360px;margin:34px auto 6px;padding:0 20px}
+  .sect h2{font-size:18px;font-weight:800;color:var(--blue);border-bottom:1px solid var(--line2);padding-bottom:8px;letter-spacing:.02em}
+  .grid{display:flex;flex-wrap:wrap;gap:34px;justify-content:center;padding:0 20px;max-width:1400px;margin:0 auto}
+  .unit{width:375px}
+  .cap{margin:10px 4px 0;font-size:12.5px;color:var(--muted)}
+  .cap b{color:var(--text);font-size:13px;display:block}
+  /* tokens table */
+  .tokens{max-width:1320px;margin:0 auto;padding:0 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+  .tk{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .tk h3{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--blue);margin-bottom:10px}
+  .tk p,.tk li{font-size:13px;color:var(--muted)}
+  .tk ul{margin-left:16px}
+  .sw{display:inline-block;width:18px;height:18px;border-radius:5px;vertical-align:middle;margin-right:6px;border:1px solid var(--line2)}
+  /* PHONE */
+  .phone{width:375px;height:760px;background:var(--bg);border-radius:36px;border:10px solid #1B2430;box-shadow:0 22px 50px rgba(0,0,0,.6);overflow:hidden;position:relative;display:flex;flex-direction:column;color:var(--text)}
+  .phone.glow::before{content:"";position:absolute;inset:0;background:radial-gradient(900px 420px at 15% 0%,rgba(25,102,204,.45),transparent 60%),radial-gradient(600px 400px at 100% 100%,rgba(61,214,140,.12),transparent 60%);pointer-events:none}
+  .status{height:34px;display:flex;justify-content:space-between;align-items:center;padding:0 22px;font-size:11.5px;font-weight:600;color:var(--muted);flex:none;position:relative;z-index:1}
+  .body{flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative;z-index:1}
+  .appbar{padding:8px 20px 12px;display:flex;justify-content:space-between;align-items:center;flex:none}
+  .appbar .title{font-size:20px;font-weight:800;letter-spacing:-.01em}
+  .logo{font-weight:800;font-size:17px;letter-spacing:-.01em;color:#fff}
+  .logo span{color:var(--blue)} .logo .tick{color:var(--money)}
+  .avatar{width:32px;height:32px;border-radius:50%;background:var(--blue-tint);border:1px solid var(--line2);color:var(--blue);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center}
+  .content{flex:1;overflow:hidden;padding:0 16px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:12px}
+  .card.raised{background:linear-gradient(180deg,var(--surface2),var(--surface));box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .card.hero{background:linear-gradient(160deg,#1A3A66 0%,#122540 60%,#0F2140 100%);border-color:var(--line2);box-shadow:0 14px 34px rgba(0,0,0,.45)}
+  .money-big{font-size:38px;font-weight:800;color:var(--money);letter-spacing:-.025em;font-variant-numeric:tabular-nums;line-height:1}
+  .money-mid{font-size:24px;font-weight:800;color:var(--money);font-variant-numeric:tabular-nums}
+  .lbl{font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .sub{font-size:12.5px;color:var(--muted)}
+  .dim{color:var(--dim)}
+  .btn{display:block;width:100%;background:#fff;color:#0F2140;text-align:center;font-weight:800;font-size:15px;padding:14px;border-radius:14px;border:none;box-shadow:0 8px 22px rgba(0,0,0,.35)}
+  .btn.green{background:var(--money);color:#052614}
+  .btn.blue{background:var(--blue-deep);color:#fff}
+  .btn.ghost{background:transparent;color:#fff;border:1.5px solid var(--line2);box-shadow:none}
+  .btn.small{padding:8px 14px;font-size:12.5px;width:auto;display:inline-block;border-radius:10px;box-shadow:none}
+  .btn.small.ghost{padding:7px 13px}
+  .pin{padding:12px 16px 16px;flex:none;background:linear-gradient(transparent,var(--bg) 40%)}
+  .pill{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;padding:3px 9px;border-radius:99px;vertical-align:middle}
+  .pill.onplan{background:var(--money-tint);color:var(--money)}
+  .pill.offered{background:var(--blue-tint);color:var(--blue)}
+  .pill.notoff{background:rgba(255,255,255,.06);color:var(--muted);border:1px solid var(--line)}
+  .pill.issue{background:var(--amber-tint);color:var(--amber)}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .divider{height:1px;background:var(--line);margin:10px 0}
+  .field{margin-bottom:11px}
+  .field label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:5px}
+  .input{background:var(--surface2);border:1.5px solid var(--line);border-radius:12px;padding:12px 13px;font-size:14px;color:var(--text)}
+  .input.ph{color:var(--dim)}
+  .input.focus{border-color:var(--blue)}
+  .nav{flex:none;background:rgba(8,19,33,.95);backdrop-filter:blur(10px);border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:center;padding:8px 6px 12px}
+  .nav .ni{font-size:10px;font-weight:600;color:var(--dim);text-align:center;width:62px}
+  .nav .ni .ic{font-size:18px;display:block;margin-bottom:1px}
+  .nav .ni.act{color:var(--blue)}
+  .nav .fab{width:56px;height:56px;border-radius:50%;background:#fff;color:#0F2140;font-size:28px;display:flex;align-items:center;justify-content:center;margin-top:-30px;box-shadow:0 8px 20px rgba(0,0,0,.5),0 0 0 4px var(--bg)}
+  .banner{border-radius:14px;padding:12px 14px;font-size:13px;margin-bottom:12px;border:1px solid}
+  .banner.green{background:var(--money-tint);border-color:rgba(61,214,140,.3)}
+  .banner.amber{background:var(--amber-tint);border-color:rgba(242,184,75,.3)}
+  .tick-li{font-size:13.5px;margin:7px 0;display:flex;gap:9px}
+  .tick-li .t{color:var(--money);font-weight:800}
+  .steps{display:flex;gap:6px;margin:2px 0 14px}
+  .steps i{flex:1;height:4px;border-radius:2px;background:var(--line2)}
+  .steps i.done{background:var(--blue)}
+  .chip{display:inline-block;border:1.5px solid var(--line2);background:transparent;border-radius:99px;padding:7px 13px;font-size:12.5px;font-weight:600;margin:0 6px 8px 0;color:var(--muted)}
+  .chip.on{border-color:var(--blue);background:var(--blue-tint);color:#fff}
+  .bubble{background:var(--blue-tint);border:1px solid rgba(95,163,240,.25);border-radius:16px 16px 16px 4px;padding:11px 13px;font-size:13px;margin-bottom:10px}
+  .script{background:var(--amber-tint);border:1px dashed rgba(242,184,75,.45);border-radius:14px;padding:11px 13px;font-size:13px;margin-bottom:12px}
+  .script .lbl{color:var(--amber);margin-bottom:4px}
+  .kb{font-variant-numeric:tabular-nums}
+  .cust-header{background:linear-gradient(160deg,#1A3A66,#0F2140);margin:0 -16px 12px;padding:20px 20px 18px;border-bottom:1px solid var(--line2)}
+  .badge-gs{display:inline-flex;align-items:center;gap:6px;background:var(--money-tint);border:1px solid rgba(61,214,140,.35);color:var(--money);border-radius:99px;padding:5px 11px;font-size:11.5px;font-weight:700;margin-top:8px}
+  .prog{height:7px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0}
+  .prog i{display:block;height:100%;background:var(--money)}
+  .tile{background:var(--surface2);border:1.5px solid var(--line);border-radius:14px;padding:12px;text-align:center}
+  .tile.on{border-color:var(--blue);background:var(--blue-tint)}
+  .tile small{display:block;font-size:9px;font-weight:800;color:var(--dim);letter-spacing:.06em}
+  .proof{display:flex;gap:8px;margin:0 0 12px}
+  .proof div{flex:1;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:12px;padding:9px 6px;text-align:center}
+  .proof b{display:block;font-size:15px}
+  .proof small{font-size:9.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+  .ribbon{background:#0F2140;border-bottom:1px solid var(--line2);font-size:12px;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;flex:none;color:var(--muted)}
+  .settings-row{padding:13px 14px;display:flex;justify-content:space-between;align-items:center;font-size:14px}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>TradeSura — Screen Designs v2 · Full Dark</h1>
+  <p>Every launch screen re-skinned to the W0 welcome language: navy depth, white primary actions, money in green, frosted chips, real hierarchy. Logic and flows unchanged from Build Spec v1 — this is the styling layer Oliver applies over what he's built.</p>
+</div>
+
+<div class="sect"><h2>Design system v2 — tokens</h2></div>
+<div class="tokens">
+  <div class="tk"><h3>Surfaces</h3>
+    <p><span class="sw" style="background:#0B1A2E"></span><b>bg</b> #0B1A2E — app background &nbsp; <span class="sw" style="background:#081321"></span><b>bg-deep</b> #081321 — nav bar</p>
+    <p style="margin-top:6px"><span class="sw" style="background:#122540"></span><b>surface</b> #122540 — cards &nbsp; <span class="sw" style="background:#193150"></span><b>surface-2</b> #193150 — inputs, tiles</p>
+    <p style="margin-top:6px"><b>hero</b> gradient #1A3A66 → #122540 — money card, customer page header, celebration moments</p>
+    <p style="margin-top:6px">Lines: white at 10% (cards) and 18% (emphasis). Radius 16px cards, 14px buttons, 12px inputs.</p>
+  </div>
+  <div class="tk"><h3>Colour roles</h3>
+    <p><span class="sw" style="background:#3DD68C"></span><b>money</b> #3DD68C — pounds only. Never decorative.</p>
+    <p><span class="sw" style="background:#5FA3F0"></span><b>blue</b> #5FA3F0 — brand, active nav, links, OFFERED state</p>
+    <p><span class="sw" style="background:#F2B84B"></span><b>amber</b> #F2B84B — attention: payment retrying, service overdue, missed money</p>
+    <p><span class="sw" style="background:#FF6B6B"></span><b>red</b> #FF6B6B — failures only</p>
+    <p><span class="sw" style="background:#F3F7FB"></span><b>text</b> #F3F7FB &nbsp; <span class="sw" style="background:#9FB6D0"></span><b>muted</b> #9FB6D0 &nbsp; <span class="sw" style="background:#6E86A3"></span><b>dim</b> #6E86A3</p>
+  </div>
+  <div class="tk"><h3>Buttons</h3>
+    <ul>
+      <li><b>Primary = white</b> on navy with a soft shadow — the signature. One per screen.</li>
+      <li><b>Green</b> reserved for the customer's "Join" and the engineer's WhatsApp share.</li>
+      <li><b>Ghost</b> white 1.5px outline for secondary actions.</li>
+      <li>Disabled = 40% opacity, never a different colour.</li>
+      <li>Nav fab is white — the "offer" action is the brightest thing on every screen.</li>
+    </ul>
+  </div>
+  <div class="tk"><h3>Type &amp; depth</h3>
+    <ul>
+      <li>System stack. Headlines 800 weight, −1% tracking. Money 800, tabular numerals, one size class up.</li>
+      <li>Labels: 10.5px, 800, +12% tracking, uppercase, muted.</li>
+      <li>Depth via layered navy gradients and 30–45% black shadows — no pure black, no flat grey.</li>
+      <li>Frosted chips (white 6% + 10% line) for proof strips and status.</li>
+    </ul>
+  </div>
+  <div class="tk"><h3>Motion &amp; feel</h3>
+    <ul>
+      <li>Screen transitions: fade + 8px rise, 220ms.</li>
+      <li>Money figures count up on first appearance (400ms).</li>
+      <li>Haptics: light on primary taps, success pattern on plan live / payout landed.</li>
+      <li>Reduced-motion respected: all off.</li>
+    </ul>
+  </div>
+  <div class="tk"><h3>Legibility rules (vans, daylight)</h3>
+    <ul>
+      <li>Body text never below #9FB6D0 on #122540 (≥ 6:1). Labels may use dim only at ≥ 10.5px 800.</li>
+      <li>Inputs one step lighter than cards so fields read as fields.</li>
+      <li>Status pills always carry text, never colour alone.</li>
+      <li>Auto-brightness hint: the app requests "prefer dark" status bar; no light-mode variant in October.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ==================== ENGINEER APP ==================== -->
+<div class="sect"><h2>Engineer app</h2></div>
+<div class="grid">
+
+<!-- W0 -->
+<div class="unit">
+<div class="phone glow"><div class="status"><span>09:41</span><span>▪▪▪ ⚡ 100%</span></div>
+<div class="body">
+  <div style="padding:58px 26px 0">
+    <div class="lbl" style="color:#9CC4F5">Care plan platform</div>
+    <div class="logo" style="font-size:40px;margin-top:6px;line-height:1">TRADE<span>SURA</span><span class="tick" style="font-size:30px;vertical-align:top">✓</span></div>
+    <div class="sub" style="margin-top:8px">Your trade. On plan.</div>
+  </div>
+  <div style="padding:54px 26px 0">
+    <div style="font-size:30px;font-weight:800;line-height:1.12;letter-spacing:-.01em">Your customers,<br>paying you <span style="color:var(--money)">every month.</span></div>
+    <div class="sub" style="font-size:15px;margin-top:14px;color:#C9D8EA">Sell your own care plans at the end of the job. We collect the Direct Debit, you keep 80%, paid every Friday.</div>
+  </div>
+  <div class="proof" style="margin:22px 26px 0"><div><b>Free</b><small>account</small></div><div><b>80%</b><small>you keep</small></div><div><b>Fridays</b><small>paid out</small></div></div>
+  <div style="flex:1"></div>
+  <div class="pin" style="background:none;padding-bottom:26px">
+    <button class="btn">Start now — it's free</button>
+    <button class="btn ghost" style="margin-top:10px">I already have an account</button>
+    <div class="lbl" style="text-align:center;margin-top:14px;color:var(--dim);font-size:10px">Gas Safe verified members · No card required</div>
+  </div>
+</div></div>
+<div class="cap"><b>W0 · Welcome</b>The reference screen. Everything else inherits from it.</div>
+</div>
+
+<!-- E1 -->
+<div class="unit">
+<div class="phone"><div class="status"><span>09:42</span><span>▪▪▪ ⚡ 99%</span></div>
+<div class="body">
+  <div class="appbar"><span class="logo">TRADE<span>SURA</span><span class="tick">✓</span></span><span class="lbl">Step 2 of 3</span></div>
+  <div class="content">
+    <div class="steps"><i class="done"></i><i class="done"></i><i></i></div>
+    <div style="font-size:24px;font-weight:800;letter-spacing:-.01em">Verify your trade</div>
+    <div class="sub" style="margin:4px 0 14px">Customers see your verified badge on every plan — it's your biggest closer.</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <div class="tile on" style="flex:1"><div style="font-size:20px">🔥</div><b style="font-size:12.5px">Gas</b></div>
+      <div class="tile" style="flex:1;opacity:.6"><div style="font-size:20px">🌡</div><b style="font-size:12.5px">Heat pump</b><small>SOON</small></div>
+      <div class="tile" style="flex:1;opacity:.6"><div style="font-size:20px">⚡</div><b style="font-size:12.5px">Electrical</b><small>SOON</small></div>
+    </div>
+    <div class="sub dim" style="margin-bottom:12px;font-size:11.5px">More trades soon — ticking one registers your interest.</div>
+    <div class="field"><label>Gas Safe registration number</label><div class="input kb">584123</div></div>
+    <div class="banner green">
+      <b style="font-size:14px">✓ Verified on the Gas Safe Register</b>
+      <div class="divider" style="margin:8px 0"></div>
+      <b>David Smith</b> · Licence 584123<br><span class="sub">Boilers · Cookers · Central heating · Valid to Mar 2027</span>
+    </div>
+  </div>
+  <div class="pin"><button class="btn">Continue</button></div>
+</div></div>
+<div class="cap"><b>E1 · Signup (step 2 shown)</b>Tiles on surface-2, verified card in money-tint. Same fields as the build — restyled only.</div>
+</div>
+
+<!-- E2 -->
+<div class="unit">
+<div class="phone"><div class="status"><span>09:44</span><span>▪▪▪ ⚡ 99%</span></div>
+<div class="body">
+  <div class="appbar"><span class="logo">TRADE<span>SURA</span><span class="tick">✓</span></span></div>
+  <div class="content">
+    <div style="font-size:24px;font-weight:800">Welcome, Dave 👋</div>
+    <div class="sub" style="margin:4px 0 14px">Four steps and you're earning. About 8 minutes.</div>
+    <div class="card"><div class="row"><div><div class="lbl" style="color:var(--money)">Done</div><b style="font-size:15px">1 · Get paid</b><div class="sub">Payouts ready — every Friday</div></div><span style="color:var(--money);font-size:20px">✓</span></div></div>
+    <div class="card raised" style="border-color:var(--blue)"><div class="row"><div><div class="lbl" style="color:var(--blue)">Next · 2 mins</div><b style="font-size:15px">2 · Your first plan</b><div class="sub">We've drafted Boiler Care at £12/month — just approve it</div></div><span style="color:var(--blue);font-size:20px">→</span></div></div>
+    <div class="card" style="opacity:.7"><div class="row"><div><b style="font-size:15px">3 · Your customers</b><div class="sub">Import your book — every contact is a potential £144/yr</div></div><span class="dim">→</span></div></div>
+    <div class="card" style="opacity:.7"><div class="row"><div><b style="font-size:15px">4 · Your founding pack</b><div class="sub">Free cards &amp; van sticker with your QR</div></div><span class="dim">→</span></div></div>
+  </div>
+  <div class="pin"><button class="btn">Set up my first plan</button></div>
+</div></div>
+<div class="cap"><b>E2 · Getting started</b>Active step is the raised card with a blue edge; done steps flatten; upcoming steps recede.</div>
+</div>
+
+<!-- E3 -->
+<div class="unit">
+<div class="phone glow"><div class="status"><span>17:20</span><span>▪▪▪ ⚡ 71%</span></div>
+<div class="body">
+  <div class="appbar"><span class="logo">TRADE<span>SURA</span><span class="tick">✓</span></span><span class="avatar">DS</span></div>
+  <div class="content">
+    <div class="card hero">
+      <div class="lbl">Your plan income</div>
+      <div class="money-big" style="margin-top:6px">£312<span style="font-size:16px;color:var(--muted);font-weight:600"> /month</span></div>
+      <div class="sub kb" style="margin-top:6px"><span style="color:var(--money);font-weight:700">▲ £24 this week</span> · 26 plans live</div>
+      <div class="divider" style="background:var(--line2)"></div>
+      <div class="row"><span class="sub">Next payout</span><b class="kb" style="color:var(--money)">£72.10 · Fri 28 Aug</b></div>
+    </div>
+    <div class="banner amber"><div class="row"><div><b class="kb">£3,312/yr not collected</b><div class="sub">23 book customers aren't on a plan yet</div></div><b style="color:var(--amber)">View →</b></div></div>
+    <div class="card">
+      <div class="lbl" style="margin-bottom:6px">Today</div>
+      <div class="tick-li"><span>🔧</span><span><b>2 services due this week</b> — Sarah J, Tom R</span></div>
+      <div class="tick-li"><span>⏳</span><span>1 payment retrying — <span class="sub">no action needed</span></span></div>
+      <div class="tick-li"><span>🤝</span><span>Gary's nearly live — <b class="kb">4/5 plans</b> to your £50</span></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn ghost" style="flex:1;font-size:13px;padding:11px">📱 Show a customer</button>
+      <button class="btn ghost" style="flex:1;font-size:13px;padding:11px">🤝 Invite an engineer</button>
+    </div>
+  </div>
+  <div class="nav"><div class="ni act"><span class="ic">⌂</span>Home</div><div class="ni"><span class="ic">👥</span>Customers</div><div class="fab">+</div><div class="ni"><span class="ic">🔔</span>Reminders</div><div class="ni"><span class="ic">£</span>Payouts</div></div>
+</div></div>
+<div class="cap"><b>E3 · Home</b>The hero money card carries the welcome gradient; amber missed-money banner; white fab is the brightest object on screen.</div>
+</div>
+
+<!-- E4 -->
+<div class="unit">
+<div class="phone"><div class="status"><span>17:22</span><span>▪▪▪ ⚡ 70%</span></div>
+<div class="body">
+  <div class="appbar"><span class="title">Send an offer</span><span class="sub">✕</span></div>
+  <div class="content">
+    <div class="field"><div class="input focus">🔍 Sarah Jones</div></div>
+    <div class="card" style="border-color:var(--blue);padding:11px 14px"><div class="row"><div><b>Sarah Jones</b><div class="sub">07700 900123 · added today</div></div><span class="pill notoff">NOT OFFERED</span></div></div>
+    <div class="script"><div class="lbl">What to say 💬</div>"I put all my customers on a care plan now — £12 a month and your annual service is included. I'll text you the link, have a look tonight."</div>
+    <div class="lbl" style="margin-bottom:6px">Her text message</div>
+    <div class="bubble">Hi Sarah — Dave from Dave Smith Heating here. My Boiler Care plan is £12/month and includes your annual service and priority call-outs. Details &amp; sign-up: <span style="color:var(--blue);font-weight:600">tradesura.com/p/dave-smith</span><br><span class="sub">Reply STOP to opt out</span></div>
+    <div class="sub" style="text-align:center">We'll nudge you if she hasn't looked in 3 days.</div>
+  </div>
+  <div class="pin"><div style="display:flex;gap:10px"><button class="btn" style="flex:1.4">Send by text</button><button class="btn green" style="flex:1">WhatsApp</button></div></div>
+</div></div>
+<div class="cap"><b>E4 · Send offer</b>Script card in amber-tint (attention, not money); message preview in blue-tint bubble.</div>
+</div>
+
+<!-- E5 -->
+<div class="unit">
+<div class="phone"><div class="status"><span>17:30</span><span>▪▪▪ ⚡ 69%</span></div>
+<div class="body">
+  <div class="ribbon"><span>Viewing Dave's plan page — hand the phone over 👋</span><b style="color:#fff">✕</b></div>
+  <div class="content" style="padding-top:0">
+    <div class="cust-header" style="margin-top:0">
+      <div style="display:flex;gap:12px;align-items:center"><div style="width:48px;height:48px;border-radius:12px;background:#fff;color:var(--blue-deep);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:15px">DS</div><div><b style="font-size:17px">Dave Smith Heating</b><div class="sub">Holmfirth &amp; Huddersfield</div></div></div>
+      <div class="badge-gs">✓ Gas Safe registered · 512345</div>
+    </div>
+    <div class="card raised" style="border-color:var(--line2)">
+      <div class="row"><b style="font-size:16px">Boiler Care Plan</b><span class="money-mid">£12<span style="font-size:12px;color:var(--muted)">/mo</span></span></div>
+      <div class="divider"></div>
+      <div class="tick-li"><span class="t">✓</span>Annual boiler service included</div>
+      <div class="tick-li"><span class="t">✓</span>Priority call-outs</div>
+      <div class="tick-li"><span class="t">✓</span>No call-out charge</div>
+      <div class="tick-li"><span class="t">✓</span>Cancel anytime</div>
+    </div>
+  </div>
+  <div class="pin"><button class="btn green">Join Dave's plan</button></div>
+</div></div>
+<div class="cap"><b>E5 · Demo mode</b>In-app, full screen, slim ribbon. Green Join is the customer's button — the only green button in the app.</div>
+</div>
+
+<!-- E6 -->
+<div class="unit">
+<div class="phone"><div class="status"><span>09:47</span><span>▪▪▪ ⚡ 98%</span></div>
+<div class="body">
+  <div class="appbar"><span class="title">Your first plan</span><span class="lbl">Step 2 of 4</span></div>
+  <div class="content">
+    <div class="card" style="border-color:var(--blue);padding:12px 14px"><div class="row"><b>Boiler Care</b><span class="pill offered">CHOSEN</span></div><div class="sub">Service + priority call-outs — most popular</div></div>
+    <div class="lbl" style="margin:2px 0 6px">Monthly price</div>
+    <div class="card" style="text-align:center;padding:12px">
+      <div class="row" style="justify-content:center;gap:24px">
+        <button class="btn ghost small" style="width:46px;font-size:20px">−</button>
+        <span style="font-size:34px;font-weight:800" class="kb">£12<span style="font-size:14px;color:var(--muted)">.00</span></span>
+        <button class="btn ghost small" style="width:46px;font-size:20px">+</button>
+      </div>
+    </div>
+    <div class="card hero">
+      <div class="lbl" style="color:var(--money)">What you'll earn</div>
+      <div class="money-mid" style="margin-top:4px">£9.60 <span style="font-size:13px;color:var(--muted);font-weight:600">per customer / month</span></div>
+      <div class="sub kb" style="margin-top:4px">50 customers = <b style="color:var(--money)">£5,760/year</b> · 80% less ~32p processing ›</div>
+    </div>
+    <div class="lbl" style="margin-bottom:6px">Included — tap to toggle</div>
+    <div class="tick-li"><span class="t">✓</span>Annual boiler service</div>
+    <div class="tick-li"><span class="t">✓</span>Priority call-outs</div>
+    <div class="tick-li"><span class="t">✓</span>No call-out charge</div>
+    <div class="tick-li" style="opacity:.5"><span style="font-weight:800;color:var(--dim)">＋</span>Controls &amp; thermostat <span class="sub">(+£3)</span></div>
+  </div>
+  <div class="pin"><button class="btn">Preview my customer page</button></div>
+</div></div>
+<div class="cap"><b>E6 · Plan builder</b>The earnings preview gets the hero treatment — it's the screen's money moment.</div>
+</div>
+
+<!-- E7 -->
+<div class="unit">
+<div class="phone"><div class="status"><span>17:35</span><span>▪▪▪ ⚡ 68%</span></div>
+<div class="body">
+  <div class="appbar"><span class="title">Customers</span><span class="sub" style="color:var(--blue);font-weight:700">＋ Add</span></div>
+  <div class="content">
+    <div style="margin-bottom:10px"><span class="chip">All 49</span><span class="chip">On plan 26</span><span class="chip on">Not on plan 23</span><span class="chip">⚠ 1</span></div>
+    <div class="card" style="padding:11px 14px"><div class="row"><div><b>Sarah Jones</b><div class="sub">Never offered · added today</div></div><button class="btn small">Offer</button></div></div>
+    <div class="card" style="padding:11px 14px"><div class="row"><div><b>Tom Riley</b><div class="sub">Offered 8 days ago · page visited</div></div><button class="btn small ghost">Re-offer</button></div></div>
+    <div class="card" style="padding:11px 14px"><div class="row"><div><b>Aisha Khan</b><div class="sub">Never offered · imported</div></div><button class="btn small">Offer</button></div></div>
+    <div class="card" style="padding:11px 14px"><div class="row"><div><b>Emma Bright</b><div class="sub">Boiler Care · service due Nov</div></div><span class="pill onplan">ON PLAN</span></div></div>
+    <div class="card" style="padding:11px 14px;opacity:.85"><div class="row"><div><b>Mo Farouk</b><div class="sub">Offered yesterday</div></div><span class="pill offered">OFFERED</span></div></div>
+  </div>
+  <div class="nav"><div class="ni"><span class="ic">⌂</span>Home</div><div class="ni act"><span class="ic">👥</span>Customers</div><div class="fab">+</div><div class="ni"><span class="ic">🔔</span>Reminders</div><div class="ni"><span class="ic">£</span>Payouts</div></div>
+</div></div>
+<div class="cap"><b>E7a · Customers</b>White Offer buttons on never-offered rows; ghost Re-offer on stale ones. Status line per spec.</div>
+</div>
+
+<!-- E7b -->
+<div class="unit">
+<div class="phone"><div class="status"><span>17:36</span><span>▪▪▪ ⚡ 68%</span></div>
+<div class="body">
+  <div class="appbar"><span class="sub" style="color:var(--blue);font-weight:700">‹ Customers</span><span class="sub">Edit</span></div>
+  <div class="content">
+    <div class="row" style="margin-bottom:10px"><div><b style="font-size:20px">Emma Bright</b><div class="sub">07700 900456 · HD9 2TR</div></div><span class="pill onplan">ON PLAN</span></div>
+    <div class="card raised">
+      <div class="row"><b>Boiler Care · £12/mo</b><span class="sub kb">since Mar 2026</span></div>
+      <div class="divider"></div>
+      <div class="row" style="margin-bottom:6px"><span class="sub">Direct Debit</span><b style="color:var(--money)">Active</b></div>
+      <div class="row" style="margin-bottom:6px"><span class="sub">Next collection</span><b class="kb">1 Sept · £12.00</b></div>
+      <div class="row"><span class="sub">Annual service</span><b style="color:var(--amber)">Due November</b></div>
+    </div>
+    <div class="lbl" style="margin-bottom:6px">Timeline</div>
+    <div class="card" style="padding:11px 14px;font-size:13px">
+      <div style="margin-bottom:8px">💷 <b class="kb">£12 collected</b> · <span class="sub">1 Aug</span></div>
+      <div style="margin-bottom:8px">🔧 Service recorded · <span class="sub">12 Nov 2025</span></div>
+      <div>⭐ Joined Boiler Care · <span class="sub">3 Mar 2026</span></div>
+    </div>
+    <div style="display:flex;gap:10px"><button class="btn ghost" style="flex:1;font-size:13px;padding:11px">Record a service</button><button class="btn ghost" style="flex:1;font-size:13px;padding:11px">Message Emma</button></div>
+  </div>
+</div></div>
+<div class="cap"><b>E7b · Customer detail</b>Plan block raised; timeline flat; amber only where attention's due.</div>
+</div>
+
+<!-- E8 -->
+<div class="unit">
+<div class="phone"><div class="status"><span>09:52</span><span>▪▪▪ ⚡ 97%</span></div>
+<div class="body">
+  <div class="appbar"><span class="title">Import your book</span><span class="lbl">Step 3 of 4</span></div>
+  <div class="content">
+    <div class="banner green"><b class="kb">142 customers ready to import</b><div class="sub kb">6 duplicates merged · 3 skipped (no mobile)</div></div>
+    <div class="card" style="padding:10px 14px;font-size:13px">
+      <div class="row" style="margin-bottom:7px"><b>Sarah Jones</b><span class="sub kb">07700 900123</span></div>
+      <div class="row" style="margin-bottom:7px"><b>Tom Riley</b><span class="sub kb">07700 900321</span></div>
+      <div class="row"><b>Aisha Khan</b><span class="sub kb">07700 900654</span></div>
+      <div class="sub" style="text-align:center;margin-top:6px">＋ 139 more</div>
+    </div>
+    <div class="card" style="padding:12px 14px"><label style="display:flex;gap:10px;font-size:13px;align-items:flex-start"><span style="width:20px;height:20px;border-radius:6px;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;flex:none">✓</span>These are my own customers — people I've done work for or who've asked me to.</label></div>
+    <div class="lbl" style="margin-bottom:6px">Their message · Boiler Care £12</div>
+    <div class="bubble" style="font-size:12.5px">Hi {name} — Dave from Dave Smith Heating here. My Boiler Care plan is £12/month and includes your annual service… <span style="color:var(--blue);font-weight:600">tradesura.com/p/dave-smith</span> <span class="sub">· Reply STOP to opt out</span></div>
+  </div>
+  <div class="pin"><button class="btn">Send to 142 customers</button></div>
+</div></div>
+<div class="cap"><b>E8 · Import &amp; blast</b>Consent checkbox is a card of its own — it's the legal basis, so it gets weight.</div>
+</div>
+
+<!-- E9 -->
+<div class="unit">
+<div class="phone"><div class="status"><span>17:40</span><span>▪▪▪ ⚡ 67%</span></div>
+<div class="body">
+  <div class="appbar"><span class="title">Reminders</span><span class="sub">⚙</span></div>
+  <div class="content">
+    <div class="sub" style="margin-bottom:10px">Gas engineers fit and forget. You won't.</div>
+    <div class="lbl" style="margin-bottom:6px">This month</div>
+    <div class="card" style="padding:12px 14px">
+      <b>Sarah Jones</b> <span class="pill onplan">ON PLAN</span>
+      <div class="sub">Service due in 3 weeks — included in her plan</div>
+      <div class="divider"></div>
+      <div class="sub">✓ We've messaged her to book a weekday with you</div>
+    </div>
+    <div class="card raised" style="padding:12px 14px;border-color:var(--blue)">
+      <b>Tom Riley</b> <span class="pill notoff">NOT ON PLAN</span>
+      <div class="sub">Boiler fitted Nov 2025 · service due</div>
+      <div class="divider"></div>
+      <div class="sub" style="margin-bottom:8px">Book his service — and offer the plan at the perfect moment.</div>
+      <button class="btn small">Send reminder + offer</button>
+    </div>
+    <div class="lbl" style="margin:4px 0 6px">Coming up</div>
+    <div class="card" style="padding:10px 14px;font-size:13px"><b>Emma Bright</b> · Nov <span class="pill onplan">ON PLAN</span></div>
+    <div class="card" style="padding:10px 14px;font-size:13px"><b>Bill Ogden</b> · Dec <span class="pill notoff">NOT ON PLAN</span></div>
+  </div>
+  <div class="nav"><div class="ni"><span class="ic">⌂</span>Home</div><div class="ni"><span class="ic">👥</span>Customers</div><div class="fab">+</div><div class="ni act"><span class="ic">🔔</span>Reminders</div><div class="ni"><span class="ic">£</span>Payouts</div></div>
+</div></div>
+<div class="cap"><b>E9 · Reminders</b>The non-member card is raised with a blue edge — it's the action; member reminders are quiet because they're automatic.</div>
+</div>
+
+<!-- E10 -->
+<div class="unit">
+<div class="phone glow"><div class="status"><span>17:45</span><span>▪▪▪ ⚡ 66%</span></div>
+<div class="body">
+  <div class="appbar"><span class="title">Refer an engineer</span></div>
+  <div class="content">
+    <div class="card hero" style="text-align:center">
+      <div class="money-big">£50</div>
+      <div style="font-weight:700;margin-top:6px">for every engineer you bring in</div>
+      <div class="sub">Paid into your payout when they get 5 plans live</div>
+    </div>
+    <div class="card" style="padding:14px;text-align:center;border-color:var(--line2)">
+      <div class="lbl" style="color:var(--blue);margin-bottom:6px">Dave Smith recommends</div>
+      <div class="logo" style="font-size:22px">TRADE<span>SURA</span><span class="tick">✓</span></div>
+      <div style="width:64px;height:64px;background:#fff;border-radius:10px;margin:10px auto;display:flex;align-items:center;justify-content:center;font-size:9px;color:#0F2140;font-weight:800">QR</div>
+      <div class="sub">Your customers, paying you monthly.</div>
+    </div>
+    <div class="lbl" style="margin-bottom:6px">Your referrals</div>
+    <div class="card" style="padding:12px 14px;font-size:13px">
+      <div class="row" style="margin-bottom:6px"><b>Gary P</b><span class="pill offered">4/5 PLANS</span></div>
+      <div class="prog"><i style="width:80%"></i></div>
+      <div class="divider"></div>
+      <div class="row"><b>Liam T</b><span class="pill onplan">£50 PAID ✓</span></div>
+    </div>
+  </div>
+  <div class="pin"><button class="btn green">Invite on WhatsApp</button></div>
+</div></div>
+<div class="cap"><b>E10 · Referrals</b>Hero £50 card; share image preview on white so the QR reads; green WhatsApp button (the second of two green buttons in the app).</div>
+</div>
+
+<!-- E11 -->
+<div class="unit">
+<div class="phone"><div class="status"><span>17:50</span><span>▪▪▪ ⚡ 65%</span></div>
+<div class="body">
+  <div class="appbar"><span class="title">Payouts</span><span class="sub" style="color:var(--blue);font-weight:700">Export</span></div>
+  <div class="content">
+    <div class="card hero">
+      <div class="lbl">Next payout · Fri 28 Aug</div>
+      <div class="money-big kb" style="margin-top:6px">£72.10</div>
+      <div class="divider" style="background:var(--line2)"></div>
+      <div class="row" style="margin-bottom:6px"><span class="sub kb">26 collections · your 80%</span><b class="kb">£62.40</b></div>
+      <div class="row" style="margin-bottom:6px"><span class="sub">Referral bonus — Liam T</span><b class="kb" style="color:var(--money)">＋£50.00</b></div>
+      <div class="row" style="margin-bottom:6px"><span class="sub kb">Processing (26 × ~32p)</span><b class="kb" style="color:var(--red)">−£8.30</b></div>
+      <div class="row"><span class="sub">Bank</span><b class="kb">NatWest ···4471</b></div>
+    </div>
+    <div class="lbl" style="margin-bottom:6px">History</div>
+    <div class="card" style="padding:11px 14px"><div class="row"><span>Fri 21 Aug</span><b class="kb" style="color:var(--money)">£58.90 ✓</b></div></div>
+    <div class="card" style="padding:11px 14px"><div class="row"><span>Fri 14 Aug</span><b class="kb" style="color:var(--money)">£55.70 ✓</b></div></div>
+    <div class="card" style="padding:11px 14px"><div class="row"><span>Fri 7 Aug</span><b class="kb" style="color:var(--money)">£51.20 ✓</b></div></div>
+  </div>
+  <div class="nav"><div class="ni"><span class="ic">⌂</span>Home</div><div class="ni"><span class="ic">👥</span>Customers</div><div class="fab">+</div><div class="ni"><span class="ic">🔔</span>Reminders</div><div class="ni act"><span class="ic">£</span>Payouts</div></div>
+</div></div>
+<div class="cap"><b>E11 · Payouts</b>Hero next-payout card with the full breakdown inside it; history rows quiet and green.</div>
+</div>
+
+<!-- E11b first payout -->
+<div class="unit">
+<div class="phone glow"><div class="status"><span>09:02</span><span>▪▪▪ ⚡ 90%</span></div>
+<div class="body">
+  <div class="content" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
+    <div class="lbl" style="color:var(--money)">Your first payout</div>
+    <div class="money-big" style="font-size:56px;margin:10px 0 6px">£28.80</div>
+    <div style="font-size:18px;font-weight:800">This is what recurring income feels like.</div>
+    <div class="sub" style="margin:10px 0 22px">Landed in NatWest ···4471 this morning. Next one's Friday.</div>
+    <div class="proof"><div><b>3</b><small>plans live</small></div><div><b>£36</b><small>/month</small></div><div><b>£432</b><small>/year</small></div></div>
+    <button class="btn">Share this</button>
+    <button class="btn ghost" style="margin-top:10px">Back to dashboard</button>
+  </div>
+</div></div>
+<div class="cap"><b>E11b · First payout moment</b>The one celebration screen. Single haptic success pattern, count-up on the figure, screenshot-friendly layout.</div>
+</div>
+
+<!-- E12 -->
+<div class="unit">
+<div class="phone"><div class="status"><span>17:52</span><span>▪▪▪ ⚡ 65%</span></div>
+<div class="body">
+  <div class="appbar"><span class="title">Settings</span></div>
+  <div class="content">
+    <div class="card" style="padding:12px 14px"><div class="row"><div style="display:flex;gap:10px;align-items:center"><span class="avatar" style="width:40px;height:40px;font-size:14px">DS</span><div><b>Dave Smith Heating</b><div class="sub">Gas Safe 512345 · <span style="color:var(--money)">✓ verified</span></div></div></div><span class="dim">›</span></div></div>
+    <div class="card" style="padding:0">
+      <div class="settings-row"><span>📋 My plans</span><span class="sub">Boiler Care £12 ›</span></div><div class="divider" style="margin:0"></div>
+      <div class="settings-row"><span>💳 Payments</span><b style="color:var(--money);font-size:13px">Stripe active ›</b></div><div class="divider" style="margin:0"></div>
+      <div class="settings-row"><span>🖼 Logo</span><span class="sub">Upload ›</span></div><div class="divider" style="margin:0"></div>
+      <div class="settings-row"><span>🔔 Notifications</span><span class="sub">All on ›</span></div><div class="divider" style="margin:0"></div>
+      <div class="settings-row"><span>📈 How to sell more plans</span><span class="dim">›</span></div><div class="divider" style="margin:0"></div>
+      <div class="settings-row"><span>💬 WhatsApp support</span><span class="dim">›</span></div><div class="divider" style="margin:0"></div>
+      <div class="settings-row"><span>📄 Terms &amp; privacy</span><span class="dim">›</span></div>
+    </div>
+    <div class="sub" style="text-align:center">TradeSura · Your trade. On plan.</div>
+  </div>
+</div></div>
+<div class="cap"><b>E12 · Settings</b>Grouped rows on a single surface card; "My plans" first — the builder is always one tap away.</div>
+</div>
+
+</div>
+
+<!-- ==================== CUSTOMER WEB ==================== -->
+<div class="sect"><h2>Customer web — the pages householders see</h2></div>
+<div class="grid">
+
+<!-- C1 -->
+<div class="unit">
+<div class="phone"><div class="status"><span>19:02</span><span>▪▪▪ ⚡ 52%</span></div>
+<div class="body">
+  <div class="content" style="padding-top:0">
+    <div class="cust-header" style="margin-top:0;padding-top:26px">
+      <div style="display:flex;gap:12px;align-items:center"><div style="width:52px;height:52px;border-radius:12px;background:#fff;color:var(--blue-deep);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:16px">DS</div><div><b style="font-size:18px">Dave Smith Heating</b><div class="sub">Serving Holmfirth &amp; Huddersfield</div></div></div>
+      <div class="badge-gs">✓ Gas Safe registered · 512345 — tap to verify</div>
+    </div>
+    <div class="card raised" style="border-color:var(--line2)">
+      <div class="row"><b style="font-size:16px">Boiler Care Plan</b><span class="money-mid">£12<span style="font-size:12px;color:var(--muted)">/mo</span></span></div>
+      <div class="divider"></div>
+      <div class="tick-li"><span class="t">✓</span>Annual boiler service included</div>
+      <div class="tick-li"><span class="t">✓</span>Priority call-outs</div>
+      <div class="tick-li"><span class="t">✓</span>No call-out charge</div>
+      <div class="tick-li"><span class="t">✓</span>Cancel anytime</div>
+    </div>
+    <div class="card" style="padding:12px 14px;font-size:13px">
+      <b>How it works</b>
+      <div class="tick-li"><span style="color:var(--blue);font-weight:800">1</span>Join in 2 minutes</div>
+      <div class="tick-li"><span style="color:var(--blue);font-weight:800">2</span>Pay monthly by Direct Debit</div>
+      <div class="tick-li"><span style="color:var(--blue);font-weight:800">3</span>Your service is booked automatically each year</div>
+    </div>
+    <div class="sub dim" style="font-size:10.5px;text-align:center">Care plans are ongoing service agreements with your engineer, not insurance products · Direct Debit Guarantee · Powered by TradeSura</div>
+  </div>
+  <div class="pin"><button class="btn green">Join Dave's plan</button></div>
+</div></div>
+<div class="cap"><b>C1 · Plan page</b>Dark treatment carries to the customer — it reads as premium, which is what a £12/month commitment to a one-man band needs. Green Join.</div>
+</div>
+
+<!-- C2 -->
+<div class="unit">
+<div class="phone"><div class="status"><span>19:04</span><span>▪▪▪ ⚡ 52%</span></div>
+<div class="body">
+  <div class="appbar"><span class="title" style="font-size:17px">Join Boiler Care · £12/mo</span><span class="sub">✕</span></div>
+  <div class="content">
+    <div class="steps"><i class="done"></i><i class="done"></i><i></i></div>
+    <b style="display:block;margin-bottom:8px">Direct Debit details</b>
+    <div class="field"><label>Name on account</label><div class="input">Sarah Jones</div></div>
+    <div style="display:flex;gap:10px"><div class="field" style="flex:1"><label>Sort code</label><div class="input kb">60-14-22</div></div><div class="field" style="flex:1.4"><label>Account number</label><div class="input kb">31889204</div></div></div>
+    <div class="banner" style="background:var(--blue-tint);border-color:rgba(95,163,240,.3);font-size:12.5px"><b>Protected by the Direct Debit Guarantee.</b> First collection <b class="kb">1 Sept</b>, then monthly. 3 days' notice of any change. Cancel anytime.</div>
+    <div class="card" style="padding:11px 13px;font-size:12.5px"><div class="row" style="margin-bottom:4px"><span class="sub">Plan</span><b>Boiler Care — Dave Smith Heating</b></div><div class="row"><span class="sub">You pay</span><b class="kb">£12.00 monthly</b></div></div>
+    <label style="display:flex;gap:9px;font-size:12px;color:var(--muted);align-items:flex-start"><span style="width:18px;height:18px;border-radius:5px;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:none">✓</span>I agree to the plan terms</label>
+  </div>
+  <div class="pin"><button class="btn green">Confirm and join</button></div>
+</div></div>
+<div class="cap"><b>C2 · Checkout</b>Inputs one step lighter than cards; DD Guarantee in blue-tint; the only green button on the page.</div>
+</div>
+
+<!-- C3 -->
+<div class="unit">
+<div class="phone glow"><div class="status"><span>19:06</span><span>▪▪▪ ⚡ 51%</span></div>
+<div class="body">
+  <div class="content" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
+    <div style="width:78px;height:78px;border-radius:50%;background:var(--money-tint);border:1px solid rgba(61,214,140,.4);color:var(--money);font-size:40px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">✓</div>
+    <b style="font-size:22px;line-height:1.2">Welcome to Dave's<br>Boiler Care plan</b>
+    <div class="sub" style="margin:12px 0 16px">Your Direct Debit is being set up — this takes 2–3 working days. Dave's been told, and we'll confirm by text.</div>
+    <div class="card" style="text-align:left;font-size:13px">
+      <b>What happens next</b>
+      <div class="tick-li"><span class="t">✓</span>Text confirmation when your plan is active</div>
+      <div class="tick-li"><span class="t">✓</span>Your service month: <b>November</b> — we'll message you to book</div>
+      <div class="tick-li"><span class="t">✓</span>Manage or cancel anytime from your plan link</div>
+    </div>
+  </div>
+</div></div>
+<div class="cap"><b>C3 · Confirmation</b>Honest Bacs timing, expectations set. Engineer's ping arrives in parallel.</div>
+</div>
+
+<!-- C4 -->
+<div class="unit">
+<div class="phone"><div class="status"><span>08:15</span><span>▪▪▪ ⚡ 94%</span></div>
+<div class="body">
+  <div class="appbar"><span class="title">Your plan</span></div>
+  <div class="content">
+    <div class="card raised">
+      <div class="row"><b>Boiler Care — Dave Smith Heating</b><span class="pill onplan">ACTIVE</span></div>
+      <div class="divider"></div>
+      <div class="row" style="margin-bottom:6px"><span class="sub">You pay</span><b class="kb">£12.00 monthly</b></div>
+      <div class="row" style="margin-bottom:6px"><span class="sub">Next collection</span><b class="kb">1 Sept</b></div>
+      <div class="row"><span class="sub">Annual service</span><b>November — included</b></div>
+    </div>
+    <div class="card" style="padding:0">
+      <div class="settings-row"><span>💳 Update payment details</span><span class="dim">›</span></div><div class="divider" style="margin:0"></div>
+      <div class="settings-row"><span>📞 Contact Dave</span><span class="sub">07700 900001 ›</span></div><div class="divider" style="margin:0"></div>
+      <div class="settings-row"><span style="color:var(--red)">Cancel my plan</span><span class="dim">›</span></div>
+    </div>
+    <div class="banner amber" style="font-size:12.5px">Thinking of cancelling? Your annual service is included and due in <b>November</b> — cancel after and it's yours.</div>
+    <div class="sub dim" style="font-size:10.5px;text-align:center">Care plans are ongoing service agreements with your engineer, not insurance products.</div>
+  </div>
+</div></div>
+<div class="cap"><b>C4 · Manage plan</b>Cancel is visible and red — no dark patterns; one gentle amber interstitial max.</div>
+</div>
+
+<!-- C5 -->
+<div class="unit">
+<div class="phone glow"><div class="status"><span>12:30</span><span>▪▪▪ ⚡ 78%</span></div>
+<div class="body">
+  <div style="padding:30px 20px 10px;text-align:center">
+    <div class="logo" style="font-size:24px">TRADE<span>SURA</span><span class="tick">✓</span></div>
+    <div class="sub" style="margin-top:4px">Your trade. On plan.</div>
+  </div>
+  <div class="content" style="padding-top:20px;text-align:center">
+    <b style="font-size:22px">Claim your free account</b>
+    <div class="sub" style="margin:6px 0 16px">Enter the claim code from your letter</div>
+    <div class="input kb" style="text-align:center;font-size:24px;font-weight:800;letter-spacing:.14em;padding:16px;border-color:var(--blue)">TS-48217</div>
+    <div style="height:14px"></div>
+    <div class="banner green" style="text-align:left">
+      <b>Welcome, Dave 👋</b>
+      <div class="sub">Your free TradeSura account is reserved for <b style="color:var(--text)">Dave Smith Heating</b>. Founding member — you keep 80% of every plan.</div>
+    </div>
+  </div>
+  <div class="pin"><button class="btn">Claim my free account</button></div>
+</div></div>
+<div class="cap"><b>C5 · Claim page</b>Same glow as the welcome screen — the letter and the app share one look.</div>
+</div>
+
+</div>
+
+<div style="text-align:center;margin-top:44px;font-size:12px;color:var(--dim)">TradeSura Screen Designs v2 · Full Dark · 1 Sept 2026 · Supersedes Screen Designs v1 for styling; Build Spec v1 flows unchanged · Confidential</div>
+</body>
+</html>
