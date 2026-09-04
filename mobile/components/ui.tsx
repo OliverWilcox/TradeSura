@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { View, Text, Pressable } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
 
 // RN port of ../../components/ui.tsx — same primitives, same tokens.
 // Design system: TradeSura Screen Designs v2 · Full Dark (navy depth, brand
@@ -163,9 +164,16 @@ export function Button({
   className?: string;
 }) {
   const v = btnVariants[variant];
+  // v2: "Haptics: light on primary taps" — the white primary button only,
+  // not every ghost/secondary action.
+  const isPrimary = variant === "flame" || variant === "copper";
+  function handlePress() {
+    if (isPrimary) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    onPress?.();
+  }
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       disabled={disabled}
       className={`items-center rounded-xl px-4 py-3.5 ${v.container} ${disabled ? "opacity-50" : ""} ${className}`}
     >

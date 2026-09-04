@@ -11,7 +11,12 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false }}>
+      {/* v2: "Screen transitions: fade + 8px rise, 220ms." Native Stack has
+          no built-in fade+rise preset, so this uses its closest native
+          equivalent (a plain fade) rather than a hand-rolled interpolator —
+          untestable without a device, so kept to what the platform already
+          knows how to do reliably. */}
+      <Stack screenOptions={{ headerShown: false, animation: "fade", animationDuration: 220 }}>
         <Stack.Screen name="welcome" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="sign-in" />

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { View, Text, TextInput, ScrollView, Switch, Pressable, ActivityIndicator, Share } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import * as Haptics from "expo-haptics";
 import { api, ApiError } from "@/lib/api";
 import { Card, Micro, Pill, Button } from "@/components/ui";
 
@@ -166,7 +167,9 @@ export default function TierEditor() {
         }),
       });
       // E6 "Make it live" — show the confirmation with the live URL instead
-      // of just popping back, same as any other save.
+      // of just popping back, same as any other save. v2: "success pattern
+      // on plan live."
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       setLiveUrl(result.slug ? `tradesura.com/p/${result.slug}` : null);
     } catch (e) {
       const body = e instanceof ApiError ? (e.body as
