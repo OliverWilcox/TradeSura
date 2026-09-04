@@ -1,43 +1,54 @@
 @import "tailwindcss";
 
+/* Design system: TradeSura Build Spec v1 §1 — TS Blue #1966CC, money-green
+   #0E9F5B (pounds only), system font, light chrome. Semantic keys kept:
+   flame=primary blue, copper/ok=money green, iron=light surface, warn=amber. */
 @theme {
-  --color-iron: #232a33;
-  --color-iron-2: #2c3540;
-  --color-ink: #1b222b;
-  --color-muted: #5e6975;
+  --color-iron: #ffffff;
+  --color-iron-2: #f5f8fb;
+  --color-ink: #14202e;
+  --color-muted: #5b6b7c;
   --color-faint: #8b95a1;
   --color-paper: #ffffff;
-  --color-bg: #eef1f4;
-  --color-panel: #f7f9fb;
-  --color-flame: #0e7fd0;
-  --color-flame-deep: #0a62a3;
-  --color-flame-tint: #e3f0fb;
-  --color-copper: #c2622e;
-  --color-copper-deep: #9c4c20;
-  --color-copper-tint: #f9ede4;
-  --color-ok: #1e9e5a;
-  --color-ok-tint: #e4f5ec;
-  --color-warn: #dd9a14;
-  --color-warn-tint: #fbf2dc;
-  --color-danger: #d64545;
-  --color-danger-tint: #fbe9e9;
-  --color-line: #d9dee4;
-  --color-line-soft: #e7ebef;
-  /* Welcome / auth surface (handover §2 approved palette) */
-  --color-night: #0b0f14;
-  --color-night-card: #121a24;
+  --color-bg: #e9eef4;
+  --color-panel: #f5f8fb;
+  --color-flame: #1966cc;
+  --color-flame-deep: #0f4c9e;
+  --color-flame-tint: #eaf2fc;
+  --color-copper: #0e9f5b;
+  --color-copper-deep: #0a7a46;
+  --color-copper-tint: #e7f7ef;
+  --color-ok: #0e9f5b;
+  --color-ok-tint: #e7f7ef;
+  --color-warn: #b7791f;
+  --color-warn-tint: #fcf3e3;
+  --color-danger: #c0392b;
+  --color-danger-tint: #fbeae7;
+  --color-line: #e1e8f0;
+  --color-line-soft: #ebeff3;
+  /* auth surface — now light like the rest */
+  --color-night: #f5f8fb;
+  --color-night-card: #ffffff;
   --color-brand-blue: #1966cc;
-  --color-brand-blue-lift: #4d94f0;
-  --color-brand-copper: #c9803f;
-  --color-night-text: #f2f5f8;
-  --color-night-muted: #96a3b1;
-  --font-sans: var(--font-barlow), sans-serif;
-  --font-disp: var(--font-barlow-condensed), sans-serif;
-  --font-mono: var(--font-plex-mono), monospace;
+  --color-brand-blue-lift: #4c8bde;
+  --color-brand-copper: #0e9f5b;
+  --color-night-text: #14202e;
+  --color-night-muted: #5b6b7c;
+  --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-disp: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 body {
   background: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* Money / IDs / gauges: system font, but tabular figures so columns align
+   (Build Spec §1 — "800 weight, tabular numerals"). */
+.font-mono {
+  font-variant-numeric: tabular-nums;
 }

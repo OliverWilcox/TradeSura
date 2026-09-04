@@ -5,8 +5,8 @@
 names stay `planlock`. Plan refs are now `TSH-`.
 
 Care-plan platform for UK gas engineers. Engineers build tiered maintenance plans,
-sell them on the doorstep via a link/QR, customers pay by GoCardless Direct Debit,
-Planlock takes a 20% app fee. Full product spec: @docs/design-spec.html
+sell them on the doorstep via a link/QR, customers pay by Direct Debit (Stripe
+Bacs), Planlock takes a 20% app fee. Full product spec: @docs/design-spec.html
 (13 annotated screens — treat its "Purpose / Key logic" cells as requirements).
 
 ## Scope fence — read this first
@@ -32,9 +32,16 @@ Planlock takes a 20% app fee. Full product spec: @docs/design-spec.html
 
 ## Stack  [DECISION — swap only if the assigned dev prefers otherwise, then update this file]
 - Next.js (App Router) + TypeScript (strict), at the repo root.
-- Postgres + Prisma. Tailwind for styling — implement the spec's design tokens
-  (Flue Iron #232A33, Burner Blue #0E7FD0, Copper #C2622E; Barlow / Barlow
-  Condensed / IBM Plex Mono) as Tailwind theme values.
+- Postgres + Prisma. Tailwind for styling.
+  [DECISION 2026-08-28, human] Design system is **TradeSura Build Spec v1 §1**,
+  not the older `docs/design-spec.html`: **TS Blue #1966CC** (primary),
+  **money-green #0E9F5B** (pounds only), amber #B7791F, red #C0392B, wash
+  #F5F8FB, light chrome, **system font** (no custom webfonts). Semantic Tailwind
+  keys are kept so screens didn't churn: `flame`=primary blue, `copper`/`ok`=
+  money green, `iron`=light header surface, `warn`=amber, `panel`=wash. Tokens
+  live in `app/globals.css` `@theme` and `mobile/tailwind.config.js` — keep the
+  two in sync. Font weight comes from `font-{medium,semibold,bold}` utilities
+  (the old `font-sans-bold` / `font-disp` family classes were converted).
 - [DECISION 2026-08-03, human] Engineer surface is a native app built with
   Expo/React Native, in a sibling `mobile/` folder (own `package.json`, no
   workspace tooling) — supersedes the earlier PWA-now/Capacitor-later plan.
@@ -47,17 +54,29 @@ Planlock takes a 20% app fee. Full product spec: @docs/design-spec.html
 - SMS and email behind thin provider interfaces (`lib/sms.ts`, `lib/email.ts`)
   with a console/dev driver; real provider keys are a human task, not yours.
 
-## GoCardless — sandbox only
-- Environment: sandbox. Never switch to live; go-live is a human sign-off.
-- Model: engineer is the merchant. Engineer connects via GoCardless OAuth;
-  store their org tokens. Create mandates via the hosted Billing Request flow;
-  create monthly subscriptions with Planlock's 20% **app fee** attached.
-- Consult the current GoCardless API docs for exact endpoints/fields rather
-  than assuming; verify the app-fee behaviour on subscriptions in sandbox.
-- Handle webhooks (mandate status, payment paid/failed) with signature
-  verification; webhook secret from env.
-- Planlock never holds funds. Never implement any flow that routes customer
-  money through a Planlock account.
+## Stripe — test mode only  [DECISION 2026-08-28, human: swapped from GoCardless per TradeSura Build Spec v1; see docs/build-spec-v1-plan.md]
+- Environment: test mode. `lib/stripe.ts` hard-refuses any key that isn't
+  `sk_test_…`. Never switch to live; go-live is a human sign-off.
+- Provisioned through the Vercel Marketplace (`vercel integration add stripe`),
+  not a hand-wired SDK config.
+- Model: engineer = Connect **Express** account (the settlement merchant, via
+  `on_behalf_of`). Customer plans are monthly Bacs Direct Debit **subscriptions**
+  created on the platform as **destination charges** — TradeSura's 20% taken as
+  `application_fee_percent`, the balance transferred to the engineer's connected
+  account, weekly payouts. Funds only ever pass through to the engineer;
+  TradeSura never holds a customer balance and no flow may route customer money
+  into a TradeSura-held account.
+- Consult the current Stripe docs for exact params rather than assuming; the
+  20%-fee-on-subscription behaviour is verified in `tests/stripe.test.ts` and
+  against test-mode objects before any UI.
+- Bacs settles on a delay: a plan goes ACTIVE only on `invoice.paid`, not at
+  checkout. Handle webhooks (`account.updated`, `checkout.session.completed`,
+  `invoice.paid`, `invoice.payment_failed`, `customer.subscription.deleted`)
+  with signature verification via the Stripe SDK; `STRIPE_WEBHOOK_SECRET` from
+  env, endpoint registered with "Listen to events on Connected accounts".
+- Refining the flat 20% into "20% + ~32p processing borne by the engineer"
+  (Build Spec S1 / Q2) is a follow-up — do it via an `invoice.created` webhook
+  setting `application_fee_amount`, not by changing the fee rate.
 
 ## Compliance — non-negotiable, build these as code not comments
 1. **Plan wording is locked.** Tier documents assemble ONLY from the clause
@@ -67,7 +86,7 @@ Planlock takes a 20% app fee. Full product spec: @docs/design-spec.html
    Blocked input → inline explanation ("that wording makes this an insurance
    product") + suggestion of the nearest approved clause.
 2. **Price before mandate.** The customer signup page shows the full monthly
-   price for the selected tier on every step before the GoCardless flow starts.
+   price for the selected tier on every step before the Stripe checkout starts.
    No fee may appear for the first time at or after the mandate step.
 3. **Cooling-off + cancellation.** 14-day cooling-off stated at signup and in
    the plan email. Cancellation path exists in v1 as: portal → "Manage plan" →
@@ -88,9 +107,10 @@ Planlock takes a 20% app fee. Full product spec: @docs/design-spec.html
    terminology throughout customer-facing copy.
 
 ## Data model (guide — refine in your Day 1 plan)
-Engineer(gasSafeNo, tradingName, logo, gcOrgTokens…) · Customer · Property/
-Appliance · PlanTier(clauses[], priceMonthly) · Plan(customer↔tier, gcMandateId,
-gcSubscriptionId, status: pending/active/paused/cancelled) · ClauseTemplate ·
+Engineer(gasSafeNo, tradingName, logo, stripeAccountId, stripeChargesEnabled…) ·
+Customer(…, stripeCustomerId) · Property/Appliance · PlanTier(clauses[],
+priceMonthly) · Plan(customer↔tier, stripeSubscriptionId, mandateStatus,
+status: pending/active/paused/cancelled) · ClauseTemplate ·
 Event(name, actor, meta, ts). Wire analytics events from day one:
 engineer_signed_up, gas_safe_verified, tier_created, doorstep_link_sent,
 signup_opened, tier_selected, mandate_active, plan_cancelled,

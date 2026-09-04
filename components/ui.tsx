@@ -24,7 +24,7 @@ export function Micro({ children, className = "" }: { children: ReactNode; class
 
 const pillStyles = {
   ok: "bg-ok-tint text-ok",
-  warn: "bg-warn-tint text-[#9A6C0C]",
+  warn: "bg-warn-tint text-warn",
   info: "bg-flame-tint text-flame-deep",
   off: "bg-panel text-faint border border-line",
   danger: "bg-danger text-white",
@@ -49,6 +49,7 @@ export function Pill({
 const btnStyles = {
   flame: "bg-flame text-white",
   copper: "bg-copper text-white",
+  green: "bg-ok text-white",
   ghost: "bg-transparent text-flame-deep border-[1.5px] border-flame",
   dangerghost: "bg-transparent text-danger border-[1.5px] border-danger-tint",
 } as const;
@@ -80,11 +81,11 @@ export function Money({ pence, suffix = "" }: { pence: number; suffix?: string }
 // covers breakdowns. Stated plainly wherever the plan is presented.
 export function NotIncluded() {
   return (
-    <div className="bg-warn-tint border border-[#EBD98F] rounded-xl px-4 py-3">
-      <p className="font-mono text-[10px] tracking-[0.1em] uppercase text-[#9A6C0C] mb-1">
+    <div className="bg-warn-tint border border-warn-tint rounded-xl px-4 py-3">
+      <p className="font-mono text-[10px] tracking-[0.1em] uppercase text-warn mb-1">
         What&apos;s not included
       </p>
-      <p className="text-xs text-[#7A5E00] leading-relaxed">
+      <p className="text-xs text-warn leading-relaxed">
         <b>Breakdown repairs.</b> If something breaks, your engineer prioritises you and repair
         work is chargeable at your plan discount. This plan is a maintenance &amp; priority
         agreement, not an insurance policy.
