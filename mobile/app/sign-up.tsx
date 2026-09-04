@@ -76,6 +76,7 @@ export default function SignUp() {
   // Submit
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [duplicateGasSafe, setDuplicateGasSafe] = useState(false);
 
   // C5 — arrived from a letter claim link: resolve the code and pre-fill.
   useEffect(() => {
@@ -230,7 +231,13 @@ export default function SignUp() {
       }
       router.replace("/(tabs)");
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Something went wrong.");
+      if (e instanceof ApiError) {
+        const body = e.body as { code?: string } | undefined;
+        setDuplicateGasSafe(body?.code === "duplicate_gas_safe_no");
+        setError(e.message);
+      } else {
+        setError("Something went wrong.");
+      }
     } finally {
       setBusy(false);
     }
@@ -609,6 +616,15 @@ export default function SignUp() {
             </View>
 
             {error && <Text className="mt-2 font-sans text-sm text-danger">{error}</Text>}
+            {duplicateGasSafe && (
+              <Link href="/sign-in" asChild>
+                <Pressable className="mt-1">
+                  <Text className="font-sans text-sm text-brand-blue-lift underline">
+                    Sign in instead
+                  </Text>
+                </Pressable>
+              </Link>
+            )}
             <Pressable
               onPress={submit}
               disabled={busy || !step3Valid}

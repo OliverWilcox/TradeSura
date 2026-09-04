@@ -95,6 +95,20 @@ export async function POST(req: Request) {
       attribution.variantCell = claim.variantCell;
     }
     if (!attribution.heardVia) attribution.heardVia = "other";
+
+    // Review #13 — a Gas Safe number can only back one account. Checked here
+    // (not just left to the DB's unique constraint) so the failure is a
+    // clear, actionable message instead of a raw 500.
+    if (rest.gasSafeNo) {
+      const dupe = await prisma.engineer.findUnique({ where: { gasSafeNo: rest.gasSafeNo } });
+      if (dupe) {
+        return NextResponse.json(
+          { error: "This licence is already registered — sign in instead?", code: "duplicate_gas_safe_no" },
+          { status: 409 },
+        );
+      }
+    }
+
     engineer = await prisma.engineer.create({
       data: {
         email,

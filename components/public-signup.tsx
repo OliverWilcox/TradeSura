@@ -20,6 +20,7 @@ type Started = {
   clientSecret: string;
   publishableKey: string;
   confirmedUrl: string;
+  signupToken: string;
 };
 
 // C1 → embedded checkout. Collect the minimum (name, mobile, email), POST
@@ -97,6 +98,7 @@ export function PublicSignup({
           clientSecret={started.clientSecret}
           publishableKey={started.publishableKey}
           confirmedUrl={started.confirmedUrl}
+          signupToken={started.signupToken}
           planName={selected.name}
           priceLabel={pounds(selected.priceMonthlyPence)}
           engineerName={engineerName}

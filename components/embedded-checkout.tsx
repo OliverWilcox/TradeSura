@@ -9,11 +9,13 @@ import { Card, btnClass } from "@/components/ui";
 // white-label page; the Payment Element collects name / sort code / account
 // number and the mandate, then the first collection processes async.
 function CheckoutForm({
+  signupToken,
   confirmedUrl,
   planName,
   priceLabel,
   engineerName,
 }: {
+  signupToken: string;
   confirmedUrl: string;
   planName: string;
   priceLabel: string;
@@ -35,6 +37,16 @@ function CheckoutForm({
     if (submitError) {
       setBusy(false);
       setError(submitError.message ?? "Check your details and try again.");
+      return;
+    }
+
+    // Review #18 — record which terms version they actually agreed to. The
+    // checkbox already gates this button; this is what makes that agreement
+    // a real record instead of just a UI gesture.
+    const agreeRes = await fetch(`/api/signup/${signupToken}/agree-terms`, { method: "POST" });
+    if (!agreeRes.ok) {
+      setBusy(false);
+      setError("Couldn't record your agreement — try again.");
       return;
     }
 
@@ -103,6 +115,7 @@ export function EmbeddedCheckout(props: {
   planName: string;
   priceLabel: string;
   engineerName: string;
+  signupToken: string;
 }) {
   const stripePromise = useMemo(
     () => loadStripe(props.publishableKey),
@@ -131,6 +144,7 @@ export function EmbeddedCheckout(props: {
       }}
     >
       <CheckoutForm
+        signupToken={props.signupToken}
         confirmedUrl={props.confirmedUrl}
         planName={props.planName}
         priceLabel={props.priceLabel}

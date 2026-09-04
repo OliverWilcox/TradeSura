@@ -142,6 +142,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       clientSecret: sub.clientSecret,
       publishableKey: publishableKey(),
       confirmedUrl: `${base}/confirmed`,
+      signupToken: plan.signupToken,
     });
   } catch (err) {
     console.error("[p/start] embedded subscription failed:", err);

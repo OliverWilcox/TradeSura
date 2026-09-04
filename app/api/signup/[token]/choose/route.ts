@@ -81,6 +81,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       clientSecret: sub.clientSecret,
       publishableKey: publishableKey(),
       confirmedUrl: `${base}/confirmed`,
+      signupToken: token,
     });
   } catch (err) {
     console.error("[signup] embedded subscription failed:", err);

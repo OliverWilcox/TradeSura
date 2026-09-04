@@ -56,7 +56,7 @@ model Engineer {
   companyNumber     String?
   postcode          String? // business postcode, not shown to customers
   marketingConsent  Boolean    @default(false)
-  gasSafeNo         String?
+  gasSafeNo         String?    @unique // review #13 — one licence, one account
   gasSafeName       String?
   gasSafeCompany    String?
   gasSafeCategories String?
@@ -183,6 +183,8 @@ model Plan {
   activatedAt            DateTime?
   cancelledAt            DateTime?
   paymentFailedAt        DateTime? // S2 — set on invoice.payment_failed, cleared on recovery
+  termsVersion           String? // review #18 — which CURRENT_TERMS_VERSION (lib/terms.ts) they agreed to
+  termsAgreedAt          DateTime?
   createdAt              DateTime   @default(now())
   updatedAt              DateTime   @updatedAt
 }
