@@ -43,7 +43,7 @@ export async function planDocumentEmailHtml(planId: string) {
 <div style="font-family:sans-serif;max-width:560px">
   <h1 style="margin-bottom:2px">${brand} Care Plans</h1>
   <p style="color:#5E6975;margin-top:0">Plan ${plan.ref} · ${plan.customer.firstName} ${plan.customer.lastName}</p>
-  <p><b>You're covered on the ${plan.tier?.name} plan</b> — ${price}/month by Direct Debit.</p>
+  <p><b>You're on the ${plan.tier?.name} plan</b> — ${price}/month by Direct Debit.</p>
   <h2>What your plan includes</h2>
   ${clauseHtml}
   <h2>What's not included</h2>

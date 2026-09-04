@@ -39,6 +39,12 @@ yarn-error.log*
 # local-only tooling (cloudflared tunnel binary/logs)
 .bin/
 
+# Claude Code local state (skill caches, scheduled-task locks) — machine-
+# local, not project config
+/.agents/
+/.claude/
+skills-lock.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

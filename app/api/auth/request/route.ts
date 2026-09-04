@@ -5,6 +5,8 @@ import { signToken, verifyToken } from "@/lib/auth";
 import { uniqueSlug } from "@/lib/slug";
 import { track } from "@/lib/track";
 import { normaliseClaimCode, resolveClaimCode } from "@/lib/claim";
+import { sendEmail } from "@/lib/email";
+import { engineerWelcomeEmailHtml } from "@/lib/engineer-welcome-email";
 
 // Everything the sign-up wizard (steps 1-3) collects.
 const SignupData = z.object({
@@ -137,6 +139,13 @@ export async function POST(req: Request) {
       letterBatch: attribution.letterBatch,
       variantCell: attribution.variantCell,
     });
+
+    engineerWelcomeEmailHtml(engineer.id)
+      .then(({ subject, html }) => sendEmail({ to: email, subject, html }))
+      .catch((err) => {
+        // Best-effort — a missed welcome email isn't worth failing signup over.
+        console.error("[signup] welcome email failed:", err);
+      });
 
     if (rest.claimCode && claim?.valid) {
       await prisma.claimCode
