@@ -2,6 +2,20 @@ import type { ReactNode } from "react";
 import { View, Text, Pressable } from "react-native";
 import * as Haptics from "expo-haptics";
 
+// RN throws "Text strings must be rendered within a <Text> component" the
+// moment JSX text is a *sibling* of an interpolation (e.g. `Text {n} more`
+// compiles to multiple children, not one string) rather than a single
+// `{...}` expression — Button used to only wrap children in <Text> when
+// `typeof children === "string"`, which misses exactly that case. This
+// checks every child instead, so any plain-text-shaped children get wrapped
+// regardless of how many pieces they came in as.
+function isTextLike(node: ReactNode): boolean {
+  if (node === null || node === undefined || typeof node === "boolean") return true;
+  if (typeof node === "string" || typeof node === "number") return true;
+  if (Array.isArray(node)) return node.every(isTextLike);
+  return false;
+}
+
 // RN port of ../../components/ui.tsx — same primitives, same tokens.
 // Design system: TradeSura Screen Designs v2 · Full Dark (navy depth, brand
 // blue, money-green, system font — see CLAUDE.md's [DECISION] for the switch
@@ -177,7 +191,7 @@ export function Button({
       disabled={disabled}
       className={`items-center rounded-xl px-4 py-3.5 ${v.container} ${disabled ? "opacity-50" : ""} ${className}`}
     >
-      {typeof children === "string" ? (
+      {isTextLike(children) ? (
         <Text className={`text-sm font-bold ${v.text}`}>{children}</Text>
       ) : (
         children

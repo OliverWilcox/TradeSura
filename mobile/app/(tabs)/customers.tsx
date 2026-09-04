@@ -214,7 +214,7 @@ export default function Customers() {
 
         {counts && counts.notOnPlan > 0 && segment === "noplan" && (
           <Button onPress={() => router.push("/customers/blast")}>
-            Text {counts.notOnPlan} no-plan customer{counts.notOnPlan === 1 ? "" : "s"} an offer
+            {`Text ${counts.notOnPlan} no-plan customer${counts.notOnPlan === 1 ? "" : "s"} an offer`}
           </Button>
         )}
 
