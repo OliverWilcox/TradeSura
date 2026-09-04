@@ -34,9 +34,11 @@ export async function GET() {
     await track("stripe_account_created", { type: "ENGINEER", id: engineerId }, { accountId });
   }
 
+  // Stripe's Account Links API only accepts http(s) return/refresh URLs, not
+  // a bare custom scheme — connect-return bounces on to tradesura://onboarding.
   const url = await createAccountOnboardingLink(accountId, {
-    returnUrl: "tradesura://onboarding?stripe=return",
-    refreshUrl: "tradesura://onboarding?stripe=refresh",
+    returnUrl: `${process.env.APP_URL}/api/stripe/connect-return?stripe=return`,
+    refreshUrl: `${process.env.APP_URL}/api/stripe/connect-return?stripe=refresh`,
   });
   return NextResponse.json({ url });
 }
