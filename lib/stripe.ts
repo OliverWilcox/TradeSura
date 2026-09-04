@@ -73,6 +73,10 @@ export async function getOrCreateConnectAccount(engineer: {
       product_description: "Monthly gas boiler care plans sold to the engineer's own customers.",
     },
     capabilities: {
+      // Stripe requires card_payments requested alongside bacs_debit_payments
+      // on Express accounts, even though this integration never charges a
+      // card — it's a platform-level prerequisite, not something we use.
+      card_payments: { requested: true },
       bacs_debit_payments: { requested: true },
       transfers: { requested: true },
     },

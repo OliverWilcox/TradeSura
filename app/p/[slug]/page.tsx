@@ -66,8 +66,30 @@ export default async function PublicPlanPage({
   const { slug } = await params;
   const { src, demo } = await searchParams;
   const data = await loadEngineer(slug);
-  if (!data || data.tiers.length === 0) notFound();
+  if (!data) notFound();
   const { engineer, tiers } = data;
+
+  // The engineer's Stripe Connect business_profile.url points here from the
+  // moment they connect payments (onboarding step 1) — before they've
+  // published a plan (step 2). A hard 404 in that gap makes Stripe flag the
+  // account for an unreachable/"under construction" business website, so
+  // this renders a real, honest holding page instead of notFound().
+  if (tiers.length === 0) {
+    return (
+      <CustomerShell tradingName={engineer.tradingName!}>
+        <div className="bg-paper border border-line rounded-xl p-4 text-center">
+          <h1 className="font-sans font-semibold text-base mb-1.5">
+            {engineer.tradingName}&apos;s care plans
+          </h1>
+          <p className="text-sm text-muted">
+            Monthly boiler care plans from a Gas Safe registered engineer — annual service,
+            priority booking, no call-out fees. Plans are being set up now; check back soon, or
+            ask {engineer.tradingName} directly.
+          </p>
+        </div>
+      </CustomerShell>
+    );
+  }
 
   // Live Gas Safe check — the badge shows register data queried now, not a
   // value cached at signup.
