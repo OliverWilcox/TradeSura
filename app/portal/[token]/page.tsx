@@ -33,12 +33,24 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
       sub={`Plan ${plan.ref} · ${plan.customer.firstName} ${plan.customer.lastName}${property ? ` · ${property.addressLine1}` : ""}`}
     >
       {plan.status === "ACTIVE" ? (
-        <Card className="bg-ok-tint border-ok-tint text-center py-5">
-          <div className="text-2xl">✓</div>
-          <p className="font-semibold">You&apos;re covered on the {plan.tier?.name} plan</p>
-          <p className="text-xs text-muted mt-1">
-            {poundsFromPence(plan.priceMonthlyPence ?? 0)}/mo by Direct Debit
-          </p>
+        // C4 — raised plan-status card with the breakdown inside it.
+        <Card variant="raised">
+          <div className="flex justify-between items-baseline">
+            <p className="font-semibold">
+              {plan.tier?.name} — {brand}
+            </p>
+            <span className="font-mono font-semibold">
+              {poundsFromPence(plan.priceMonthlyPence ?? 0)}/mo
+            </span>
+          </div>
+          <div className="h-px bg-line-strong my-2.5" />
+          <RowLine left="Direct Debit" right={<span className="text-ok font-semibold">Active</span>} />
+          {nextService && (
+            <RowLine
+              left="Annual service"
+              right={nextService.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
+            />
+          )}
         </Card>
       ) : plan.status === "CANCELLED" ? (
         <Card className="text-center py-5">
