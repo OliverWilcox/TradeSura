@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { NotIncluded, btnClass } from "@/components/ui";
+import { EmbeddedCheckout } from "@/components/embedded-checkout";
 
 type Tier = {
   id: string;
@@ -15,12 +16,23 @@ function pounds(pence: number) {
   return pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
 }
 
-export function SignupTiers({ token, tiers }: { token: string; tiers: Tier[] }) {
+type Started = { clientSecret: string; publishableKey: string; confirmedUrl: string };
+
+export function SignupTiers({
+  token,
+  tiers,
+  engineerName,
+}: {
+  token: string;
+  tiers: Tier[];
+  engineerName: string;
+}) {
   const [selectedId, setSelectedId] = useState(
     tiers.find((t) => t.isRecommended)?.id ?? tiers[0]?.id,
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [started, setStarted] = useState<Started | null>(null);
   const selected = tiers.find((t) => t.id === selectedId);
 
   async function choose() {
@@ -33,12 +45,36 @@ export function SignupTiers({ token, tiers }: { token: string; tiers: Tier[] }) 
       body: JSON.stringify({ tierId: selected.id }),
     });
     const data = await res.json();
+    setBusy(false);
     if (!res.ok) {
-      setBusy(false);
       setError(data.error ?? "Something went wrong — try again.");
       return;
     }
-    window.location.assign(data.authorisationUrl);
+    setStarted(data);
+  }
+
+  if (started && selected) {
+    return (
+      <>
+        <div className="rounded-xl bg-paper border-[1.5px] border-flame p-3.5">
+          <div className="flex justify-between items-baseline">
+            <span className="font-disp text-[17px] uppercase tracking-wide">{selected.name}</span>
+            <span className="font-mono text-xl font-semibold">
+              {pounds(selected.priceMonthlyPence)}
+              <small className="text-[11px] text-muted font-normal">/mo</small>
+            </span>
+          </div>
+        </div>
+        <EmbeddedCheckout
+          clientSecret={started.clientSecret}
+          publishableKey={started.publishableKey}
+          confirmedUrl={started.confirmedUrl}
+          planName={selected.name}
+          priceLabel={pounds(selected.priceMonthlyPence)}
+          engineerName={engineerName}
+        />
+      </>
+    );
   }
 
   return (
@@ -76,7 +112,7 @@ export function SignupTiers({ token, tiers }: { token: string; tiers: Tier[] }) 
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {/* Price before mandate: the full monthly price is restated on the
-          button itself, the last thing seen before the GoCardless flow. */}
+          button itself, the last thing seen before the Payment Element. */}
       {selected && (
         <button onClick={choose} disabled={busy} className={btnClass()}>
           {busy

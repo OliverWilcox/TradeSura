@@ -36,7 +36,7 @@ export function CustomerShell({
 
 export function GasSafeBadge({ regNo }: { regNo: string }) {
   return (
-    <span className="inline-flex gap-1.5 items-center bg-[#FFF6D6] border border-[#EBD98F] text-[#7A5E00] text-[10.5px] font-semibold px-2 py-0.5 rounded-md">
+    <span className="inline-flex gap-1.5 items-center bg-warn-tint border border-warn-tint text-warn text-[10.5px] font-semibold px-2 py-0.5 rounded-md">
       ▲ GAS SAFE VERIFIED {regNo}
     </span>
   );

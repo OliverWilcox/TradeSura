@@ -16,16 +16,23 @@ export function CancelFlow(props: {
   const [step, setStep] = useState<"start" | "confirm" | "done">(
     props.status === "CANCELLED" ? "done" : "start",
   );
+  const [reason, setReason] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const inCoolingOff =
     props.coolingOffEndsAt !== null && new Date(props.coolingOffEndsAt) > new Date();
 
+  const REASONS = ["Moving house", "Cost", "Not using it", "Other"];
+
   async function cancel() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/portal/${props.token}/cancel`, { method: "POST" });
+    const res = await fetch(`/api/portal/${props.token}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
     const data = await res.json();
     setBusy(false);
     if (!res.ok) {
@@ -72,9 +79,23 @@ export function CancelFlow(props: {
         </button>
       ) : (
         <Card className="border-danger-tint">
-          <p className="text-sm mb-3">
+          <p className="text-sm mb-2">
             Cancel your {props.tierName} plan? Your Direct Debit stops immediately.
           </p>
+          <p className="text-xs text-muted mb-1.5">Mind telling us why? (optional)</p>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {REASONS.map((r) => (
+              <button
+                key={r}
+                onClick={() => setReason(reason === r ? null : r)}
+                className={`text-xs rounded-full border px-2.5 py-1 ${
+                  reason === r ? "border-flame bg-flame-tint text-flame-deep" : "border-line text-muted"
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
           {error && <p className="text-sm text-danger mb-2">{error}</p>}
           <button onClick={cancel} disabled={busy} className={btnClass("dangerghost")}>
             {busy ? "Cancelling…" : "Yes, cancel my plan"}

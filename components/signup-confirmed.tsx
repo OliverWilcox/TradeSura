@@ -11,6 +11,7 @@ export function SignupConfirmed(props: {
   portalToken: string | null;
 }) {
   const [status, setStatus] = useState(props.initialStatus);
+  const [mandatePending, setMandatePending] = useState(false);
   const [portalToken, setPortalToken] = useState(props.portalToken);
 
   useEffect(() => {
@@ -21,24 +22,31 @@ export function SignupConfirmed(props: {
       if (res.ok && !stop) {
         const data = await res.json();
         setStatus(data.status);
+        setMandatePending(data.mandate === "pending");
         if (data.portalToken) setPortalToken(data.portalToken);
         if (data.status === "ACTIVE") return;
       }
-      if (!stop) setTimeout(tick, 2000);
+      // Poll faster before the mandate exists, then back off — Bacs settlement
+      // is measured in days, not seconds.
+      if (!stop) setTimeout(tick, mandatePending ? 15000 : 2500);
     }
     tick();
     return () => {
       stop = true;
     };
-  }, [props.token, status]);
+  }, [props.token, status, mandatePending]);
 
   if (status !== "ACTIVE") {
     return (
       <Card className="text-center py-8">
-        <div className="text-2xl animate-pulse">⏳</div>
-        <p className="font-semibold mt-2">Setting up your Direct Debit…</p>
+        <div className="text-2xl">{mandatePending ? "✓" : "⏳"}</div>
+        <p className="font-semibold mt-2">
+          {mandatePending ? "You're in — Direct Debit is being set up" : "Setting up your Direct Debit…"}
+        </p>
         <p className="text-xs text-muted mt-1">
-          This usually takes a few seconds. Keep this page open.
+          {mandatePending
+            ? "This takes 2–3 working days. Your engineer has been told, and we'll text you when your first payment clears. You can close this page."
+            : "This usually takes a few seconds. Keep this page open."}
         </p>
       </Card>
     );
@@ -47,7 +55,7 @@ export function SignupConfirmed(props: {
   const price = (props.priceMonthlyPence / 100).toFixed(2);
   return (
     <>
-      <Card className="bg-ok-tint border-[#BCE6CF] text-center py-6">
+      <Card className="bg-ok-tint border-ok-tint text-center py-6">
         <div className="text-3xl">✓</div>
         <p className="font-semibold mt-1">You&apos;re covered on the {props.tierName} plan</p>
         <p className="text-xs text-muted mt-1">£{price}/mo by Direct Debit</p>

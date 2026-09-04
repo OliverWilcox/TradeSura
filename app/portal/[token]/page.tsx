@@ -33,7 +33,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
       sub={`Plan ${plan.ref} · ${plan.customer.firstName} ${plan.customer.lastName}${property ? ` · ${property.addressLine1}` : ""}`}
     >
       {plan.status === "ACTIVE" ? (
-        <Card className="bg-ok-tint border-[#BCE6CF] text-center py-5">
+        <Card className="bg-ok-tint border-ok-tint text-center py-5">
           <div className="text-2xl">✓</div>
           <p className="font-semibold">You&apos;re covered on the {plan.tier?.name} plan</p>
           <p className="text-xs text-muted mt-1">

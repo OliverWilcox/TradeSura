@@ -54,6 +54,7 @@ export default async function SignupPage({
       </p>
       <SignupTiers
         token={token}
+        engineerName={brand}
         tiers={tiers.map((t) => ({
           id: t.id,
           name: t.name,

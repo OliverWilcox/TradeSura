@@ -50,7 +50,7 @@ export function ReportForm({ token }: { token: string }) {
   if (done) {
     return (
       <>
-        <Card className="bg-ok-tint border-[#BCE6CF] text-center py-6">
+        <Card className="bg-ok-tint border-ok-tint text-center py-6">
           <div className="text-2xl">✓</div>
           <p className="font-semibold mt-1">Report sent</p>
           <p className="text-xs text-muted mt-1">
