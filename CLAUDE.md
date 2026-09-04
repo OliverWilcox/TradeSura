@@ -33,15 +33,26 @@ Bacs), Planlock takes a 20% app fee. Full product spec: @docs/design-spec.html
 ## Stack  [DECISION — swap only if the assigned dev prefers otherwise, then update this file]
 - Next.js (App Router) + TypeScript (strict), at the repo root.
 - Postgres + Prisma. Tailwind for styling.
-  [DECISION 2026-08-28, human] Design system is **TradeSura Build Spec v1 §1**,
-  not the older `docs/design-spec.html`: **TS Blue #1966CC** (primary),
-  **money-green #0E9F5B** (pounds only), amber #B7791F, red #C0392B, wash
-  #F5F8FB, light chrome, **system font** (no custom webfonts). Semantic Tailwind
-  keys are kept so screens didn't churn: `flame`=primary blue, `copper`/`ok`=
-  money green, `iron`=light header surface, `warn`=amber, `panel`=wash. Tokens
+  [DECISION 2026-09-04, human] Design system is **TradeSura Screen Designs v2
+  · Full Dark** (`app/assets/TradeSura_Screen_Designs_v2_Dark.html` +
+  `TradeSura_Welcome_Screen_W0.html`), superseding the 2026-08-28 light system
+  below. Navy depth (bg #0B1A2E, surfaces #122540/#193150/#213C60), **brand
+  blue #5FA3F0** (was TS Blue #1966CC — that hex is kept as `flame-deep`),
+  **money-green #3DD68C** (pounds only, was #0E9F5B), amber #F2B84B, red
+  #FF6B6B, white-alpha lines (10%/18%), **system font** (unchanged). Primary
+  buttons are now **white bg / navy text**, not filled brand-colour — green is
+  reserved for the customer's "Join" and the engineer's WhatsApp share only.
+  Cards have three variants: flat (default), `raised` (surface gradient +
+  shadow), `hero` (deep navy gradient — money cards, celebration moments).
+  This is a one-way palette swap, no light-mode variant. Semantic Tailwind
+  keys are kept so screens didn't churn: `flame`=brand blue, `copper`/`ok`=
+  money green, `iron`=dark chrome, `warn`=amber, `panel`=surface-2. Tokens
   live in `app/globals.css` `@theme` and `mobile/tailwind.config.js` — keep the
   two in sync. Font weight comes from `font-{medium,semibold,bold}` utilities
   (the old `font-sans-bold` / `font-disp` family classes were converted).
+  [SUPERSEDED 2026-08-28, human] Previously: TradeSura Build Spec v1 §1's
+  light system — TS Blue #1966CC primary, money-green #0E9F5B, wash #F5F8FB,
+  light chrome. Kept here for history; do not build against it.
 - [DECISION 2026-08-03, human] Engineer surface is a native app built with
   Expo/React Native, in a sibling `mobile/` folder (own `package.json`, no
   workspace tooling) — supersedes the earlier PWA-now/Capacitor-later plan.

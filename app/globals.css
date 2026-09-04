@@ -1,39 +1,49 @@
 @import "tailwindcss";
 
-/* Design system: TradeSura Build Spec v1 §1 — TS Blue #1966CC, money-green
-   #0E9F5B (pounds only), system font, light chrome. Semantic keys kept:
-   flame=primary blue, copper/ok=money green, iron=light surface, warn=amber. */
+/* Design system: TradeSura Screen Designs v2 · Full Dark (supersedes Build
+   Spec v1 §1's light system — see CLAUDE.md's [DECISION] for the switch).
+   Navy depth, brand blue #5FA3F0, money-green #3DD68C (pounds only), system
+   font. Semantic keys kept: flame=brand blue, copper/ok=money green,
+   iron=dark chrome, warn=amber. Mirrored by hand in mobile/tailwind.config.js
+   — NativeWind v4 can't consume this file directly (see mobile/CLAUDE.md). */
 @theme {
-  --color-iron: #ffffff;
-  --color-iron-2: #f5f8fb;
-  --color-ink: #14202e;
-  --color-muted: #5b6b7c;
-  --color-faint: #8b95a1;
-  --color-paper: #ffffff;
-  --color-bg: #e9eef4;
-  --color-panel: #f5f8fb;
-  --color-flame: #1966cc;
-  --color-flame-deep: #0f4c9e;
-  --color-flame-tint: #eaf2fc;
-  --color-copper: #0e9f5b;
-  --color-copper-deep: #0a7a46;
-  --color-copper-tint: #e7f7ef;
-  --color-ok: #0e9f5b;
-  --color-ok-tint: #e7f7ef;
-  --color-warn: #b7791f;
-  --color-warn-tint: #fcf3e3;
-  --color-danger: #c0392b;
-  --color-danger-tint: #fbeae7;
-  --color-line: #e1e8f0;
-  --color-line-soft: #ebeff3;
-  /* auth surface — now light like the rest */
-  --color-night: #f5f8fb;
-  --color-night-card: #ffffff;
-  --color-brand-blue: #1966cc;
-  --color-brand-blue-lift: #4c8bde;
-  --color-brand-copper: #0e9f5b;
-  --color-night-text: #14202e;
-  --color-night-muted: #5b6b7c;
+  --color-iron: #081321;
+  --color-iron-2: #122540;
+  --color-ink: #f3f7fb;
+  --color-muted: #9fb6d0;
+  --color-faint: #6e86a3;
+  --color-paper: #122540;
+  --color-paper-2: #193150;
+  --color-paper-3: #213c60;
+  --color-bg: #0b1a2e;
+  --color-bg-deep: #081321;
+  --color-panel: #193150;
+  --color-flame: #5fa3f0;
+  --color-flame-deep: #1966cc;
+  --color-flame-tint: rgba(95, 163, 240, 0.16);
+  --color-copper: #3dd68c;
+  --color-copper-deep: #2fb877;
+  --color-copper-tint: rgba(61, 214, 140, 0.14);
+  --color-ok: #3dd68c;
+  --color-ok-tint: rgba(61, 214, 140, 0.14);
+  --color-warn: #f2b84b;
+  --color-warn-tint: rgba(242, 184, 75, 0.14);
+  --color-danger: #ff6b6b;
+  --color-danger-tint: rgba(255, 107, 107, 0.14);
+  --color-line: rgba(255, 255, 255, 0.10);
+  --color-line-soft: rgba(255, 255, 255, 0.06);
+  --color-line-strong: rgba(255, 255, 255, 0.18);
+  --color-hero-from: #1a3a66;
+  --color-hero-via: #122540;
+  --color-hero-to: #0f2140;
+  /* auth surface — matches the app background */
+  --color-night: #0b1a2e;
+  --color-night-card: #122540;
+  --color-brand-blue: #5fa3f0;
+  --color-brand-blue-lift: #8cc0f7;
+  --color-brand-copper: #3dd68c;
+  --color-night-text: #f3f7fb;
+  --color-night-muted: #9fb6d0;
   --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --font-disp: "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;

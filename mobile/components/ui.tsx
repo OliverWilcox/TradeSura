@@ -1,21 +1,25 @@
 import type { ReactNode } from "react";
 import { View, Text, Pressable } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 
 // RN port of ../../components/ui.tsx — same primitives, same tokens.
-// Design system: TradeSura Build Spec v1 §1 (TS Blue, money-green, light
-// chrome, system font). Text can't contain arbitrary block layout in RN, so
-// RowLine's slots accept a plain string (wrapped in Text) or a composed node.
+// Design system: TradeSura Screen Designs v2 · Full Dark (navy depth, brand
+// blue, money-green, system font — see CLAUDE.md's [DECISION] for the switch
+// from the earlier light system). Text can't contain arbitrary block layout
+// in RN, so RowLine's slots accept a plain string (wrapped in Text) or a
+// composed node.
 
 // Home shows the wordmark; every other screen shows a plain bold title
 // (matches the interactive prototype's appbars).
 export function AppHeader({ title, right }: { title?: string; right?: ReactNode }) {
   return (
-    <View className="flex-row items-center justify-between border-b border-line bg-paper px-4 py-3">
+    <View className="flex-row items-center justify-between border-b border-line bg-bg-deep px-4 py-3">
       {title ? (
         <Text className="text-[17px] font-bold text-ink">{title}</Text>
       ) : (
-        <Text className="text-lg font-extrabold tracking-tight text-flame">
-          TradeSura<Text className="text-copper">✓</Text>
+        <Text className="text-lg font-extrabold tracking-tight text-white">
+          TRADE<Text className="text-flame">SURA</Text>
+          <Text className="text-copper">✓</Text>
         </Text>
       )}
       {right}
@@ -23,9 +27,45 @@ export function AppHeader({ title, right }: { title?: string; right?: ReactNode 
   );
 }
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+// `variant` picks the card treatment from v2: `flat` (default, most cards),
+// `raised` (surface-2→surface gradient + shadow, for the active/highlighted
+// item in a list), `hero` (the deep navy gradient reserved for money cards
+// and celebration moments — the screen's one big money moment).
+export function Card({
+  children,
+  className = "",
+  variant = "flat",
+}: {
+  children: ReactNode;
+  className?: string;
+  variant?: "flat" | "raised" | "hero";
+}) {
+  if (variant === "hero") {
+    return (
+      <LinearGradient
+        colors={["#1a3a66", "#122540", "#0f2140"]}
+        start={{ x: 0.15, y: 0 }}
+        end={{ x: 0.85, y: 1 }}
+        style={{ borderRadius: 16 }}
+        className={`border border-line-strong p-4 ${className}`}
+      >
+        {children}
+      </LinearGradient>
+    );
+  }
+  if (variant === "raised") {
+    return (
+      <LinearGradient
+        colors={["#193150", "#122540"]}
+        style={{ borderRadius: 16 }}
+        className={`border border-line-strong p-4 ${className}`}
+      >
+        {children}
+      </LinearGradient>
+    );
+  }
   return (
-    <View className={`rounded-[14px] border border-line bg-paper p-4 ${className}`}>{children}</View>
+    <View className={`rounded-2xl border border-line bg-paper p-4 ${className}`}>{children}</View>
   );
 }
 
@@ -39,12 +79,15 @@ export function Micro({ children, className = "" }: { children: ReactNode; class
   );
 }
 
+// Status pills always carry text, never colour alone (v2 legibility rule) —
+// every tone below is a tinted background + matching-hue text, never a solid
+// fill (the old solid `danger` fill is replaced with the same tint pattern).
 const pillStyles = {
   ok: "bg-ok-tint text-ok",
   warn: "bg-warn-tint text-warn",
-  info: "bg-flame-tint text-flame-deep",
-  off: "border border-line bg-panel text-muted",
-  danger: "bg-danger text-white",
+  info: "bg-flame-tint text-flame",
+  off: "border border-line bg-line-soft text-muted",
+  danger: "bg-danger-tint text-danger",
 } as const;
 
 export function Pill({ tone, children }: { tone: keyof typeof pillStyles; children: ReactNode }) {
@@ -87,19 +130,23 @@ export function Money({
 }) {
   const pounds = pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
   return (
-    <Text className={`font-mono font-extrabold text-ink ${className}`}>
+    <Text className={`font-mono font-extrabold text-ok ${className}`}>
       {pounds}
       {suffix}
     </Text>
   );
 }
 
+// v2 rule: primary is white-on-navy (not a filled brand colour) — it's the
+// signature and the brightest object on screen, one per screen. Green is
+// reserved for the customer's "Join" and the engineer's WhatsApp share, the
+// only two green buttons in the app. Disabled is opacity, never a colour swap.
 const btnVariants = {
-  flame: { container: "bg-flame", text: "text-white" },
-  copper: { container: "bg-flame", text: "text-white" }, // legacy alias → primary blue
-  green: { container: "bg-ok", text: "text-white" },
-  ghost: { container: "border-[1.5px] border-flame bg-paper", text: "text-flame-deep" },
-  dangerghost: { container: "border-[1.5px] border-danger-tint bg-paper", text: "text-danger" },
+  flame: { container: "bg-white", text: "text-night-text" },
+  copper: { container: "bg-white", text: "text-night-text" }, // legacy alias → primary
+  green: { container: "bg-ok", text: "text-[#052614]" },
+  ghost: { container: "border-[1.5px] border-white/55 bg-transparent", text: "text-white" },
+  dangerghost: { container: "border-[1.5px] border-danger bg-transparent", text: "text-danger" },
 } as const;
 
 export function Button({

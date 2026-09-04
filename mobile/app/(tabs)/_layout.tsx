@@ -15,15 +15,15 @@ export default function TabsLayout() {
 
   if (meLoading && !me) {
     return (
-      <View className="flex-1 items-center justify-center bg-panel">
-        <ActivityIndicator color="#1966CC" />
+      <View className="flex-1 items-center justify-center bg-bg">
+        <ActivityIndicator color="#5FA3F0" />
       </View>
     );
   }
 
   if (meError && !me) {
     return (
-      <View className="flex-1 items-center justify-center gap-3 bg-panel px-6">
+      <View className="flex-1 items-center justify-center gap-3 bg-bg px-6">
         <Text className="text-sm text-danger">{meError}</Text>
         <Button onPress={refreshMe} variant="ghost" className="w-full">
           Try again
@@ -44,9 +44,12 @@ export default function TabsLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: "#1966CC",
-          tabBarInactiveTintColor: "#5B6B7C",
-          tabBarStyle: { borderTopColor: "#E1E8F0", backgroundColor: "#FFFFFF" },
+          tabBarActiveTintColor: "#5FA3F0",
+          tabBarInactiveTintColor: "#6E86A3",
+          tabBarStyle: {
+            borderTopColor: "rgba(255,255,255,0.10)",
+            backgroundColor: "rgba(8,19,33,0.97)",
+          },
           tabBarLabelStyle: { fontSize: 10, fontWeight: "600" },
         }}
       >
@@ -79,19 +82,20 @@ export default function TabsLayout() {
         <Tabs.Screen name="plans" options={{ href: null }} />
         <Tabs.Screen name="more" options={{ href: null }} />
       </Tabs>
-      {/* Send an offer — the app's primary action, one tap from every tab. */}
+      {/* Send an offer — the app's primary action, one tap from every tab.
+          White fab: the brightest object on every screen (v2 nav rule). */}
       <Pressable
         onPress={() => router.push("/offer")}
-        className="absolute bottom-[26px] h-14 w-14 items-center justify-center self-center rounded-full bg-flame"
+        className="absolute bottom-[26px] h-14 w-14 items-center justify-center self-center rounded-full bg-white"
         style={{
           elevation: 6,
-          shadowColor: "#1966CC",
-          shadowOpacity: 0.4,
+          shadowColor: "#000",
+          shadowOpacity: 0.5,
           shadowRadius: 10,
           shadowOffset: { width: 0, height: 6 },
         }}
       >
-        <Text className="text-[26px] leading-none text-white">+</Text>
+        <Text className="text-[26px] leading-none text-night-text">+</Text>
       </Pressable>
     </View>
   );

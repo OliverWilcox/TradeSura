@@ -2,10 +2,11 @@
 // Kept as a separate v3-style config here because NativeWind v4 (stable) targets
 // Tailwind v3 — see mobile/CLAUDE.md for why v5/Tailwind v4 wasn't used.
 //
-// Design system: TradeSura Build Spec v1 §1 — TS Blue #1966CC, money-green
-// #0E9F5B (pounds only), system font, light chrome. Semantic keys are kept so
-// screens don't churn: `flame`=primary blue, `copper`/`ok`=money green,
-// `iron`=light surface (was dark), `warn`=amber, `panel`=wash.
+// Design system: TradeSura Screen Designs v2 · Full Dark (supersedes Build
+// Spec v1 §1's light system — see CLAUDE.md's [DECISION] for the switch).
+// Navy depth, brand blue #5FA3F0, money-green #3DD68C (pounds only), system
+// font. Semantic keys are kept so screens don't churn: `flame`=brand blue,
+// `copper`/`ok`=money green, `iron`=dark chrome, `warn`=amber, `panel`=surface-2.
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ["./app/**/*.{js,jsx,ts,tsx}", "./components/**/*.{js,jsx,ts,tsx}"],
@@ -14,39 +15,47 @@ module.exports = {
     extend: {
       colors: {
         // surfaces
-        iron: "#ffffff", // was dark chrome — now a light header surface
-        "iron-2": "#f5f8fb",
-        ink: "#14202e",
-        muted: "#5b6b7c",
-        faint: "#8b95a1",
-        paper: "#ffffff",
-        bg: "#e9eef4",
-        panel: "#f5f8fb",
-        // primary — TS Blue
-        flame: "#1966cc",
-        "flame-deep": "#0f4c9e",
-        "flame-tint": "#eaf2fc",
+        iron: "#081321", // bg-deep — nav/header chrome
+        "iron-2": "#122540", // surface — secondary chrome
+        ink: "#f3f7fb",
+        muted: "#9fb6d0",
+        faint: "#6e86a3",
+        paper: "#122540", // surface — cards, headers
+        "paper-2": "#193150", // surface-2 — inputs, tiles, raised cards
+        "paper-3": "#213c60", // surface-3
+        bg: "#0b1a2e",
+        "bg-deep": "#081321",
+        panel: "#193150",
+        // brand — light blue
+        flame: "#5fa3f0",
+        "flame-deep": "#1966cc",
+        "flame-tint": "rgba(95,163,240,0.16)",
         // money — green, pounds only
-        copper: "#0e9f5b",
-        "copper-deep": "#0a7a46",
-        "copper-tint": "#e7f7ef",
-        ok: "#0e9f5b",
-        "ok-tint": "#e7f7ef",
+        copper: "#3dd68c",
+        "copper-deep": "#2fb877",
+        "copper-tint": "rgba(61,214,140,0.14)",
+        ok: "#3dd68c",
+        "ok-tint": "rgba(61,214,140,0.14)",
         // attention / failure
-        warn: "#b7791f",
-        "warn-tint": "#fcf3e3",
-        danger: "#c0392b",
-        "danger-tint": "#fbeae7",
-        line: "#e1e8f0",
-        "line-soft": "#ebeff3",
-        // auth surface — now light like the rest
-        night: "#f5f8fb",
-        "night-card": "#ffffff",
-        "brand-blue": "#1966cc",
-        "brand-blue-lift": "#4c8bde",
-        "brand-copper": "#0e9f5b",
-        "night-text": "#14202e",
-        "night-muted": "#5b6b7c",
+        warn: "#f2b84b",
+        "warn-tint": "rgba(242,184,75,0.14)",
+        danger: "#ff6b6b",
+        "danger-tint": "rgba(255,107,107,0.14)",
+        line: "rgba(255,255,255,0.10)",
+        "line-soft": "rgba(255,255,255,0.06)",
+        "line-strong": "rgba(255,255,255,0.18)",
+        // hero card gradient stops (money cards, celebration moments)
+        "hero-from": "#1a3a66",
+        "hero-via": "#122540",
+        "hero-to": "#0f2140",
+        // auth surface — matches the app background
+        night: "#0b1a2e",
+        "night-card": "#122540",
+        "brand-blue": "#5fa3f0",
+        "brand-blue-lift": "#8cc0f7",
+        "brand-copper": "#3dd68c",
+        "night-text": "#f3f7fb",
+        "night-muted": "#9fb6d0",
       },
       fontFamily: {
         // System font (Build Spec §1: "No custom webfonts"). Weight comes from

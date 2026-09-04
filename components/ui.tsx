@@ -1,12 +1,45 @@
 import type { ReactNode } from "react";
 
+// `variant` picks the card treatment from Screen Designs v2: `flat` (default,
+// most cards), `raised` (surface-2→surface gradient + shadow, for the
+// highlighted item in a list), `hero` (the deep navy gradient reserved for
+// money cards and celebration moments).
 export function Card({
   children,
   className = "",
+  variant = "flat",
 }: {
   children: ReactNode;
   className?: string;
+  variant?: "flat" | "raised" | "hero";
 }) {
+  if (variant === "hero") {
+    return (
+      <div
+        className={`rounded-2xl border border-line-strong p-4 ${className}`}
+        style={{
+          background:
+            "linear-gradient(160deg, #1a3a66 0%, #122540 60%, #0f2140 100%)",
+          boxShadow: "0 14px 34px rgba(0,0,0,.45)",
+        }}
+      >
+        {children}
+      </div>
+    );
+  }
+  if (variant === "raised") {
+    return (
+      <div
+        className={`rounded-2xl border border-line-strong p-4 ${className}`}
+        style={{
+          background: "linear-gradient(180deg, #193150, #122540)",
+          boxShadow: "0 10px 30px rgba(0,0,0,.35)",
+        }}
+      >
+        {children}
+      </div>
+    );
+  }
   return (
     <div className={`bg-paper border border-line rounded-xl p-4 ${className}`}>
       {children}
@@ -22,12 +55,14 @@ export function Micro({ children, className = "" }: { children: ReactNode; class
   );
 }
 
+// Status pills always carry text, never colour alone — tinted background +
+// matching-hue text, never a solid fill.
 const pillStyles = {
   ok: "bg-ok-tint text-ok",
   warn: "bg-warn-tint text-warn",
-  info: "bg-flame-tint text-flame-deep",
-  off: "bg-panel text-faint border border-line",
-  danger: "bg-danger text-white",
+  info: "bg-flame-tint text-flame",
+  off: "bg-line-soft text-faint border border-line",
+  danger: "bg-danger-tint text-danger",
 } as const;
 
 export function Pill({
@@ -46,12 +81,15 @@ export function Pill({
   );
 }
 
+// v2 rule: primary is white-on-navy (not a filled brand colour) — the
+// signature, one per screen. Green is reserved for the customer's "Join" and
+// the engineer's WhatsApp share. Disabled is opacity, never a colour swap.
 const btnStyles = {
-  flame: "bg-flame text-white",
-  copper: "bg-copper text-white",
-  green: "bg-ok text-white",
-  ghost: "bg-transparent text-flame-deep border-[1.5px] border-flame",
-  dangerghost: "bg-transparent text-danger border-[1.5px] border-danger-tint",
+  flame: "bg-white text-night-text",
+  copper: "bg-white text-night-text", // legacy alias → primary
+  green: "bg-ok text-[#052614]",
+  ghost: "bg-transparent text-white border-[1.5px] border-white/55",
+  dangerghost: "bg-transparent text-danger border-[1.5px] border-danger",
 } as const;
 
 export function btnClass(variant: keyof typeof btnStyles = "flame") {
@@ -70,7 +108,7 @@ export function RowLine({ left, right }: { left: ReactNode; right?: ReactNode })
 export function Money({ pence, suffix = "" }: { pence: number; suffix?: string }) {
   const pounds = pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
   return (
-    <span className="font-mono font-semibold">
+    <span className="font-mono font-semibold text-ok">
       {pounds}
       {suffix}
     </span>
