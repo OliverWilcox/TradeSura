@@ -57,7 +57,7 @@ export function SignupConfirmed(props: {
     <>
       <Card className="bg-ok-tint border-ok-tint text-center py-6">
         <div className="text-3xl">✓</div>
-        <p className="font-semibold mt-1">You&apos;re covered on the {props.tierName} plan</p>
+        <p className="font-semibold mt-1">You&apos;re on the {props.tierName} plan</p>
         <p className="text-xs text-muted mt-1">£{price}/mo by Direct Debit</p>
       </Card>
       <Card>
