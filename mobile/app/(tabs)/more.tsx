@@ -1,11 +1,11 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, ScrollView, RefreshControl, Pressable } from "react-native";
+import { View, Text, TextInput, ScrollView, RefreshControl, Pressable, Linking } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { gcResultError } from "@/lib/gc";
+import { stripeResultError } from "@/lib/stripe";
 import { AppHeader, Card, Micro, Pill, RowLine, Button } from "@/components/ui";
 
 type MoreData = {
@@ -35,7 +35,7 @@ const BUSINESS_TYPE_LABELS: Record<string, string> = {
   partnership: "Partnership",
 };
 
-// More hub — settings, GC status, payouts summary, sign out.
+// More hub — settings, Stripe status, payouts summary, sign out.
 // The full Payouts & Collections screen (Screen 12) is P1 and stays web-only;
 // this is just the summary CLAUDE.md scoped into the hub.
 export default function More() {
@@ -51,8 +51,8 @@ export default function More() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
-  const [gcBusy, setGcBusy] = useState(false);
-  const [gcError, setGcError] = useState<string | null>(null);
+  const [stripeBusy, setStripeBusy] = useState(false);
+  const [stripeError, setStripeError] = useState<string | null>(null);
 
   const [flushBusy, setFlushBusy] = useState(false);
   const [flushResult, setFlushResult] = useState<string | null>(null);
@@ -105,19 +105,19 @@ export default function More() {
     }
   }
 
-  async function connectGc() {
-    setGcBusy(true);
-    setGcError(null);
+  async function connectStripe() {
+    setStripeBusy(true);
+    setStripeError(null);
     try {
-      const { url } = await api<{ url: string }>("/api/gc/connect-url");
+      const { url } = await api<{ url: string }>("/api/stripe/connect-link");
       const result = await WebBrowser.openAuthSessionAsync(url, "tradesura://onboarding");
-      const gcErr = gcResultError(result);
-      if (gcErr) setGcError(gcErr);
+      const err = stripeResultError(result);
+      if (err) setStripeError(err);
       else if (result.type === "success") await refreshMe();
     } catch (e) {
-      setGcError(e instanceof ApiError ? e.message : "Couldn't start Direct Debit connect.");
+      setStripeError(e instanceof ApiError ? e.message : "Couldn't start payment setup.");
     } finally {
-      setGcBusy(false);
+      setStripeBusy(false);
     }
   }
 
@@ -140,7 +140,7 @@ export default function More() {
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader right={<Micro className="text-[#AEB9C4]">More</Micro>} />
+        <AppHeader title="More" />
       </SafeAreaView>
       <ScrollView
         className="flex-1"
@@ -150,11 +150,11 @@ export default function More() {
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
         <Card>
-          <Text className="mb-1 font-sans-semibold text-sm text-ink">Your business</Text>
+          <Text className="mb-1 font-semibold text-sm text-ink">Your business</Text>
           <View className="py-1.5">
             {me?.gasSafeNo && me.gasSafeVerifiedAt ? (
               <View className="flex-row items-center gap-1.5 self-start rounded-md border border-[#EBD98F] bg-[#FFF6D6] px-2 py-0.5">
-                <Text className="font-sans-semibold text-[10.5px] text-[#7A5E00]">
+                <Text className="font-semibold text-[10.5px] text-warn">
                   ▲ GAS SAFE VERIFIED {me.gasSafeNo}
                 </Text>
               </View>
@@ -235,25 +235,33 @@ export default function More() {
             </Button>
           )}
           {savedSettings && !dirty && (
-            <Text className="mt-2 font-sans-semibold text-xs text-ok">✓ Saved</Text>
+            <Text className="mt-2 font-semibold text-xs text-ok">✓ Saved</Text>
           )}
         </Card>
 
         <Card>
-          <Text className="mb-1 font-sans-semibold text-sm text-ink">Direct Debit</Text>
-          {me?.gcConnected ? (
+          <Text className="mb-1 font-semibold text-sm text-ink">Payments</Text>
+          {me?.stripeConnected ? (
             <RowLine
-              left="Connection"
+              left="Stripe"
               right={
-                <Pill tone="ok">CONNECTED · {me.gcOrganisationId?.slice(0, 10)}…</Pill>
+                <Pill tone="ok">
+                  {me.stripePayoutsEnabled ? "ACTIVE" : "ACTIVE · PAYOUTS PENDING"}
+                </Pill>
               }
             />
           ) : (
             <>
-              {gcError && <Text className="mb-2 font-sans text-xs text-danger">{gcError}</Text>}
-              <Pressable onPress={connectGc} disabled={gcBusy}>
-                <Text className="font-sans-semibold text-sm text-flame-deep">
-                  {gcBusy ? "Opening…" : "Connect Direct Debit →"}
+              {stripeError && (
+                <Text className="mb-2 font-sans text-xs text-danger">{stripeError}</Text>
+              )}
+              <Pressable onPress={connectStripe} disabled={stripeBusy}>
+                <Text className="font-semibold text-sm text-flame-deep">
+                  {stripeBusy
+                    ? "Opening…"
+                    : me?.stripeDetailsSubmitted
+                      ? "Finish payment setup →"
+                      : "Set up payments →"}
                 </Text>
               </Pressable>
             </>
@@ -269,9 +277,9 @@ export default function More() {
             />
             <RowLine left="TradeSura fee (20%)" right={`−£${(data.fee / 100).toFixed(2)}`} />
             <RowLine
-              left={<Text className="font-sans-bold text-sm text-ink">To your bank (before DD costs)</Text>}
+              left={<Text className="font-bold text-sm text-ink">To your bank (before DD costs)</Text>}
               right={
-                <Text className="font-mono-semibold text-copper">
+                <Text className="font-mono font-semibold text-copper">
                   £{((data.totalPence - data.fee) / 100).toFixed(2)}
                 </Text>
               }
@@ -286,7 +294,7 @@ export default function More() {
 
         {data && (
           <Card>
-            <Text className="mb-1 font-sans-semibold text-sm text-ink">Message queue (dev)</Text>
+            <Text className="mb-1 font-semibold text-sm text-ink">Message queue (dev)</Text>
             <RowLine
               left="Queued texts (nudges, reminders, quiet hours)"
               right={<Pill tone={data.queuedSms > 0 ? "info" : "off"}>{data.queuedSms}</Pill>}
@@ -295,7 +303,7 @@ export default function More() {
               {flushBusy ? "Flushing…" : "Run queue now"}
             </Button>
             {flushResult && (
-              <Text className="mt-1.5 font-sans-semibold text-xs text-ok">✓ {flushResult}</Text>
+              <Text className="mt-1.5 font-semibold text-xs text-ok">✓ {flushResult}</Text>
             )}
           </Card>
         )}
@@ -307,13 +315,36 @@ export default function More() {
           <Pressable onPress={() => router.push("/payouts")}>
             <RowLine left="Payouts & collections" right={<Pill tone="info">OPEN</Pill>} />
           </Pressable>
+          <Pressable onPress={() => router.push("/referral")}>
+            <RowLine left="Refer an engineer · £50" right={<Pill tone="ok">OPEN</Pill>} />
+          </Pressable>
+          <Pressable onPress={() => router.push("/customers/blast")}>
+            <RowLine left="Offer campaign" right={<Pill tone="info">OPEN</Pill>} />
+          </Pressable>
           <Pressable onPress={() => router.push("/trades")}>
             <RowLine left="Trades & TradePacks" right={<Pill tone="info">OPEN</Pill>} />
           </Pressable>
+        </Card>
+
+        <Card>
           <Pressable
-            onPress={() => router.push({ pathname: "/coming-soon", params: { title: "Campaigns" } })}
+            onPress={() => router.push({ pathname: "/coming-soon", params: { title: "How to sell more plans" } })}
           >
-            <RowLine left="Campaigns" right={<Pill tone="off">SOON</Pill>} />
+            <RowLine left="📈 How to sell more plans" right={<Text className="text-faint">›</Text>} />
+          </Pressable>
+          <Pressable
+            onPress={() =>
+              Linking.openURL(
+                "https://wa.me/447700900000?text=" + encodeURIComponent("TradeSura support: "),
+              )
+            }
+          >
+            <RowLine left="💬 WhatsApp support" right={<Text className="text-faint">›</Text>} />
+          </Pressable>
+          <Pressable
+            onPress={() => router.push({ pathname: "/coming-soon", params: { title: "Terms & privacy" } })}
+          >
+            <RowLine left="📄 Terms & privacy" right={<Text className="text-faint">›</Text>} />
           </Pressable>
         </Card>
 

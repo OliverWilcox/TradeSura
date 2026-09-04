@@ -41,10 +41,10 @@ export default function SignIn() {
           keyboardShouldPersistTaps="handled"
         >
           <View className="flex-1 justify-center gap-2.5">
-            <Text className="font-mono-medium text-[11px] uppercase tracking-[3px] text-brand-blue-lift">
+            <Text className="font-mono font-medium text-[11px] uppercase tracking-[3px] text-brand-blue-lift">
               Care Plan Platform
             </Text>
-            <Text className="font-disp-bold text-[42px] uppercase leading-[1.05] tracking-wide text-night-text">
+            <Text className="font-bold text-[42px] uppercase leading-[1.05] tracking-wide text-night-text">
               Trade<Text className="text-brand-blue-lift">Sura</Text>
             </Text>
             <Text className="mt-1 max-w-[30ch] font-sans text-[15px] leading-5 text-night-muted">
@@ -63,7 +63,7 @@ export default function SignIn() {
               autoCorrect={false}
               keyboardType="email-address"
               placeholder="you@example.com"
-              placeholderTextColor="#5E6975"
+              placeholderTextColor="#8B95A1"
               className="rounded-xl border border-iron bg-night-card px-4 py-3 font-sans text-night-text"
             />
             {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
@@ -75,12 +75,12 @@ export default function SignIn() {
               {busy ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className="font-sans-semibold text-white">Sign in</Text>
+                <Text className="font-semibold text-white">Sign in</Text>
               )}
             </Pressable>
             <Link href="/sign-up" asChild>
               <Pressable className="items-center rounded-xl border-[1.5px] border-iron py-3.5">
-                <Text className="font-sans-semibold text-night-text">Create an account</Text>
+                <Text className="font-semibold text-night-text">Create an account</Text>
               </Pressable>
             </Link>
           </View>

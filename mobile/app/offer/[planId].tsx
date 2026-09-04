@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, ScrollView, Image, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, Image, ActivityIndicator, Linking } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Button } from "@/components/ui";
 
 type LinkInfo = { link: string; qrDataUrl: string };
@@ -30,6 +31,7 @@ function stepIndex(s: Status) {
 
 export default function OfferLive() {
   const { planId } = useLocalSearchParams<{ planId: string }>();
+  const { me } = useAuth();
   const [info, setInfo] = useState<LinkInfo | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
@@ -64,27 +66,29 @@ export default function OfferLive() {
 
   if (status?.status === "ACTIVE") {
     return (
-      <View className="flex-1 items-center justify-center gap-4 bg-iron px-8">
-        <View className="h-16 w-16 items-center justify-center rounded-full bg-flame">
-          <Text className="text-3xl font-bold text-white">✓</Text>
+      <View className="flex-1 items-center justify-center gap-3 bg-panel px-8">
+        <View className="h-[74px] w-[74px] items-center justify-center rounded-full bg-ok-tint">
+          <Text className="text-4xl text-ok">✓</Text>
         </View>
-        <Text className="text-center font-disp-bold text-3xl uppercase tracking-wide text-white">
-          Plan active — +£{Math.round((status.priceMonthlyPence ?? 0) / 100)}/mo locked in
+        <Text className="text-center text-[21px] font-extrabold text-ink">
+          {status.customerFirstName} joined — +£
+          {Math.round(((status.priceMonthlyPence ?? 0) * 12) / 100)}/yr
         </Text>
-        <Text className="text-center font-sans text-sm text-[#C7D0D9]">
+        <Text className="text-center text-sm text-muted">
           {status.customerFirstName} {status.customerLastName} is on a plan at{" "}
-          <Text className="font-mono-semibold text-[#C7D0D9]">
+          <Text className="font-mono font-bold text-ink">
             £{Math.round((status.priceMonthlyPence ?? 0) / 100)}/mo
           </Text>
           .
         </Text>
-        <Text className="font-mono-semibold text-2xl text-[#F3B27E]">
-          £{Math.round(status.incomeMonthlyPence / 100)}/mo
+        <Text className="font-mono text-3xl font-extrabold text-copper">
+          £{Math.round(status.incomeMonthlyPence / 100)}
+          <Text className="text-base font-bold text-muted"> /month</Text>
         </Text>
-        <Text className="font-mono text-xs text-[#8FA0B0]">
+        <Text className="font-mono text-xs text-faint">
           locked in across {status.activePlans} active plan{status.activePlans === 1 ? "" : "s"}
         </Text>
-        <Button variant="copper" onPress={() => router.replace("/(tabs)")} className="mt-4 w-64">
+        <Button onPress={() => router.replace("/(tabs)")} className="mt-4 w-64">
           Back to the dashboard
         </Button>
       </View>
@@ -96,21 +100,35 @@ export default function OfferLive() {
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader right={<Micro className="text-[#AEB9C4]">Offer a plan</Micro>} />
+        <AppHeader title="Offer a plan" />
       </SafeAreaView>
       <ScrollView className="flex-1" contentContainerClassName="gap-3.5 px-4 pb-8 pt-4">
         <Card>
-          <Text className="mb-2 font-sans-semibold text-sm text-ink">Link sent by text</Text>
+          <Text className="mb-2 font-semibold text-sm text-ink">Link sent by text</Text>
           {infoError ? (
             <Text className="font-sans text-sm text-danger">{infoError}</Text>
           ) : !info ? (
-            <ActivityIndicator color="#0E7FD0" />
+            <ActivityIndicator color="#1966CC" />
           ) : (
             <>
               <Text selectable className="font-mono text-xs text-muted">
                 {info.link}
               </Text>
-              <Button variant="ghost" className="mt-3" onPress={() => setShowQr(!showQr)}>
+              <Button
+                variant="ghost"
+                className="mt-3"
+                onPress={() => {
+                  const brand = me?.tradingName ?? "your engineer";
+                  const msg = `Hi — it's ${brand}. Here's the link to set up your care plan: ${info.link}`;
+                  const wa = `whatsapp://send?text=${encodeURIComponent(msg)}`;
+                  Linking.canOpenURL(wa).then((ok) =>
+                    Linking.openURL(ok ? wa : `https://wa.me/?text=${encodeURIComponent(msg)}`),
+                  );
+                }}
+              >
+                Also share on WhatsApp
+              </Button>
+              <Button variant="ghost" className="mt-2" onPress={() => setShowQr(!showQr)}>
                 {showQr ? "Hide QR" : "Show QR on my screen instead"}
               </Button>
               {showQr && (
@@ -128,7 +146,7 @@ export default function OfferLive() {
             {STEPS.map((step, i) => (
               <Text
                 key={step}
-                className={`font-mono-medium text-[10px] ${
+                className={`font-mono font-medium text-[10px] ${
                   i < idx ? "text-flame-deep" : i === idx ? "text-flame" : "text-faint"
                 }`}
               >
@@ -144,14 +162,14 @@ export default function OfferLive() {
         </Card>
 
         {status && (
-          <Card className="border-[#EBCDB8] bg-copper-tint">
-            <Text className="font-sans text-xs text-[#7A4A26]">
+          <Card className="border-[#E1E8F0] bg-copper-tint">
+            <Text className="font-sans text-xs text-copper-deep">
               {status.customerFirstName} signs at{" "}
-              <Text className="font-mono-semibold">
+              <Text className="font-mono font-semibold">
                 {status.priceMonthlyPence ? `£${Math.round(status.priceMonthlyPence / 100)}/mo` : "£15/mo"}
               </Text>{" "}
               → your income becomes{" "}
-              <Text className="font-mono-semibold">
+              <Text className="font-mono font-semibold">
                 £
                 {Math.floor(
                   (status.incomeMonthlyPence + (status.priceMonthlyPence ?? 1500)) / 100,

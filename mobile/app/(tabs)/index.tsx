@@ -1,10 +1,10 @@
 import { useCallback, useState } from "react";
 import { View, Text, ScrollView, RefreshControl, ActivityIndicator, Pressable } from "react-native";
-import { useFocusEffect, Link, router } from "expo-router";
+import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { AppHeader, Card, Micro, RowLine, Button } from "@/components/ui";
+import { AppHeader, Card, Micro, Button } from "@/components/ui";
 
 type DueItem = {
   customerId: string;
@@ -24,38 +24,10 @@ type Dashboard = {
   noPlan: number;
   prizeYearlyPence: number;
   upcoming: DueItem[];
+  nextPayoutPence: number | null;
+  nextPayoutDate: string | null;
+  referral: { name: string; activePlans: number; required: number } | null;
 };
-
-function StatTile({
-  label,
-  value,
-  sub,
-  tone = "ok",
-  onPress,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: "ok" | "warn";
-  onPress?: () => void;
-}) {
-  const Wrap = onPress ? Pressable : View;
-  return (
-    <Wrap
-      className="flex-1 rounded-xl border border-line bg-paper p-3.5"
-      onPress={onPress}
-      {...(onPress ? { hitSlop: 4 } : {})}
-    >
-      <Micro>{label}</Micro>
-      <Text
-        className={`mt-1 font-mono-semibold text-2xl ${tone === "ok" ? "text-ink" : "text-warn"}`}
-      >
-        {value}
-      </Text>
-      {sub && <Text className="mt-0.5 font-sans text-[11px] text-faint">{sub}</Text>}
-    </Wrap>
-  );
-}
 
 // Screen 02 — the money mirror. Greeting + a single primary action up top,
 // then the numbers — the doorstep flow is what this screen exists to launch.
@@ -99,12 +71,15 @@ export default function Home() {
 
   return (
     <View className="flex-1 bg-panel">
-      <SafeAreaView edges={["top"]} className="bg-iron">
+      <SafeAreaView edges={["top"]} className="bg-paper">
         <AppHeader
           right={
-            <View className="h-8 w-8 items-center justify-center rounded-full bg-white/15">
-              <Text className="font-mono text-[11px] text-white">{monogram}</Text>
-            </View>
+            <Pressable
+              onPress={() => router.push("/more")}
+              className="h-8 w-8 items-center justify-center rounded-full bg-flame-tint"
+            >
+              <Text className="text-[11px] font-bold text-flame-deep">{monogram}</Text>
+            </Pressable>
           }
         />
       </SafeAreaView>
@@ -113,133 +88,123 @@ export default function Home() {
         contentContainerClassName="gap-3.5 px-4 pb-8 pt-4"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Text className="font-disp-bold text-[26px] uppercase tracking-wide text-ink">
+        <Text className="text-[22px] font-extrabold tracking-tight text-ink">
           {me?.firstName ? `Hello, ${me.firstName}` : "Hello"}
         </Text>
-        <Text className="-mt-2 font-sans text-sm text-muted">
+        <Text className="-mt-2 text-sm text-muted">
           Offer a plan on the doorstep — most take under 90 seconds.
         </Text>
 
-        <Link href="/offer" asChild>
-          <Button variant="copper">Offer a plan — signed in 90 seconds</Button>
-        </Link>
-
         {loading && !data && !error && (
           <View className="items-center py-10">
-            <ActivityIndicator color="#0E7FD0" />
+            <ActivityIndicator color="#1966CC" />
           </View>
         )}
 
-        {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
+        {error && <Text className="text-sm text-danger">{error}</Text>}
         {data && (
           <>
-            <View className="rounded-[14px] border border-[#39434f] bg-iron-2 p-4">
-              <View className="flex-row items-center gap-1.5">
-                <Micro className="text-[#8FA0B0]">Locked-in income</Micro>
-                <View
-                  className={`h-2.5 w-2.5 rounded-full ${data.failedRecently < 2 ? "bg-flame" : "bg-warn"}`}
-                />
-              </View>
-              <Text className="mt-1 font-mono-semibold text-[34px] leading-tight text-[#F3B27E]">
+            <Card>
+              <Micro>Your plan income</Micro>
+              <Text className="mt-0.5 text-[36px] font-extrabold leading-none text-copper">
                 £{(data.totalPence / 100).toFixed(0)}
-                <Text className="font-mono text-base text-[#C9A17E]">/mo</Text>
+                <Text className="text-base font-bold text-muted"> /month</Text>
               </Text>
-              <Text className="mt-0.5 font-sans text-xs text-[#AEB9C4]">
-                <Text>= </Text>
-                <Text className="font-sans-semibold text-[#F3B27E]">
-                  £{((data.totalPence * 12) / 100).toFixed(0)} a year
-                </Text>
-                <Text> · {data.count} active plan{data.count === 1 ? "" : "s"}</Text>
+              <Text className="mt-1 text-[12.5px] text-muted">
+                {data.count} active plan{data.count === 1 ? "" : "s"}
+                {data.newThisMonth > 0 && (
+                  <Text className="font-bold text-ok"> · +{data.newThisMonth} this month</Text>
+                )}
               </Text>
-            </View>
-
-            <View className="flex-row gap-3">
-              <StatTile
-                label="New this month"
-                value={`+${data.newThisMonth}`}
-                sub="New plans"
-                onPress={() => router.push("/(tabs)/plans")}
-              />
-              <StatTile
-                label="Failed collections"
-                value={String(data.failedRecently)}
-                sub="Last 30 days"
-                tone={data.failedRecently > 0 ? "warn" : "ok"}
-                onPress={() => router.push("/payouts")}
-              />
-            </View>
-
-            {data.count === 0 && data.noPlan === 0 && (
-              <Card className="border-[#BBDCF4] bg-flame-tint">
-                <Text className="font-sans-semibold text-sm text-flame-deep">
-                  Get your first plan on the board
-                </Text>
-                <Text className="mt-1 font-sans text-xs text-muted">
-                  Import your customer book so you know who to offer a plan to — or head
-                  straight to the doorstep flow above if you&apos;ve got someone in mind.
-                </Text>
-                <Pressable onPress={() => router.push("/(tabs)/customers")} className="mt-2.5">
-                  <Text className="font-sans-semibold text-xs text-flame-deep">
-                    Import your customer book →
+              {data.nextPayoutPence !== null && (
+                <View className="mt-2.5 flex-row items-center justify-between border-t border-line pt-2.5">
+                  <Text className="text-[12.5px] text-muted">Next payout</Text>
+                  <Text className="font-mono font-bold text-copper">
+                    £{(data.nextPayoutPence / 100).toFixed(2)}
+                    {data.nextPayoutDate
+                      ? ` · ${new Date(data.nextPayoutDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}`
+                      : ""}
                   </Text>
-                </Pressable>
+                </View>
+              )}
+            </Card>
+
+            {data.noPlan >= 5 && (
+              <Card className="border-[#EAD8AE] bg-warn-tint">
+                <View className="flex-row items-center justify-between">
+                  <View className="shrink">
+                    <Text className="font-mono font-bold text-warn">
+                      £{(data.prizeYearlyPence / 100).toFixed(0)}/yr not collected
+                    </Text>
+                    <Text className="mt-0.5 text-[12.5px] text-muted">
+                      {data.noPlan} book customers aren&apos;t on a plan yet
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => router.push("/(tabs)/customers")}>
+                    <Text className="font-bold text-warn">View →</Text>
+                  </Pressable>
+                </View>
               </Card>
             )}
 
             <Card>
-              <View className="mb-1 flex-row items-baseline justify-between">
-                <Text className="font-sans-semibold text-sm text-ink">Upcoming appointments</Text>
-                <Link href="/(tabs)/jobs" className="font-sans-semibold text-xs text-flame-deep">
-                  View all →
-                </Link>
-              </View>
-              {data.upcoming.length === 0 ? (
-                <Text className="py-1 font-sans text-xs text-muted">
-                  Nothing booked yet — service dates appear here from plan signups and your
-                  customer import.
+              <Micro className="mb-1">Today</Micro>
+              {data.upcoming.length > 0 && (
+                <Pressable
+                  className="flex-row gap-2 py-1.5"
+                  onPress={() => router.push("/(tabs)/jobs")}
+                >
+                  <Text>🔧</Text>
+                  <Text className="flex-1 text-[13px] text-ink">
+                    <Text className="font-bold">
+                      {data.upcoming.length} service{data.upcoming.length === 1 ? "" : "s"} due
+                    </Text>{" "}
+                    — {data.upcoming.map((d) => d.customerName.split(" ")[0]).join(", ")}
+                  </Text>
+                </Pressable>
+              )}
+              {data.failedRecently > 0 && (
+                <Pressable
+                  className="flex-row gap-2 py-1.5"
+                  onPress={() => router.push("/payouts")}
+                >
+                  <Text>⏳</Text>
+                  <Text className="flex-1 text-[13px] text-ink">
+                    {data.failedRecently} payment{data.failedRecently === 1 ? "" : "s"} retrying —{" "}
+                    <Text className="text-faint">Stripe handles it, no action yet</Text>
+                  </Text>
+                </Pressable>
+              )}
+              {data.referral && (
+                <Pressable
+                  className="flex-row gap-2 py-1.5"
+                  onPress={() => router.push("/referral")}
+                >
+                  <Text>🤝</Text>
+                  <Text className="flex-1 text-[13px] text-ink">
+                    {data.referral.name}&apos;s nearly live —{" "}
+                    <Text className="font-bold">
+                      {data.referral.activePlans}/{data.referral.required} plans
+                    </Text>{" "}
+                    to your £50
+                  </Text>
+                </Pressable>
+              )}
+              {data.upcoming.length === 0 && data.failedRecently === 0 && !data.referral && (
+                <Text className="py-1 text-xs text-muted">
+                  Nothing needs you today. Tap the + below to offer a plan.
                 </Text>
-              ) : (
-                data.upcoming.map((d, i) => (
-                  <RowLine
-                    key={i}
-                    left={
-                      <View>
-                        <Text className="font-sans-semibold text-sm text-ink">
-                          {d.customerName}
-                        </Text>
-                        <Text className="font-mono text-[10px] uppercase text-faint">
-                          Annual service{d.tierName ? ` · ${d.tierName} plan` : " · no plan"}
-                        </Text>
-                      </View>
-                    }
-                    right={
-                      <Text className="font-mono text-xs text-ink">
-                        {new Date(d.dueDate).toLocaleDateString("en-GB", {
-                          day: "2-digit",
-                          month: "short",
-                        })}
-                      </Text>
-                    }
-                  />
-                ))
               )}
             </Card>
 
-            {data.noPlan > 0 && (
-              <Card className="border-[#EBCDB8] bg-copper-tint">
-                <Text className="font-sans-semibold text-sm text-copper-deep">
-                  You&apos;re leaving money on the van
-                </Text>
-                <Text className="mt-1 font-sans text-xs text-[#7A4A26]">
-                  {data.noPlan} customer{data.noPlan === 1 ? "" : "s"} in your book{" "}
-                  {data.noPlan === 1 ? "has" : "have"} no plan. Converting 1 in 5 adds{" "}
-                  <Text className="font-mono-semibold">
-                    £{(data.prizeYearlyPence / 100).toFixed(0)}/yr
-                  </Text>
-                  .
-                </Text>
-              </Card>
-            )}
+            <View className="flex-row gap-2.5">
+              <Button variant="ghost" className="flex-1" onPress={() => router.push("/demo")}>
+                📱 Show a customer
+              </Button>
+              <Button variant="ghost" className="flex-1" onPress={() => router.push("/referral")}>
+                🤝 Invite an engineer
+              </Button>
+            </View>
           </>
         )}
       </ScrollView>

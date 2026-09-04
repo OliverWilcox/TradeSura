@@ -1,11 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import {
   api,
-  clearGcSkipped,
+  clearStripeSkipped,
   clearToken,
-  getGcSkipped,
+  getStripeSkipped,
   getToken,
-  setGcSkipped,
+  setStripeSkipped,
   setToken,
 } from "./api";
 
@@ -26,8 +26,13 @@ export type Me = {
   gasSafeName: string | null;
   gasSafeCompany: string | null;
   gasSafeCategories: string | null;
-  gcConnected: boolean;
-  gcOrganisationId: string | null;
+  stripeConnected: boolean;
+  stripeDetailsSubmitted: boolean;
+  stripePayoutsEnabled: boolean;
+  hasPlan: boolean;
+  customerCount: number;
+  activePlans: number;
+  packRequestedAt: string | null;
 };
 
 type AuthState = {
@@ -36,8 +41,8 @@ type AuthState = {
   me: Me | null;
   meLoading: boolean;
   meError: string | null;
-  gcSkipped: boolean;
-  skipGc: () => Promise<void>;
+  stripeSkipped: boolean;
+  skipStripe: () => Promise<void>;
   refreshMe: () => Promise<void>;
   signIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -51,13 +56,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [meLoading, setMeLoading] = useState(false);
   const [meError, setMeError] = useState<string | null>(null);
-  const [gcSkipped, setGcSkippedState] = useState(false);
+  const [stripeSkipped, setStripeSkippedState] = useState(false);
 
   useEffect(() => {
     getToken()
       .then(setTokenState)
       .finally(() => setLoading(false));
-    getGcSkipped().then(setGcSkippedState);
+    getStripeSkipped().then(setStripeSkippedState);
   }, []);
 
   const refreshMe = useCallback(async () => {
@@ -86,20 +91,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     await clearToken();
-    await clearGcSkipped();
+    await clearStripeSkipped();
     setTokenState(null);
     setMe(null);
-    setGcSkippedState(false);
+    setStripeSkippedState(false);
   }
 
-  async function skipGc() {
-    await setGcSkipped();
-    setGcSkippedState(true);
+  async function skipStripe() {
+    await setStripeSkipped();
+    setStripeSkippedState(true);
   }
 
   return (
     <AuthContext.Provider
-      value={{ token, loading, me, meLoading, meError, gcSkipped, skipGc, refreshMe, signIn, signOut }}
+      value={{ token, loading, me, meLoading, meError, stripeSkipped, skipStripe, refreshMe, signIn, signOut }}
     >
       {children}
     </AuthContext.Provider>

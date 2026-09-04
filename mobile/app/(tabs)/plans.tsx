@@ -3,7 +3,7 @@ import { View, Text, ScrollView, RefreshControl, Pressable } from "react-native"
 import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
-import { AppHeader, Card, Micro, Money, Pill, Button } from "@/components/ui";
+import { AppHeader, Card, Money, Pill, Button } from "@/components/ui";
 
 type Tier = {
   id: string;
@@ -59,7 +59,7 @@ export default function Plans() {
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader right={<Micro className="text-[#AEB9C4]">Plan builder</Micro>} />
+        <AppHeader title="Plan builder" />
       </SafeAreaView>
       <ScrollView
         className="flex-1"
@@ -70,9 +70,9 @@ export default function Plans() {
 
         {tiers?.length === 0 && (
           <>
-            <Card className="border-[#BBDCF4] bg-flame-tint">
+            <Card className="border-[#E1E8F0] bg-flame-tint">
               <Text className="font-sans text-xs text-flame-deep">
-                <Text className="font-sans-semibold">Legal wording locked in.</Text> Your plan uses
+                <Text className="font-semibold">Legal wording locked in.</Text> Your plan uses
                 solicitor-approved maintenance-and-priority terms. Breakdown-repair promises are
                 insurance — TradeSura keeps you on the right side of the line automatically.
               </Text>
@@ -80,7 +80,7 @@ export default function Plans() {
             <Button onPress={() => createTiers(true)} disabled={creating}>
               {creating
                 ? "Creating…"
-                : "Start with the 3 recommended tiers — Essential £9 / Plus £15 / Complete £22"}
+                : "Start with the 3 recommended tiers — Boiler Care £12 / Boiler + Controls £15 / Landlord Care £15"}
             </Button>
           </>
         )}
@@ -94,7 +94,7 @@ export default function Plans() {
                 className={`rounded-xl border bg-paper p-4 ${t.isRecommended ? "border-copper" : "border-line"}`}
               >
                 <View className="flex-row items-baseline justify-between">
-                  <Text className="font-disp text-lg uppercase tracking-wide text-ink">
+                  <Text className="font-semibold text-lg uppercase tracking-wide text-ink">
                     {t.name}
                   </Text>
                   <Money pence={t.priceMonthlyPence} suffix="/mo" />

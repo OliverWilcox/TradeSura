@@ -1,7 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 
 const TOKEN_KEY = "ts_engineer_token";
-const GC_SKIPPED_KEY = "ts_gc_skipped";
+const STRIPE_SKIPPED_KEY = "ts_stripe_skipped";
 
 // process.env.EXPO_PUBLIC_* is inlined by Metro at build time — see .env.example.
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -19,19 +19,19 @@ export async function clearToken(): Promise<void> {
 }
 
 // Temporary dev convenience — lets an engineer past the (tabs) gate without
-// a real GoCardless connection while sandbox credentials aren't wired up.
+// a completed Stripe onboarding while test-mode credentials aren't wired up.
 // Device-local only, cleared on sign-out so a different engineer on the same
 // device doesn't inherit someone else's skip.
-export async function getGcSkipped(): Promise<boolean> {
-  return (await SecureStore.getItemAsync(GC_SKIPPED_KEY)) === "1";
+export async function getStripeSkipped(): Promise<boolean> {
+  return (await SecureStore.getItemAsync(STRIPE_SKIPPED_KEY)) === "1";
 }
 
-export async function setGcSkipped(): Promise<void> {
-  await SecureStore.setItemAsync(GC_SKIPPED_KEY, "1");
+export async function setStripeSkipped(): Promise<void> {
+  await SecureStore.setItemAsync(STRIPE_SKIPPED_KEY, "1");
 }
 
-export async function clearGcSkipped(): Promise<void> {
-  await SecureStore.deleteItemAsync(GC_SKIPPED_KEY);
+export async function clearStripeSkipped(): Promise<void> {
+  await SecureStore.deleteItemAsync(STRIPE_SKIPPED_KEY);
 }
 
 export class ApiError extends Error {

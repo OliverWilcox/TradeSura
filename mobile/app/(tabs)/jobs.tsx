@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, Pressable } from "react-native";
-import { useFocusEffect, Link } from "expo-router";
+import { View, Text, ScrollView, RefreshControl, Pressable, Alert } from "react-native";
+import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, Button } from "@/components/ui";
@@ -42,7 +42,7 @@ function CalendarCard({ month, jobDates }: { month: Date; jobDates: Set<number> 
 
   return (
     <Card>
-      <Text className="mb-2 font-sans-semibold text-sm text-ink">
+      <Text className="mb-2 font-semibold text-sm text-ink">
         {month.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
       </Text>
       <View className="flex-row">
@@ -68,9 +68,9 @@ function CalendarCard({ month, jobDates }: { month: Date; jobDates: Set<number> 
                   <Text
                     className={`text-xs ${
                       isToday
-                        ? "font-sans-semibold text-white"
+                        ? "font-semibold text-white"
                         : hasJob
-                          ? "font-sans-semibold text-flame-deep"
+                          ? "font-semibold text-flame-deep"
                           : "text-ink"
                     }`}
                   >
@@ -86,11 +86,21 @@ function CalendarCard({ month, jobDates }: { month: Date; jobDates: Set<number> 
   );
 }
 
-function JobRow({ d, urgent }: { d: DueItem; urgent: boolean }) {
+function JobRow({
+  d,
+  urgent,
+  onOffer,
+  offerBusy,
+}: {
+  d: DueItem;
+  urgent: boolean;
+  onOffer?: () => void;
+  offerBusy?: boolean;
+}) {
   return (
     <View className="flex-row items-center justify-between gap-2 border-b border-line-soft py-2.5 last:border-b-0">
       <View className="shrink">
-        <Text className="font-sans-bold text-sm text-ink">{d.customerName}</Text>
+        <Text className="font-bold text-sm text-ink">{d.customerName}</Text>
         <Micro>
           {d.onPlan ? `ANNUAL SERVICE · ${d.tierName?.toUpperCase()} PLAN` : "ANNUAL SERVICE · NO PLAN"}
           {d.hasCp12 && " · CP12"}
@@ -99,11 +109,24 @@ function JobRow({ d, urgent }: { d: DueItem; urgent: boolean }) {
             .toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
             .toUpperCase()}
         </Micro>
+        {d.onPlan ? (
+          <Text className="mt-0.5 font-sans text-[11px] text-ok">
+            ✓ We&apos;ve messaged them to book a weekday with you
+          </Text>
+        ) : (
+          <Text className="mt-0.5 font-sans text-[11px] text-muted">
+            Book it — and offer the plan at the perfect moment.
+          </Text>
+        )}
       </View>
       {urgent ? (
         <Pill tone="warn">URGENT</Pill>
       ) : d.onPlan ? (
-        <Pill tone="info">BOOK</Pill>
+        <Pill tone="ok">AUTO</Pill>
+      ) : onOffer ? (
+        <Button variant="flame" className="px-3 py-1.5" onPress={onOffer} disabled={offerBusy}>
+          {offerBusy ? "…" : "Book + offer"}
+        </Button>
       ) : (
         <Pill tone="off">NO PLAN</Pill>
       )}
@@ -118,6 +141,19 @@ export default function Jobs() {
   const [refreshing, setRefreshing] = useState(false);
   const [showAllNext, setShowAllNext] = useState(false);
   const [showAllPast, setShowAllPast] = useState(false);
+  const [reminding, setReminding] = useState<string | null>(null);
+
+  async function sendReminder(customerId: string) {
+    setReminding(customerId);
+    try {
+      await api("/api/jobs/remind", { method: "POST", body: JSON.stringify({ customerId }) });
+      Alert.alert("Sent", "Your customer got a text to book the service, with your plan offer.");
+    } catch (e) {
+      Alert.alert("Couldn't send", e instanceof ApiError ? e.message : "Try again.");
+    } finally {
+      setReminding(null);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -167,7 +203,7 @@ export default function Jobs() {
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader right={<Micro className="text-[#AEB9C4]">Jobs</Micro>} />
+        <AppHeader title="Reminders" />
       </SafeAreaView>
       <ScrollView
         className="flex-1"
@@ -178,23 +214,33 @@ export default function Jobs() {
 
         {data && (
           <>
+            <Text className="font-sans text-sm text-muted">
+              Gas engineers fit and forget. You won&apos;t — plan members are reminded and booked
+              automatically; everyone else is a one-tap pitch.
+            </Text>
             <CalendarCard month={calendarMonth} jobDates={jobDates} />
 
             {data.overdue.length > 0 && (
               <Card>
-                <Text className="mb-1 font-sans-semibold text-sm text-ink">Overdue</Text>
+                <Text className="mb-1 font-semibold text-sm text-ink">Overdue</Text>
                 {data.overdue.map((d, i) => (
-                  <JobRow key={i} d={d} urgent />
+                  <JobRow
+                    key={i}
+                    d={d}
+                    urgent
+                    onOffer={d.onPlan ? undefined : () => sendReminder(d.customerId)}
+                    offerBusy={reminding === d.customerId}
+                  />
                 ))}
               </Card>
             )}
 
             <Card>
               <View className="mb-1 flex-row items-baseline justify-between">
-                <Text className="font-sans-semibold text-sm text-ink">Next jobs</Text>
+                <Text className="font-semibold text-sm text-ink">Next jobs</Text>
                 {!showAllNext && upcoming.length > 3 && (
                   <Pressable onPress={() => setShowAllNext(true)}>
-                    <Text className="font-sans-semibold text-xs text-flame-deep">
+                    <Text className="font-semibold text-xs text-flame-deep">
                       View all {upcoming.length} →
                     </Text>
                   </Pressable>
@@ -207,17 +253,23 @@ export default function Jobs() {
                 </Text>
               ) : (
                 nextJobs.map((d, i) => (
-                  <JobRow key={i} d={d} urgent={d.hasCp12 && new Date(d.dueDate) <= soon} />
+                  <JobRow
+                    key={i}
+                    d={d}
+                    urgent={d.hasCp12 && new Date(d.dueDate) <= soon}
+                    onOffer={d.onPlan ? undefined : () => sendReminder(d.customerId)}
+                    offerBusy={reminding === d.customerId}
+                  />
                 ))
               )}
             </Card>
 
             <Card>
               <View className="mb-1 flex-row items-baseline justify-between">
-                <Text className="font-sans-semibold text-sm text-ink">Past jobs</Text>
+                <Text className="font-semibold text-sm text-ink">Past jobs</Text>
                 {!showAllPast && data.past.length > 3 && (
                   <Pressable onPress={() => setShowAllPast(true)}>
-                    <Text className="font-sans-semibold text-xs text-flame-deep">
+                    <Text className="font-semibold text-xs text-flame-deep">
                       View all {data.past.length} →
                     </Text>
                   </Pressable>
@@ -234,7 +286,7 @@ export default function Jobs() {
                     className="flex-row items-center justify-between gap-2 border-b border-line-soft py-2.5 last:border-b-0"
                   >
                     <View className="shrink">
-                      <Text className="font-sans-bold text-sm text-ink">{a.customerName}</Text>
+                      <Text className="font-bold text-sm text-ink">{a.customerName}</Text>
                       <Micro>
                         {a.applianceLabel.toUpperCase()} · SERVICED{" "}
                         {new Date(a.lastServicedAt)
@@ -249,7 +301,7 @@ export default function Jobs() {
             </Card>
 
             <Card>
-              <Text className="mb-1 font-sans-semibold text-sm text-ink">Reminder engine</Text>
+              <Text className="mb-1 font-semibold text-sm text-ink">Reminder engine</Text>
               <View className="flex-row items-center justify-between border-b border-line-soft py-2.5">
                 <Text className="font-sans text-sm text-ink">Customer reminders</Text>
                 <Pill tone="ok">AUTO · SMS · 30/14/3 DAYS</Pill>
@@ -260,9 +312,9 @@ export default function Jobs() {
               </View>
             </Card>
 
-            <Link href="/offer" asChild>
-              <Button variant="copper">Offer a plan to a no-plan customer</Button>
-            </Link>
+            <Button variant="copper" onPress={() => router.push("/offer")}>
+              Offer a plan to a no-plan customer
+            </Button>
           </>
         )}
       </ScrollView>

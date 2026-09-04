@@ -37,6 +37,8 @@ const CATEGORY_ORDER = [
 ] as const;
 const SUGGESTED_BASE_PENCE = 700;
 const TRADESURA_FEE_RATE = 0.2;
+const PRICE_MIN_PENCE = 800;
+const PRICE_MAX_PENCE = 2500;
 
 function upliftLabel(t: Template) {
   if (t.kind === "CORE") return "";
@@ -53,7 +55,7 @@ export default function TierEditor() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
-  const [pounds, setPounds] = useState("");
+  const [pricePence, setPricePence] = useState(1200);
   const [isRecommended, setIsRecommended] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [customLabels, setCustomLabels] = useState<string[]>([]);
@@ -74,7 +76,7 @@ export default function TierEditor() {
       setTier(data.tier);
       setTemplates(data.templates);
       setName(data.tier.name);
-      setPounds((data.tier.priceMonthlyPence / 100).toFixed(2));
+      setPricePence(data.tier.priceMonthlyPence);
       setIsRecommended(data.tier.isRecommended);
       setSelected(new Set(data.tier.clauseIds));
       setCustomLabels(data.tier.customLabels);
@@ -90,8 +92,10 @@ export default function TierEditor() {
     }, [load]),
   );
 
-  const pricePence = Math.round(parseFloat(pounds || "0") * 100);
   const fee = Math.round(pricePence * TRADESURA_FEE_RATE);
+  function step(deltaPence: number) {
+    setPricePence((p) => Math.min(PRICE_MAX_PENCE, Math.max(PRICE_MIN_PENCE, p + deltaPence)));
+  }
 
   const suggestedPence = useMemo(
     () =>
@@ -140,6 +144,12 @@ export default function TierEditor() {
   }
 
   async function save() {
+    if (pricePence < PRICE_MIN_PENCE || pricePence > PRICE_MAX_PENCE) {
+      setError(
+        `Price must be between £${(PRICE_MIN_PENCE / 100).toFixed(0)} and £${(PRICE_MAX_PENCE / 100).toFixed(0)} a month.`,
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -183,7 +193,7 @@ export default function TierEditor() {
   if (!tier) {
     return (
       <View className="flex-1 items-center justify-center bg-panel">
-        <ActivityIndicator color="#0E7FD0" />
+        <ActivityIndicator color="#1966CC" />
       </View>
     );
   }
@@ -195,30 +205,43 @@ export default function TierEditor() {
           <TextInput
             value={name}
             onChangeText={setName}
-            className="flex-1 border-b border-line-soft font-sans-semibold text-sm text-ink"
+            className="flex-1 border-b border-line-soft font-semibold text-sm text-ink"
           />
           <View className="flex-row items-center gap-1.5">
             <Text className="font-sans text-xs text-muted">&ldquo;Most chosen&rdquo;</Text>
             <Switch value={isRecommended} onValueChange={setIsRecommended} />
           </View>
         </View>
-        <View className="flex-row items-center justify-between rounded-[10px] border border-line px-3 py-2">
-          <Text className="font-sans text-sm text-ink">Monthly price</Text>
-          <View className="flex-row items-center">
-            <Text className="font-mono-semibold text-ink">£</Text>
-            <TextInput
-              value={pounds}
-              onChangeText={(v) => setPounds(v.replace(/[^0-9.]/g, ""))}
-              keyboardType="decimal-pad"
-              className="w-16 text-right font-mono-semibold text-ink"
-            />
-          </View>
+        <Micro className="mb-1">Monthly price</Micro>
+        <View className="flex-row items-center justify-center gap-6 py-1">
+          <Pressable
+            onPress={() => step(-50)}
+            className="h-11 w-11 items-center justify-center rounded-xl border-[1.5px] border-flame"
+          >
+            <Text className="font-bold text-2xl text-flame-deep">−</Text>
+          </Pressable>
+          <Text className="font-mono font-semibold text-3xl text-ink">
+            £{(pricePence / 100).toFixed(2)}
+          </Text>
+          <Pressable
+            onPress={() => step(50)}
+            className="h-11 w-11 items-center justify-center rounded-xl border-[1.5px] border-flame"
+          >
+            <Text className="font-bold text-2xl text-flame-deep">＋</Text>
+          </Pressable>
         </View>
-        <View className="mt-2 flex-row items-center justify-between gap-2">
+        <View className="mt-1 flex-row items-center justify-between gap-2">
           <Micro>Suggested from what you&apos;ve ticked</Micro>
-          <Pressable onPress={() => setPounds((suggestedPence / 100).toFixed(2))} disabled={suggestedPence === pricePence}>
+          <Pressable
+            onPress={() =>
+              setPricePence(
+                Math.min(PRICE_MAX_PENCE, Math.max(PRICE_MIN_PENCE, Math.round(suggestedPence / 50) * 50)),
+              )
+            }
+            disabled={suggestedPence === pricePence}
+          >
             <Text
-              className={`font-mono-semibold text-xs ${suggestedPence === pricePence ? "text-faint" : "text-flame-deep"}`}
+              className={`font-mono font-semibold text-xs ${suggestedPence === pricePence ? "text-faint" : "text-flame-deep"}`}
             >
               £{(suggestedPence / 100).toFixed(2)}/mo
               {suggestedPence !== pricePence && " — apply"}
@@ -237,7 +260,7 @@ export default function TierEditor() {
               className="flex-row items-center justify-between gap-2 border-b border-line-soft py-2.5 last:border-b-0"
             >
               <View className="shrink flex-row flex-wrap items-center gap-1.5">
-                <Text className={`font-sans-bold ${selected.has(t.id) ? "text-ok" : "text-line"}`}>
+                <Text className={`font-bold ${selected.has(t.id) ? "text-ok" : "text-line"}`}>
                   {selected.has(t.id) ? "✓" : "○"}
                 </Text>
                 <Text className={`font-sans text-sm ${selected.has(t.id) ? "text-ink" : "text-faint"}`}>
@@ -262,7 +285,7 @@ export default function TierEditor() {
             className="flex-row items-center justify-between gap-2 border-b border-line-soft py-2"
           >
             <Text className="font-sans text-sm text-ink">
-              <Text className="font-sans-bold text-ok">✓ </Text>
+              <Text className="font-bold text-ok">✓ </Text>
               {label}
             </Text>
             <Pressable onPress={() => setCustomLabels(customLabels.filter((_, j) => j !== i))}>
@@ -278,7 +301,7 @@ export default function TierEditor() {
             className="flex-1 rounded-[10px] border border-line bg-paper px-3 py-2 font-sans text-sm text-ink"
           />
           <Pressable onPress={addLabel} disabled={checkingLabel}>
-            <Text className="px-2 font-sans-semibold text-sm text-flame-deep">
+            <Text className="px-2 font-semibold text-sm text-flame-deep">
               {checkingLabel ? "…" : "Add"}
             </Text>
           </Pressable>
@@ -292,17 +315,17 @@ export default function TierEditor() {
       {blocked && (
         <Card className="border-danger-tint bg-danger-tint">
           <Pill tone="off">BLOCKED</Pill>
-          <Text className="mt-1.5 font-sans text-xs text-[#8F2323]">{blocked.explanation}</Text>
-          <Text className="mt-1.5 font-sans text-xs text-[#8F2323]">
-            Nearest approved clause: <Text className="font-sans-semibold">{blocked.suggestion.title}</Text> — tick it
+          <Text className="mt-1.5 font-sans text-xs text-danger">{blocked.explanation}</Text>
+          <Text className="mt-1.5 font-sans text-xs text-danger">
+            Nearest approved clause: <Text className="font-semibold">{blocked.suggestion.title}</Text> — tick it
             in the list above instead.
           </Text>
         </Card>
       )}
 
-      <Card className="border-[#BBDCF4] bg-flame-tint">
+      <Card className="border-[#E1E8F0] bg-flame-tint">
         <Text className="font-sans text-xs text-flame-deep">
-          <Text className="font-sans-semibold">Legal wording locked in.</Text> Your plan document
+          <Text className="font-semibold">Legal wording locked in.</Text> Your plan document
           assembles only from solicitor-approved maintenance-and-priority clauses.
           Breakdown-repair promises are insurance — TradeSura keeps you on the right side of the
           line automatically.
@@ -310,18 +333,19 @@ export default function TierEditor() {
       </Card>
 
       <Card>
-        <View className="flex-row items-center justify-between border-b border-line-soft py-1.5">
-          <Text className="font-sans text-sm text-ink">Est. take-home per customer</Text>
-          <Text className="font-mono-semibold text-copper">
-            £{((pricePence - fee) / 100).toFixed(2)}/mo
-          </Text>
-        </View>
-        <View className="flex-row items-center justify-between py-1.5">
+        <Micro className="mb-1">What you&apos;ll earn</Micro>
+        <Text className="font-mono font-semibold text-[15px] text-copper">
+          £{((pricePence - fee) / 100).toFixed(2)} per customer per month
+        </Text>
+        <Text className="mt-0.5 font-sans text-[11px] text-faint">
+          50 customers = £{(((pricePence - fee) * 12 * 50) / 100).toLocaleString()}/year
+        </Text>
+        <View className="mt-2 flex-row items-center justify-between border-t border-line-soft pt-2">
           <Text className="font-sans text-sm text-ink">TradeSura fee (20%)</Text>
           <Text className="font-mono text-ink">£{(fee / 100).toFixed(2)}/mo</Text>
         </View>
         <Text className="mt-1 font-sans text-[11px] text-faint">
-          Direct Debit costs are charged by the payment provider on their standard terms.
+          You keep 80%. Direct Debit processing (~32p per collection) comes out of your share.
         </Text>
       </Card>
 

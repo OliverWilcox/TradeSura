@@ -1,11 +1,23 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View, Text, TextInput, ScrollView, Pressable, ActivityIndicator } from "react-native";
-import { Link, router } from "expo-router";
+import { Link, router, useLocalSearchParams } from "expo-router";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
+type ClaimResolved =
+  | { valid: true; personalised: boolean; firstName?: string; businessName?: string; letterBatch: string; variantCell: string }
+  | { valid: false };
+
 type Verified = { regNo: string; name: string; company: string; categories: string };
 type BusinessType = "sole_trader" | "ltd" | "partnership";
+type HeardVia = "letter" | "engineer" | "online" | "other";
+
+const HEARD_OPTIONS: { value: HeardVia; label: string }[] = [
+  { value: "letter", label: "Letter" },
+  { value: "engineer", label: "Another engineer" },
+  { value: "online", label: "Online" },
+  { value: "other", label: "Other" },
+];
 
 // Hand-duplicated from ../../lib/trades.ts — Metro's watchFolders keeps this
 // app's resolution scoped to mobile/ (see mobile/CLAUDE.md), same reason
@@ -21,12 +33,17 @@ const OTHER_TRADES = [
 ] as const;
 
 const inputCls =
-  "rounded-[10px] border border-[#26303C] bg-night-card px-3.5 py-3 font-sans text-[15px] text-night-text";
-const labelCls = "mb-1.5 mt-3.5 font-sans-semibold text-[13px] text-night-muted";
+  "rounded-[10px] border border-[#E1E8F0] bg-night-card px-3.5 py-3 font-sans text-[15px] text-night-text";
+const labelCls = "mb-1.5 mt-3.5 font-semibold text-[13px] text-night-muted";
 
 export default function SignUp() {
   const { signIn } = useAuth();
+  const { code: claimCodeParam, ref: refParam } = useLocalSearchParams<{
+    code?: string;
+    ref?: string;
+  }>();
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [claim, setClaim] = useState<ClaimResolved | null>(null);
 
   // Step 1 — account basics
   const [firstName, setFirstName] = useState("");
@@ -38,6 +55,8 @@ export default function SignUp() {
   const [phoneToken, setPhoneToken] = useState<string | null>(null);
   const [otpBusy, setOtpBusy] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
+  const [heardVia, setHeardVia] = useState<HeardVia | null>(refParam ? "engineer" : null);
+  const [referralCode, setReferralCode] = useState(refParam ?? "");
 
   // Step 2 — trade + Gas Safe
   const [interestTrades, setInterestTrades] = useState<Set<string>>(new Set());
@@ -57,6 +76,31 @@ export default function SignUp() {
   // Submit
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // C5 — arrived from a letter claim link: resolve the code and pre-fill.
+  useEffect(() => {
+    if (!claimCodeParam) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api<ClaimResolved>(
+          `/api/claim/resolve?code=${encodeURIComponent(claimCodeParam)}`,
+        );
+        if (cancelled) return;
+        setClaim(r);
+        if (r.valid && r.personalised) {
+          if (r.firstName) setFirstName((prev) => prev || r.firstName!);
+          if (r.businessName) setTradingName((prev) => prev || r.businessName!);
+          setHeardVia("letter");
+        }
+      } catch {
+        /* not a dead end — fall through to the normal wizard */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [claimCodeParam]);
 
   function onPhoneChange(v: string) {
     setPhone(v);
@@ -156,6 +200,22 @@ export default function SignUp() {
             companyNumber: businessType === "ltd" ? companyNumber.trim() || undefined : undefined,
             postcode: postcode.trim().toUpperCase(),
             marketingConsent,
+            claimCode: claimCodeParam || undefined,
+            attribution:
+              claim?.valid
+                ? {
+                    heardVia: "letter",
+                    letterBatch: claim.letterBatch,
+                    variantCell: claim.variantCell,
+                  }
+                : heardVia
+                  ? {
+                      heardVia,
+                      ...(heardVia === "engineer" && referralCode.trim()
+                        ? { referralCode: referralCode.trim() }
+                        : {}),
+                    }
+                  : undefined,
           },
         }),
       });
@@ -177,7 +237,11 @@ export default function SignUp() {
   }
 
   const step1Valid =
-    firstName.trim().length >= 2 && lastName.trim().length >= 2 && Boolean(phoneToken) && email.includes("@");
+    firstName.trim().length >= 2 &&
+    lastName.trim().length >= 2 &&
+    Boolean(phoneToken) &&
+    email.includes("@") &&
+    Boolean(heardVia);
   const step2Valid = Boolean(gasSafeMatch);
   const step3Valid =
     tradingName.trim().length >= 2 && postcode.trim().length >= 4 && termsConsent;
@@ -186,27 +250,27 @@ export default function SignUp() {
     <View className="flex-1 bg-night">
       <ScrollView className="flex-1" contentContainerClassName="px-6 pb-10 pt-14 gap-1">
         <View className="mb-3.5 flex-row items-center justify-between">
-          <Text className="font-disp-bold text-[22px] text-night-text uppercase tracking-wide">
+          <Text className="font-bold text-[22px] text-night-text uppercase tracking-wide">
             Trade<Text className="text-brand-blue-lift">Sura</Text>
           </Text>
-          <Text className="font-mono-medium text-[11px] tracking-widest text-night-muted">
+          <Text className="font-mono font-medium text-[11px] tracking-widest text-night-muted">
             STEP {step} OF 3
           </Text>
         </View>
-        <View className="mb-5 h-[5px] overflow-hidden rounded-full bg-[#26303C]">
+        <View className="mb-5 h-[5px] overflow-hidden rounded-full bg-[#E1E8F0]">
           <View className="h-full rounded-full bg-brand-blue" style={{ width: `${(step / 3) * 100}%` }} />
         </View>
 
         {step === 1 && (
           <>
-            <Text className="font-disp-bold text-[28px] text-night-text uppercase tracking-wide">
+            <Text className="font-bold text-[28px] text-night-text uppercase tracking-wide">
               Create your account
             </Text>
             <Text className="mb-2 font-sans text-[14.5px] text-night-muted">
               Takes about 2 minutes. No card needed.
             </Text>
 
-            <View className="rounded-[14px] border border-[#26303C] bg-night-card p-4">
+            <View className="rounded-[14px] border border-[#E1E8F0] bg-night-card p-4">
               <View className="flex-row gap-2.5">
                 <View className="flex-1">
                   <Text className={labelCls}>First name</Text>
@@ -214,7 +278,7 @@ export default function SignUp() {
                     value={firstName}
                     onChangeText={setFirstName}
                     placeholder="Dave"
-                    placeholderTextColor="#5E6975"
+                    placeholderTextColor="#8B95A1"
                     className={inputCls}
                   />
                 </View>
@@ -224,7 +288,7 @@ export default function SignUp() {
                     value={lastName}
                     onChangeText={setLastName}
                     placeholder="Smith"
-                    placeholderTextColor="#5E6975"
+                    placeholderTextColor="#8B95A1"
                     className={inputCls}
                   />
                 </View>
@@ -235,7 +299,7 @@ export default function SignUp() {
                 value={phone}
                 onChangeText={onPhoneChange}
                 placeholder="07123 456789"
-                placeholderTextColor="#5E6975"
+                placeholderTextColor="#8B95A1"
                 keyboardType="phone-pad"
                 editable={!phoneToken}
                 className={inputCls}
@@ -246,8 +310,8 @@ export default function SignUp() {
               </Text>
 
               {phoneToken ? (
-                <View className="mt-2.5 rounded-[10px] border border-[#1E4633] bg-[#12291E] px-3.5 py-2.5">
-                  <Text className="font-sans-semibold text-[13.5px] text-[#2BB673]">
+                <View className="mt-2.5 rounded-[10px] border border-[#BFE8D2] bg-[#E7F7EF] px-3.5 py-2.5">
+                  <Text className="font-semibold text-[13.5px] text-[#0E9F5B]">
                     ✓ Mobile verified
                   </Text>
                 </View>
@@ -260,7 +324,7 @@ export default function SignUp() {
                     value={otpCode}
                     onChangeText={setOtpCode}
                     placeholder="123456"
-                    placeholderTextColor="#5E6975"
+                    placeholderTextColor="#8B95A1"
                     keyboardType="number-pad"
                     className={inputCls}
                   />
@@ -270,7 +334,7 @@ export default function SignUp() {
                     disabled={otpBusy || otpCode.length < 4}
                     className={`items-center rounded-[10px] border-[1.5px] border-brand-blue py-2.5 ${otpBusy || otpCode.length < 4 ? "opacity-50" : ""}`}
                   >
-                    <Text className="font-sans-semibold text-[13.5px] text-brand-blue-lift">
+                    <Text className="font-semibold text-[13.5px] text-brand-blue-lift">
                       {otpBusy ? "Checking…" : "Verify code"}
                     </Text>
                   </Pressable>
@@ -288,7 +352,7 @@ export default function SignUp() {
                     disabled={otpBusy || phone.trim().length < 10}
                     className={`mt-2.5 items-center rounded-[10px] border-[1.5px] border-brand-blue py-2.5 ${otpBusy || phone.trim().length < 10 ? "opacity-50" : ""}`}
                   >
-                    <Text className="font-sans-semibold text-[13.5px] text-brand-blue-lift">
+                    <Text className="font-semibold text-[13.5px] text-brand-blue-lift">
                       {otpBusy ? "Sending…" : "Send verification code"}
                     </Text>
                   </Pressable>
@@ -300,7 +364,7 @@ export default function SignUp() {
                 value={email}
                 onChangeText={setEmail}
                 placeholder="dave@smithheating.co.uk"
-                placeholderTextColor="#5E6975"
+                placeholderTextColor="#8B95A1"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -309,6 +373,43 @@ export default function SignUp() {
               <Text className="mt-1.5 font-sans text-xs text-night-muted">
                 Your sign-in and where plan documents are sent.
               </Text>
+
+              {claim?.valid && claim.personalised ? (
+                <View className="mt-3 rounded-[10px] border border-[#BFE8D2] bg-[#E7F7EF] px-3.5 py-2.5">
+                  <Text className="font-semibold text-[13px] text-[#0E9F5B]">
+                    ✓ Claiming the account reserved for {claim.businessName}
+                  </Text>
+                </View>
+              ) : (
+                <>
+              <Text className={labelCls}>How did you hear about us?</Text>
+              <View className="flex-row flex-wrap gap-2">
+                {HEARD_OPTIONS.map((o) => (
+                  <Pressable
+                    key={o.value}
+                    onPress={() => setHeardVia(o.value)}
+                    className={`rounded-full border-[1.5px] px-3.5 py-2 ${heardVia === o.value ? "border-brand-blue bg-[#EAF2FC]" : "border-[#E1E8F0]"}`}
+                  >
+                    <Text className="font-sans text-[13px] text-night-text">{o.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              {heardVia === "engineer" && (
+                <>
+                  <Text className={labelCls}>Referral code (optional)</Text>
+                  <TextInput
+                    value={referralCode}
+                    onChangeText={setReferralCode}
+                    placeholder="e.g. dave-smith"
+                    placeholderTextColor="#8B95A1"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    className={inputCls}
+                  />
+                </>
+              )}
+                </>
+              )}
             </View>
 
             <Pressable
@@ -316,7 +417,7 @@ export default function SignUp() {
               disabled={!step1Valid}
               className={`mt-4 items-center rounded-xl bg-brand-blue py-3.5 ${step1Valid ? "" : "opacity-50"}`}
             >
-              <Text className="font-sans-bold text-[16.5px] text-white">Continue</Text>
+              <Text className="font-bold text-[16.5px] text-white">Continue</Text>
             </Pressable>
             <Link href="/sign-in" asChild>
               <Pressable className="mt-3">
@@ -330,7 +431,7 @@ export default function SignUp() {
 
         {step === 2 && (
           <>
-            <Text className="font-disp-bold text-[28px] text-night-text uppercase tracking-wide">
+            <Text className="font-bold text-[28px] text-night-text uppercase tracking-wide">
               Verify your trade
             </Text>
             <Text className="mb-2 font-sans text-[14.5px] text-night-muted">
@@ -338,7 +439,7 @@ export default function SignUp() {
               closer.
             </Text>
 
-            <View className="rounded-[14px] border border-[#26303C] bg-night-card p-4">
+            <View className="rounded-[14px] border border-[#E1E8F0] bg-night-card p-4">
               <Text className={`${labelCls} mt-0`}>Your trade</Text>
               <View className="rounded-[10px] border-[1.5px] border-brand-blue bg-night-card px-3 py-2.5">
                 <Text className="font-sans text-sm text-night-text">✓ Gas / Heating</Text>
@@ -350,7 +451,7 @@ export default function SignUp() {
                     <Pressable
                       key={t.code}
                       onPress={() => toggleInterest(t.code)}
-                      className={`flex-[1_1_47%] flex-row items-center gap-1.5 rounded-[10px] border-[1.5px] px-3 py-2.5 ${on ? "border-brand-blue" : "border-[#26303C]"}`}
+                      className={`flex-[1_1_47%] flex-row items-center gap-1.5 rounded-[10px] border-[1.5px] px-3 py-2.5 ${on ? "border-brand-blue" : "border-[#E1E8F0]"}`}
                     >
                       <Text className="font-sans text-[13.5px] text-night-text">{t.name}</Text>
                       <Text className="ml-auto font-mono text-[8.5px] text-night-muted">SOON</Text>
@@ -370,13 +471,13 @@ export default function SignUp() {
                   setGasSafeMatch(null);
                 }}
                 placeholder="584123"
-                placeholderTextColor="#5E6975"
+                placeholderTextColor="#8B95A1"
                 keyboardType="number-pad"
                 className={inputCls}
               />
               {gasSafeMatch ? (
-                <View className="mt-2.5 rounded-[10px] border border-[#1E4633] bg-[#12291E] px-3.5 py-2.5">
-                  <Text className="font-sans-semibold text-[13px] text-[#2BB673]">
+                <View className="mt-2.5 rounded-[10px] border border-[#BFE8D2] bg-[#E7F7EF] px-3.5 py-2.5">
+                  <Text className="font-semibold text-[13px] text-[#0E9F5B]">
                     ✓ Verified against the register — {gasSafeMatch.name} · {gasSafeMatch.company} ·{" "}
                     {gasSafeMatch.categories}
                   </Text>
@@ -389,7 +490,7 @@ export default function SignUp() {
                     disabled={gasBusy || gasSafeNo.trim().length < 6}
                     className={`mt-2.5 items-center rounded-[10px] border-[1.5px] border-brand-blue py-2.5 ${gasBusy || gasSafeNo.trim().length < 6 ? "opacity-50" : ""}`}
                   >
-                    <Text className="font-sans-semibold text-[13.5px] text-brand-blue-lift">
+                    <Text className="font-semibold text-[13.5px] text-brand-blue-lift">
                       {gasBusy ? "Checking…" : "Check the register"}
                     </Text>
                   </Pressable>
@@ -402,7 +503,7 @@ export default function SignUp() {
               disabled={!step2Valid}
               className={`mt-4 items-center rounded-xl bg-brand-blue py-3.5 ${step2Valid ? "" : "opacity-50"}`}
             >
-              <Text className="font-sans-bold text-[16.5px] text-white">Continue</Text>
+              <Text className="font-bold text-[16.5px] text-white">Continue</Text>
             </Pressable>
             <Pressable onPress={() => setStep(1)} className="mt-3">
               <Text className="text-center font-sans text-sm text-night-muted">← Back</Text>
@@ -412,20 +513,20 @@ export default function SignUp() {
 
         {step === 3 && (
           <>
-            <Text className="font-disp-bold text-[28px] text-night-text uppercase tracking-wide">
+            <Text className="font-bold text-[28px] text-night-text uppercase tracking-wide">
               Your business
             </Text>
             <Text className="mb-2 font-sans text-[14.5px] text-night-muted">
               This is the name your customers see on their plan.
             </Text>
 
-            <View className="rounded-[14px] border border-[#26303C] bg-night-card p-4">
+            <View className="rounded-[14px] border border-[#E1E8F0] bg-night-card p-4">
               <Text className={`${labelCls} mt-0`}>Trading name</Text>
               <TextInput
                 value={tradingName}
                 onChangeText={setTradingName}
                 placeholder="Smith Heating"
-                placeholderTextColor="#5E6975"
+                placeholderTextColor="#8B95A1"
                 className={inputCls}
               />
               {tradingName ? (
@@ -446,7 +547,7 @@ export default function SignUp() {
                   <Pressable
                     key={value}
                     onPress={() => setBusinessType(value)}
-                    className={`flex-1 items-center rounded-[10px] border-[1.5px] px-2 py-2.5 ${businessType === value ? "border-brand-blue" : "border-[#26303C]"}`}
+                    className={`flex-1 items-center rounded-[10px] border-[1.5px] px-2 py-2.5 ${businessType === value ? "border-brand-blue" : "border-[#E1E8F0]"}`}
                   >
                     <Text className="font-sans text-[12.5px] text-night-text">{label}</Text>
                   </Pressable>
@@ -460,7 +561,7 @@ export default function SignUp() {
                     value={companyNumber}
                     onChangeText={setCompanyNumber}
                     placeholder="12345678"
-                    placeholderTextColor="#5E6975"
+                    placeholderTextColor="#8B95A1"
                     className={inputCls}
                   />
                 </>
@@ -471,7 +572,7 @@ export default function SignUp() {
                 value={postcode}
                 onChangeText={setPostcode}
                 placeholder="HD9 2TT"
-                placeholderTextColor="#5E6975"
+                placeholderTextColor="#8B95A1"
                 autoCapitalize="characters"
                 className={inputCls}
               />
@@ -484,7 +585,7 @@ export default function SignUp() {
                 className="mt-4 flex-row items-start gap-2.5"
               >
                 <View
-                  className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${termsConsent ? "border-brand-blue bg-brand-blue" : "border-[#26303C]"}`}
+                  className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${termsConsent ? "border-brand-blue bg-brand-blue" : "border-[#E1E8F0]"}`}
                 >
                   {termsConsent && <Text className="text-[11px] text-white">✓</Text>}
                 </View>
@@ -497,7 +598,7 @@ export default function SignUp() {
                 className="mt-2.5 flex-row items-start gap-2.5"
               >
                 <View
-                  className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${marketingConsent ? "border-brand-blue bg-brand-blue" : "border-[#26303C]"}`}
+                  className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${marketingConsent ? "border-brand-blue bg-brand-blue" : "border-[#E1E8F0]"}`}
                 >
                   {marketingConsent && <Text className="text-[11px] text-white">✓</Text>}
                 </View>
@@ -516,7 +617,7 @@ export default function SignUp() {
               {busy ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className="font-sans-bold text-[16.5px] text-white">Create my account</Text>
+                <Text className="font-bold text-[16.5px] text-white">Create my account</Text>
               )}
             </Pressable>
             <Pressable onPress={() => setStep(2)} className="mt-3">

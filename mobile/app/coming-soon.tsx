@@ -8,7 +8,7 @@ export default function ComingSoon() {
   const { title } = useLocalSearchParams<{ title?: string }>();
   return (
     <View className="flex-1 items-center justify-center gap-3 bg-panel px-6">
-      <Text className="font-disp-bold text-3xl uppercase tracking-wide text-ink">
+      <Text className="font-bold text-3xl uppercase tracking-wide text-ink">
         {title ?? "Coming soon"}
       </Text>
       <Pill tone="info">COMING SOON</Pill>

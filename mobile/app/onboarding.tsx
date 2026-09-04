@@ -1,86 +1,207 @@
-import { useState } from "react";
-import { View, Text, ScrollView } from "react-native";
+import { useState, type ReactNode } from "react";
+import { View, Text, TextInput, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
 import { router } from "expo-router";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { gcResultError } from "@/lib/gc";
+import { stripeResultError } from "@/lib/stripe";
 import { AppHeader, Card, Micro, Button } from "@/components/ui";
 
-// Post-signup — Direct Debit connect only. Name, Gas Safe verification,
-// trading name and business details are all collected earlier now, in the
-// sign-up wizard (app/sign-up.tsx) before the account even exists.
+// E2 — post-signup onboarding wizard. Four steps, sequenced for activation:
+// get paid → first plan → import book → founding pack. Only step 1 gates the
+// app (see (tabs)/_layout.tsx); 2–4 are strong nudges that resume from wherever
+// the engineer left off (state derived from /api/me, not stored).
+type StepState = "done" | "next" | "later";
+
+function StepCard({
+  n,
+  title,
+  body,
+  state,
+  cta,
+  onPress,
+  children,
+}: {
+  n: number;
+  title: string;
+  body: string;
+  state: StepState;
+  cta?: string;
+  onPress?: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <Card className={state === "next" ? "border-[1.5px] border-flame" : ""}>
+      <View className="flex-row items-start justify-between gap-2">
+        <View className="shrink">
+          <Micro className={state === "done" ? "text-ok" : state === "next" ? "text-flame-deep" : ""}>
+            {state === "done" ? "✓ Done" : `Step ${n}`}
+          </Micro>
+          <Text className="mt-0.5 font-semibold text-[15px] text-ink">{title}</Text>
+          <Text className="mt-0.5 font-sans text-xs text-muted">{body}</Text>
+        </View>
+        {state === "done" && <Text className="text-lg text-ok">✓</Text>}
+      </View>
+      {children}
+      {state !== "done" && cta && onPress && (
+        <Button onPress={onPress} variant={state === "next" ? "flame" : "ghost"} className="mt-3">
+          {cta}
+        </Button>
+      )}
+    </Card>
+  );
+}
+
 export default function Onboarding() {
-  const { me, refreshMe, skipGc } = useAuth();
-  const [gcBusy, setGcBusy] = useState(false);
-  const [gcError, setGcError] = useState<string | null>(null);
+  const { me, refreshMe, skipStripe } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [packAddress, setPackAddress] = useState("");
+  const [packBusy, setPackBusy] = useState(false);
+  const [packError, setPackError] = useState<string | null>(null);
 
-  async function skip() {
-    await skipGc();
-    router.replace("/(tabs)");
-  }
+  const paid = Boolean(me?.stripeConnected);
+  const hasPlan = Boolean(me?.hasPlan);
+  const hasBook = (me?.customerCount ?? 0) > 0;
+  const packDone = Boolean(me?.packRequestedAt);
 
-  async function connectGc() {
-    setGcBusy(true);
-    setGcError(null);
+  async function connectStripe() {
+    setBusy(true);
+    setError(null);
     try {
-      const { url } = await api<{ url: string }>("/api/gc/connect-url");
+      const { url } = await api<{ url: string }>("/api/stripe/connect-link");
       const result = await WebBrowser.openAuthSessionAsync(url, "tradesura://onboarding");
-      const gcErr = gcResultError(result);
-      if (gcErr) setGcError(gcErr);
+      const err = stripeResultError(result);
+      if (err) setError(err);
       else if (result.type === "success") await refreshMe();
     } catch (e) {
-      setGcError(e instanceof ApiError ? e.message : "Couldn't start Direct Debit connect.");
+      setError(e instanceof ApiError ? e.message : "Couldn't start payment setup.");
     } finally {
-      setGcBusy(false);
+      setBusy(false);
     }
+  }
+
+  async function requestPack() {
+    setPackBusy(true);
+    setPackError(null);
+    try {
+      await api("/api/onboarding/pack", {
+        method: "POST",
+        body: JSON.stringify({ address: packAddress.trim() }),
+      });
+      await refreshMe();
+    } catch (e) {
+      setPackError(e instanceof ApiError ? e.message : "Couldn't save your address.");
+    } finally {
+      setPackBusy(false);
+    }
+  }
+
+  function stepState(done: boolean, isNext: boolean): StepState {
+    if (done) return "done";
+    return isNext ? "next" : "later";
   }
 
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader right={<Micro className="text-[#AEB9C4]">Almost there</Micro>} />
+        <AppHeader title="Getting started" />
       </SafeAreaView>
       <ScrollView className="flex-1" contentContainerClassName="gap-2.5 px-4 pb-6 pt-4">
-        <Text className="font-disp-bold text-2xl uppercase tracking-wide text-ink">
+        <Text className="font-bold text-2xl uppercase tracking-wide text-ink">
           {me?.firstName ? `Welcome, ${me.firstName}` : "Welcome"}
         </Text>
         <Text className="mb-1 font-sans text-sm text-muted">
-          One last step before you can start selling plans.
+          Four steps and you&apos;re earning. About 8 minutes.
         </Text>
 
-        <Card>
-          <Text className="mb-1 font-sans-semibold text-sm text-ink">Connect Direct Debit</Text>
-          <Text className="mb-2.5 font-sans text-xs text-muted">
-            Customers pay you by Direct Debit. Paid out direct to your bank — TradeSura never
-            holds your money.
-          </Text>
-          {me?.gcConnected ? (
-            <View className="rounded-[10px] border border-[#BCE6CF] bg-ok-tint px-3 py-2.5">
-              <Text className="font-sans-semibold text-xs text-ok">✓ Direct Debit connected</Text>
-            </View>
-          ) : (
-            <>
-              {gcError && <Text className="mb-2 font-sans text-xs text-danger">{gcError}</Text>}
-              <Button onPress={connectGc} disabled={gcBusy}>
-                {gcBusy ? "Opening…" : "Connect Direct Debit"}
-              </Button>
-            </>
-          )}
-        </Card>
+        <StepCard
+          n={1}
+          title="Get paid"
+          body={
+            paid
+              ? "Payouts ready — you'll be paid every week."
+              : "Stripe handles your details — TradeSura never sees your bank login."
+          }
+          state={stepState(paid, !paid)}
+          cta={me?.stripeDetailsSubmitted ? "Finish payment setup" : "Set up payments"}
+          onPress={connectStripe}
+        >
+          {busy && <Text className="mt-2 font-sans text-xs text-muted">Opening…</Text>}
+          {error && <Text className="mt-2 font-sans text-xs text-danger">{error}</Text>}
+        </StepCard>
 
-        {me?.gcConnected ? (
-          <Button onPress={() => router.replace("/(tabs)")} className="mt-1">
-            Continue — build my first plan
-          </Button>
-        ) : (
-          <Button onPress={skip} variant="ghost" className="mt-1">
-            Skip for now
-          </Button>
-        )}
+        <StepCard
+          n={2}
+          title="Your first plan"
+          body={
+            hasPlan
+              ? "Your plan page is live — customers can join it now."
+              : "We've drafted Boiler Care at £12/month — approve it or set your own price."
+          }
+          state={stepState(hasPlan, paid && !hasPlan)}
+          cta="Set up my plan"
+          onPress={() => router.push("/(tabs)/plans")}
+        />
+
+        <StepCard
+          n={3}
+          title="Your customers"
+          body={
+            hasBook
+              ? `${me?.customerCount} customer${me?.customerCount === 1 ? "" : "s"} imported — each one is a potential £144/yr.`
+              : "Import your book — every contact is a potential £144/yr."
+          }
+          state={stepState(hasBook, paid && hasPlan && !hasBook)}
+          cta="Import my book"
+          onPress={() => router.push("/customers/import-contacts")}
+        />
+
+        <StepCard
+          n={4}
+          title="Your founding pack"
+          body={
+            packDone
+              ? "On its way — free QR cards and a van sticker."
+              : "Free cards & van sticker with your personal QR code — hand one over at every job."
+          }
+          state={stepState(packDone, paid && hasPlan && hasBook && !packDone)}
+        >
+          {!packDone && (
+            <View className="mt-2.5 gap-2">
+              <TextInput
+                value={packAddress}
+                onChangeText={setPackAddress}
+                placeholder="Full postal address"
+                placeholderTextColor="#8B95A1"
+                multiline
+                className="min-h-[64px] rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-sm text-ink"
+              />
+              {packError && <Text className="font-sans text-xs text-danger">{packError}</Text>}
+              <Button
+                onPress={requestPack}
+                variant="ghost"
+                disabled={packBusy || packAddress.trim().length < 10}
+              >
+                {packBusy ? "Saving…" : "Send my pack"}
+              </Button>
+            </View>
+          )}
+        </StepCard>
+
+        <Button
+          onPress={() => {
+            if (!paid) skipStripe();
+            router.replace("/(tabs)");
+          }}
+          variant={paid ? "flame" : "ghost"}
+          className="mt-1"
+        >
+          {paid ? "Go to my dashboard" : "Skip setup for now"}
+        </Button>
         <Text className="pt-1 text-center font-mono text-[10px] text-faint">
-          Paid out direct to your bank · Verification refreshed monthly
+          Paid out to your bank every week · Powered by Stripe
         </Text>
       </ScrollView>
     </View>

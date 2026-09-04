@@ -6,21 +6,35 @@ import { api, apiText, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, RowLine, Button } from "@/components/ui";
 
 type FailedPlan = { id: string; customerName: string; priceMonthlyPence: number };
+type StripeSummary = {
+  pendingPence: number;
+  availablePence: number;
+  nextPayout: { amountPence: number; arrivalDate: string; status: string } | null;
+  history: { id: string; amountPence: number; arrivalDate: string; status: string }[];
+};
 type PayoutsData = {
   totalPence: number;
   count: number;
   fee: number;
   confirmed: number;
+  referralBonusPence: number;
+  processingPence: number;
+  bankLast4: string | null;
+  stripe: StripeSummary | null;
+  stripeError: boolean;
+  accountRestricted: boolean;
   failedPlans: FailedPlan[];
 };
 
 function pounds(pence: number) {
   return `£${(pence / 100).toFixed(2)}`;
 }
+function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
 
-// Payouts & collections (full screen) — restored to mobile scope 2026-08-03
-// (see CLAUDE.md). The More hub's inline card is just the summary line item;
-// this is the fuller breakdown.
+// E11 — Payouts & collections. Real Stripe balance + payout history once the
+// account is live; the plan maths until then.
 export default function Payouts() {
   const [data, setData] = useState<PayoutsData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,10 +76,13 @@ export default function Payouts() {
     }
   }
 
+  const s = data?.stripe;
+  const expectedToBank = data ? data.totalPence - data.fee : 0;
+
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader right={<Micro className="text-[#AEB9C4]">Payouts</Micro>} />
+        <AppHeader title="Payouts" />
       </SafeAreaView>
       <ScrollView
         className="flex-1"
@@ -74,46 +91,99 @@ export default function Payouts() {
       >
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
+        {data?.accountRestricted && (
+          <Card className="border-danger-tint bg-danger-tint">
+            <Text className="font-semibold text-sm text-danger">
+              Stripe needs more information
+            </Text>
+            <Text className="mt-1 font-sans text-xs text-danger">
+              Your payouts are on hold until you finish verifying your account. Open the payment
+              setup from More → Payments to complete it.
+            </Text>
+          </Card>
+        )}
+
         {data && (
           <>
             <Card>
-              <Text className="mb-1 font-sans-semibold text-sm text-ink">
-                Expected monthly payout
-              </Text>
-              <Text className="font-mono-semibold text-3xl text-copper">
-                {pounds(data.totalPence - data.fee)}
+              <Micro className="mb-1">
+                {s?.nextPayout ? `Next payout · ${shortDate(s.nextPayout.arrivalDate)}` : "Expected monthly payout"}
+              </Micro>
+              <Text className="font-mono font-semibold text-3xl text-copper">
+                {pounds(s?.nextPayout ? s.nextPayout.amountPence : expectedToBank)}
               </Text>
               <Text className="mt-1 font-sans text-xs text-muted">
-                {data.count} active plan{data.count === 1 ? "" : "s"} · paid out direct to your
-                bank
+                {s
+                  ? `${pounds(s.availablePence)} available · ${pounds(s.pendingPence)} still clearing`
+                  : `${data.count} active plan${data.count === 1 ? "" : "s"} · paid out direct to your bank`}
               </Text>
-              <Text className="mt-1 font-sans text-[11px] text-faint">
-                The live payout feed switches on once the payment provider is connected; until
-                then this is the maths of your active plans.
-              </Text>
+              {!s && !data.stripeError && (
+                <Text className="mt-1 font-sans text-[11px] text-faint">
+                  The live Stripe payout feed switches on once your first collections clear; until
+                  then this is the maths of your active plans.
+                </Text>
+              )}
+              {data.stripeError && (
+                <Text className="mt-1 font-sans text-[11px] text-warn">
+                  Couldn&apos;t reach Stripe just now — showing the plan maths instead.
+                </Text>
+              )}
             </Card>
 
             <Card>
               <Micro className="mb-1.5">This month, transparently</Micro>
-              <RowLine left="Plan collections (expected)" right={pounds(data.totalPence)} />
-              <RowLine left="TradeSura fee (20%)" right={`−${pounds(data.fee)}`} />
-              <RowLine left="Collections confirmed" right={String(data.confirmed)} />
               <RowLine
-                left={
-                  <Text className="font-sans-bold text-sm text-ink">
-                    To your bank (before DD costs)
-                  </Text>
-                }
+                left={`${data.confirmed} collection${data.confirmed === 1 ? "" : "s"} · your 80%`}
+                right={pounds(data.totalPence - data.fee)}
+              />
+              {data.referralBonusPence > 0 && (
+                <RowLine
+                  left="Referral bonus"
+                  right={
+                    <Text className="font-mono font-semibold text-ok">
+                      ＋{pounds(data.referralBonusPence)}
+                    </Text>
+                  }
+                />
+              )}
+              <RowLine
+                left={`Processing (${data.confirmed} × ~32p)`}
                 right={
-                  <Text className="font-mono-semibold text-copper">
-                    {pounds(data.totalPence - data.fee)}
+                  <Text className="font-mono text-danger">−{pounds(data.processingPence)}</Text>
+                }
+              />
+              <RowLine
+                left={<Text className="font-bold text-sm text-ink">To your bank</Text>}
+                right={
+                  <Text className="font-mono font-semibold text-copper">
+                    {pounds(
+                      data.totalPence - data.fee + data.referralBonusPence - data.processingPence,
+                    )}
                   </Text>
                 }
               />
+              {data.bankLast4 && (
+                <RowLine left="Bank" right={<Text className="font-mono">···{data.bankLast4}</Text>} />
+              )}
             </Card>
 
+            {s && s.history.length > 0 && (
+              <Card>
+                <Micro className="mb-1.5">Payout history</Micro>
+                {s.history.map((h) => (
+                  <RowLine
+                    key={h.id}
+                    left={shortDate(h.arrivalDate)}
+                    right={
+                      <Text className="font-mono font-semibold text-copper">{pounds(h.amountPence)} ✓</Text>
+                    }
+                  />
+                ))}
+              </Card>
+            )}
+
             <Card>
-              <Text className="mb-1 font-sans-semibold text-sm text-ink">
+              <Text className="mb-1 font-semibold text-sm text-ink">
                 Failed collection recovery
               </Text>
               {data.failedPlans.length === 0 ? (
@@ -127,10 +197,10 @@ export default function Payouts() {
                     className="flex-row items-center justify-between gap-2 border-b border-line-soft py-2.5 last:border-b-0"
                   >
                     <View className="shrink">
-                      <Text className="font-sans-bold text-sm text-ink">
+                      <Text className="font-bold text-sm text-ink">
                         {p.customerName} · {pounds(p.priceMonthlyPence)}
                       </Text>
-                      <Micro>GOCARDLESS RETRIES AUTOMATICALLY</Micro>
+                      <Micro>STRIPE RETRIES AUTOMATICALLY</Micro>
                     </View>
                     <Pill tone="warn">AUTO</Pill>
                   </View>
