@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, ScrollView, RefreshControl, Pressable, Linking } from "react-native";
+import { View, Text, TextInput, ScrollView, RefreshControl, Pressable, Linking, Image } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
+import * as ImagePicker from "expo-image-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -46,10 +47,12 @@ export default function More() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [tradingName, setTradingName] = useState("");
-  const [logoUrl, setLogoUrl] = useState("");
   const [savedSettings, setSavedSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
 
   const [stripeBusy, setStripeBusy] = useState(false);
   const [stripeError, setStripeError] = useState<string | null>(null);
@@ -63,7 +66,6 @@ export default function More() {
       setData(m);
       setSettings(s);
       setTradingName(s.tradingName);
-      setLogoUrl(s.logoUrl);
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't load this page.");
@@ -82,9 +84,7 @@ export default function More() {
     setRefreshing(false);
   }
 
-  const dirty = settings
-    ? tradingName !== settings.tradingName || logoUrl !== settings.logoUrl
-    : false;
+  const dirty = settings ? tradingName !== settings.tradingName : false;
 
   async function saveSettings() {
     if (!settings) return;
@@ -93,15 +93,53 @@ export default function More() {
     try {
       await api("/api/settings", {
         method: "PATCH",
-        body: JSON.stringify({ tradingName, logoUrl }),
+        body: JSON.stringify({ tradingName, logoUrl: settings.logoUrl }),
       });
-      setSettings({ ...settings, tradingName, logoUrl });
+      setSettings({ ...settings, tradingName });
       setSavedSettings(true);
       await refreshMe();
     } catch (e) {
       setSettingsError(e instanceof ApiError ? e.message : "Could not save.");
     } finally {
       setSavingSettings(false);
+    }
+  }
+
+  // Review #15 — upload the image directly instead of asking for a hosted
+  // URL most engineers don't have; stored in our own Blob store.
+  async function pickLogo() {
+    setLogoError(null);
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      setLogoError("Allow photo access to change your logo.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    setLogoBusy(true);
+    try {
+      const form = new FormData();
+      form.append("file", {
+        uri: asset.uri,
+        name: asset.fileName ?? "logo.jpg",
+        type: asset.mimeType ?? "image/jpeg",
+      } as unknown as Blob);
+      const { logoUrl } = await api<{ logoUrl: string }>("/api/settings/logo", {
+        method: "POST",
+        body: form,
+      });
+      setSettings((prev) => (prev ? { ...prev, logoUrl } : prev));
+      await refreshMe();
+    } catch (e) {
+      setLogoError(e instanceof ApiError ? e.message : "Couldn't upload that image.");
+    } finally {
+      setLogoBusy(false);
     }
   }
 
@@ -205,17 +243,25 @@ export default function More() {
             }}
             className="mt-1 rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-sm text-ink"
           />
-          <Text className="mt-2 font-sans text-xs text-muted">Logo URL (optional)</Text>
-          <TextInput
-            value={logoUrl}
-            onChangeText={(v) => {
-              setLogoUrl(v);
-              setSavedSettings(false);
-            }}
-            placeholder="https://…"
-            autoCapitalize="none"
-            className="mt-1 rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-sm text-ink"
-          />
+          <Text className="mt-3 font-sans text-xs text-muted">Logo (optional)</Text>
+          <View className="mt-1.5 flex-row items-center gap-3">
+            {settings?.logoUrl ? (
+              <Image
+                source={{ uri: settings.logoUrl }}
+                className="h-12 w-12 rounded-lg bg-paper-2"
+              />
+            ) : (
+              <View className="h-12 w-12 items-center justify-center rounded-lg border border-dashed border-line bg-paper-2">
+                <Text className="text-lg text-faint">＋</Text>
+              </View>
+            )}
+            <Pressable onPress={pickLogo} disabled={logoBusy}>
+              <Text className="font-semibold text-sm text-flame">
+                {logoBusy ? "Uploading…" : settings?.logoUrl ? "Change logo" : "Add a logo"}
+              </Text>
+            </Pressable>
+          </View>
+          {logoError && <Text className="mt-1.5 font-sans text-xs text-danger">{logoError}</Text>}
           {settings && (
             <Text className="mt-2 font-sans text-[11px] text-faint">
               Customer pages: /p/{settings.slug}/… — the address updates if you rename.
