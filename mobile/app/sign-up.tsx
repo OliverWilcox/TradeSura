@@ -65,6 +65,11 @@ export default function SignUp() {
   const [gasSafeMatch, setGasSafeMatch] = useState<Verified | null>(null);
   const [gasBusy, setGasBusy] = useState(false);
   const [gasError, setGasError] = useState<string | null>(null);
+  // review #11 — a checked-but-unmatched (or unreachable) number isn't a
+  // dead end: gasChecked flips the UI to the amber "continue anyway" escape
+  // hatch instead of just re-showing "Check the register".
+  const [gasChecked, setGasChecked] = useState(false);
+  const [gasReviewPending, setGasReviewPending] = useState(false);
 
   // Step 3 — business
   const [tradingName, setTradingName] = useState("");
@@ -154,6 +159,7 @@ export default function SignUp() {
   async function checkGasSafe() {
     setGasBusy(true);
     setGasError(null);
+    setGasReviewPending(false);
     try {
       const data = await api<Verified>("/api/verify", {
         method: "POST",
@@ -162,11 +168,19 @@ export default function SignUp() {
       setGasSafeMatch(data);
       if (!tradingName) setTradingName(data.company);
     } catch (e) {
+      // Whether it's a clean "no match" (404) or the check couldn't complete
+      // at all (network/server error) — either way, this isn't a dead end.
+      // The amber card below offers a manual-review escape hatch either way.
       setGasSafeMatch(null);
-      setGasError(e instanceof ApiError ? e.message : "Something went wrong.");
+      setGasError(e instanceof ApiError ? e.message : "Couldn't reach the register.");
     } finally {
+      setGasChecked(true);
       setGasBusy(false);
     }
+  }
+
+  function continueWithoutMatch() {
+    setGasReviewPending(true);
   }
 
   function toggleInterest(code: string) {
@@ -193,10 +207,13 @@ export default function SignUp() {
             lastName: lastName.trim(),
             phoneToken,
             trades: [...interestTrades],
-            gasSafeNo: gasSafeMatch?.regNo,
+            // review #11 — gasSafeMatch is null on the manual-review path, so
+            // fall back to what they typed rather than dropping the number.
+            gasSafeNo: gasSafeMatch?.regNo ?? gasSafeNo.trim(),
             gasSafeName: gasSafeMatch?.name,
             gasSafeCompany: gasSafeMatch?.company,
             gasSafeCategories: gasSafeMatch?.categories,
+            gasSafeReviewRequested: gasReviewPending && !gasSafeMatch,
             tradingName: tradingName.trim(),
             businessType,
             companyNumber: businessType === "ltd" ? companyNumber.trim() || undefined : undefined,
@@ -250,7 +267,7 @@ export default function SignUp() {
     Boolean(phoneToken) &&
     email.includes("@") &&
     Boolean(heardVia);
-  const step2Valid = Boolean(gasSafeMatch);
+  const step2Valid = Boolean(gasSafeMatch) || gasReviewPending;
   const step3Valid =
     tradingName.trim().length >= 2 && postcode.trim().length >= 4 && termsConsent;
 
@@ -478,6 +495,9 @@ export default function SignUp() {
                 onChangeText={(v) => {
                   setGasSafeNo(v);
                   setGasSafeMatch(null);
+                  setGasChecked(false);
+                  setGasReviewPending(false);
+                  setGasError(null);
                 }}
                 placeholder="584123"
                 placeholderTextColor="#6E86A3"
@@ -491,19 +511,50 @@ export default function SignUp() {
                     {gasSafeMatch.categories}
                   </Text>
                 </View>
+              ) : gasReviewPending ? (
+                <View className="mt-2.5 rounded-[10px] border border-line bg-night-card px-3.5 py-2.5">
+                  <Text className="font-semibold text-[13px] text-night-text">
+                    ◐ Continuing without a match — we&apos;ll verify {gasSafeNo} manually before your
+                    plans go live.
+                  </Text>
+                </View>
+              ) : gasChecked && !gasBusy ? (
+                // review #11 — amber, never a dead end: offer a manual-review
+                // escape hatch instead of blocking sign-up on a register miss
+                // (a real mismatch, or the check itself failing to complete).
+                <View className="mt-2.5 rounded-[10px] border border-warn-tint bg-warn-tint px-3.5 py-2.5">
+                  <Text className="font-semibold text-[13px] text-warn">
+                    ▲ {gasError ?? "No match on the register."}
+                  </Text>
+                  <Text className="mt-1 font-sans text-xs text-night-muted">
+                    Double check the number, or continue and we&apos;ll verify it manually.
+                  </Text>
+                  <View className="mt-2.5 flex-row gap-2">
+                    <Pressable
+                      onPress={checkGasSafe}
+                      disabled={gasSafeNo.trim().length < 6}
+                      className="flex-1 items-center rounded-[10px] border-[1.5px] border-brand-blue py-2.5"
+                    >
+                      <Text className="font-semibold text-[13px] text-brand-blue-lift">Try again</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={continueWithoutMatch}
+                      className="flex-1 items-center rounded-[10px] border-[1.5px] border-line py-2.5"
+                    >
+                      <Text className="font-semibold text-[13px] text-night-text">Continue anyway</Text>
+                    </Pressable>
+                  </View>
+                </View>
               ) : (
-                <>
-                  {gasError && <Text className="mt-2 font-sans text-[13px] text-danger">{gasError}</Text>}
-                  <Pressable
-                    onPress={checkGasSafe}
-                    disabled={gasBusy || gasSafeNo.trim().length < 6}
-                    className={`mt-2.5 items-center rounded-[10px] border-[1.5px] border-brand-blue py-2.5 ${gasBusy || gasSafeNo.trim().length < 6 ? "opacity-50" : ""}`}
-                  >
-                    <Text className="font-semibold text-[13.5px] text-brand-blue-lift">
-                      {gasBusy ? "Checking…" : "Check the register"}
-                    </Text>
-                  </Pressable>
-                </>
+                <Pressable
+                  onPress={checkGasSafe}
+                  disabled={gasBusy || gasSafeNo.trim().length < 6}
+                  className={`mt-2.5 items-center rounded-[10px] border-[1.5px] border-brand-blue py-2.5 ${gasBusy || gasSafeNo.trim().length < 6 ? "opacity-50" : ""}`}
+                >
+                  <Text className="font-semibold text-[13.5px] text-brand-blue-lift">
+                    {gasBusy ? "Checking…" : "Check the register"}
+                  </Text>
+                </Pressable>
               )}
             </View>
 

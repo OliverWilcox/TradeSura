@@ -14,13 +14,17 @@ const SignupData = z.object({
   lastName: z.string().min(2).max(60),
   phoneToken: z.string().min(1), // from /api/onboarding/phone/verify
   trades: z.array(z.string().max(40)).max(10).default([]),
-  // Required, not optional: Gas Safe is the only live trade right now, so
-  // it's mandatory at sign-up — enforced here too, not just client-side,
-  // same pattern as the wording blocklist re-check on tier save.
+  // The regNo is required — Gas Safe is the only live trade right now, so
+  // it's mandatory at sign-up, same pattern as the wording blocklist
+  // re-check on tier save. Name/company/categories are only present when
+  // the number matched the register; review #11's escape hatch lets an
+  // engineer continue on an unmatched number, flagged for manual review
+  // instead of dead-ended (see gasSafeReviewRequested below).
   gasSafeNo: z.string().min(1).max(20),
-  gasSafeName: z.string().min(1).max(120),
-  gasSafeCompany: z.string().min(1).max(120),
-  gasSafeCategories: z.string().min(1).max(200),
+  gasSafeName: z.string().max(120).optional(),
+  gasSafeCompany: z.string().max(120).optional(),
+  gasSafeCategories: z.string().max(200).optional(),
+  gasSafeReviewRequested: z.boolean().optional(),
   tradingName: z.string().min(2).max(80),
   businessType: z.enum(["sole_trader", "ltd", "partnership"]),
   companyNumber: z.string().max(20).optional(),
@@ -128,7 +132,11 @@ export async function POST(req: Request) {
         gasSafeName: rest.gasSafeName,
         gasSafeCompany: rest.gasSafeCompany,
         gasSafeCategories: rest.gasSafeCategories,
-        gasSafeVerifiedAt: new Date(),
+        // review #11 — a real register match verifies immediately; an
+        // unmatched number the engineer chose to continue with (the
+        // manual-review escape hatch) is flagged pending instead.
+        gasSafeVerifiedAt: rest.gasSafeReviewRequested ? null : new Date(),
+        gasSafeReviewRequestedAt: rest.gasSafeReviewRequested ? new Date() : null,
         attribution,
       },
     });

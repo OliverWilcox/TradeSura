@@ -59,6 +59,7 @@ export async function GET() {
     tradingName: engineer.tradingName,
     slug: engineer.slug,
     gasSafeVerifiedAt: engineer.gasSafeVerifiedAt,
+    gasSafeReviewRequestedAt: engineer.gasSafeReviewRequestedAt,
     gasSafeNo: engineer.gasSafeNo,
     gasSafeName: engineer.gasSafeName,
     gasSafeCompany: engineer.gasSafeCompany,

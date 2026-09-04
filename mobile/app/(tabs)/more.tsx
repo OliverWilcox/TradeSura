@@ -200,6 +200,15 @@ export default function More() {
                   ▲ GAS SAFE VERIFIED {me.gasSafeNo}
                 </Text>
               </View>
+            ) : me?.gasSafeNo && me.gasSafeReviewRequestedAt ? (
+              // review #11 — the manual-review escape hatch: the number
+              // didn't match our register at signup, so they're not verified
+              // yet, but they weren't dead-ended either.
+              <View className="flex-row items-center gap-1.5 self-start rounded-md border border-line bg-panel px-2 py-0.5">
+                <Text className="font-semibold text-[10.5px] text-muted">
+                  ◐ VERIFICATION PENDING {me.gasSafeNo}
+                </Text>
+              </View>
             ) : (
               // Gas Safe verification is mandatory during sign-up now, so a
               // signed-in engineer without it is a legacy/edge case — nothing

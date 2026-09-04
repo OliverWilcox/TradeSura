@@ -56,11 +56,15 @@ model Engineer {
   companyNumber     String?
   postcode          String? // business postcode, not shown to customers
   marketingConsent  Boolean    @default(false)
-  gasSafeNo         String?    @unique // review #13 — one licence, one account
-  gasSafeName       String?
-  gasSafeCompany    String?
-  gasSafeCategories String?
-  gasSafeVerifiedAt DateTime?
+  gasSafeNo                String?    @unique // review #13 — one licence, one account
+  gasSafeName              String?
+  gasSafeCompany           String?
+  gasSafeCategories        String?
+  gasSafeVerifiedAt        DateTime?
+  // review #11 — set instead of gasSafeVerifiedAt when the number the
+  // engineer entered didn't match our register on signup, so they can
+  // continue (manual-review escape hatch) rather than being dead-ended.
+  gasSafeReviewRequestedAt DateTime?
   stripeAccountId        String?  @unique // Connect Express account (acct_…)
   stripeDetailsSubmitted Boolean  @default(false)
   stripeChargesEnabled   Boolean  @default(false)

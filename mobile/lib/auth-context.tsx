@@ -23,6 +23,7 @@ export type Me = {
   tradingName: string | null;
   slug: string;
   gasSafeVerifiedAt: string | null;
+  gasSafeReviewRequestedAt: string | null;
   gasSafeNo: string | null;
   gasSafeName: string | null;
   gasSafeCompany: string | null;
