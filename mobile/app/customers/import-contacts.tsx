@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { View, Text, FlatList, Pressable, ActivityIndicator } from "react-native";
 import { router } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as Contacts from "expo-contacts";
 import { api, ApiError } from "@/lib/api";
-import { Button } from "@/components/ui";
+import { AppHeader, Button } from "@/components/ui";
 
 type PickedContact = { id: string; name: string; phone: string; email?: string };
 
@@ -79,7 +80,7 @@ export default function ImportContacts() {
   if (status === "loading") {
     return (
       <View className="flex-1 items-center justify-center bg-panel">
-        <ActivityIndicator color="#0E7FD0" />
+        <ActivityIndicator color="#1966CC" />
       </View>
     );
   }
@@ -101,7 +102,7 @@ export default function ImportContacts() {
   if (result) {
     return (
       <View className="flex-1 items-center justify-center gap-3 bg-panel px-6">
-        <Text className="text-center font-sans-semibold text-sm text-ok">{result}</Text>
+        <Text className="text-center font-semibold text-sm text-ok">{result}</Text>
         <Button onPress={() => router.back()}>Done</Button>
       </View>
     );
@@ -109,14 +110,22 @@ export default function ImportContacts() {
 
   return (
     <View className="flex-1 bg-panel">
+      <SafeAreaView edges={["top"]} className="bg-paper">
+        <AppHeader title="Import contacts" />
+      </SafeAreaView>
       <FlatList
         data={contacts}
         keyExtractor={(c) => c.id}
         contentContainerClassName="gap-1 p-4 pb-28"
         ListHeaderComponent={
-          <Text className="mb-2 font-sans text-xs text-muted">
-            {selected.size} of {contacts.length} selected
-          </Text>
+          <View className="mb-2 flex-row items-center justify-between">
+            <Pressable onPress={() => router.back()}>
+              <Text className="font-semibold text-sm text-flame-deep">‹ Back</Text>
+            </Pressable>
+            <Text className="font-sans text-xs text-muted">
+              {selected.size} of {contacts.length} selected
+            </Text>
+          </View>
         }
         renderItem={({ item }) => (
           <Pressable
