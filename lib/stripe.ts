@@ -49,6 +49,7 @@ const BUSINESS_TYPE: Record<string, Stripe.AccountCreateParams.BusinessType> = {
 export async function getOrCreateConnectAccount(engineer: {
   id: string;
   email: string;
+  slug: string;
   businessType: string | null;
   tradingName: string | null;
   stripeAccountId: string | null;
@@ -62,6 +63,12 @@ export async function getOrCreateConnectAccount(engineer: {
     business_type: engineer.businessType ? BUSINESS_TYPE[engineer.businessType] : undefined,
     business_profile: {
       name: engineer.tradingName ?? undefined,
+      // "Get paid" runs before the engineer has a live plan (onboarding step
+      // 1 of 4), so this page can 404 for a little while — still the correct
+      // URL to have on file, and it's what Stripe otherwise flags as an
+      // "Overdue: provide a business website" requirement that pauses
+      // payments/payouts/transfers if left unset entirely.
+      url: `${process.env.APP_URL}/p/${engineer.slug}`,
       mcc: "1711", // Heating, plumbing, air-conditioning contractors
       product_description: "Monthly gas boiler care plans sold to the engineer's own customers.",
     },
