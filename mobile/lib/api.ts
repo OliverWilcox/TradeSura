@@ -2,6 +2,7 @@ import * as SecureStore from "expo-secure-store";
 
 const TOKEN_KEY = "ts_engineer_token";
 const STRIPE_SKIPPED_KEY = "ts_stripe_skipped";
+const HAS_SIGNED_IN_KEY = "ts_has_signed_in_before";
 
 // process.env.EXPO_PUBLIC_* is inlined by Metro at build time — see .env.example.
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -32,6 +33,18 @@ export async function setStripeSkipped(): Promise<void> {
 
 export async function clearStripeSkipped(): Promise<void> {
   await SecureStore.deleteItemAsync(STRIPE_SKIPPED_KEY);
+}
+
+// W0 — "has this device signed in before" for the returning-user welcome
+// state. Deliberately NOT cleared on sign-out: it's a device fact, not a
+// session fact, so the welcome screen still promotes Sign in after signing
+// out and back in.
+export async function getHasSignedInBefore(): Promise<boolean> {
+  return (await SecureStore.getItemAsync(HAS_SIGNED_IN_KEY)) === "1";
+}
+
+export async function setHasSignedInBefore(): Promise<void> {
+  await SecureStore.setItemAsync(HAS_SIGNED_IN_KEY, "1");
 }
 
 export class ApiError extends Error {

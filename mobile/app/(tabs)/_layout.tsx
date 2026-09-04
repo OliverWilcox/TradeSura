@@ -11,7 +11,10 @@ export default function TabsLayout() {
   const { token, loading, me, meLoading, meError, stripeSkipped, refreshMe, signOut } = useAuth();
 
   if (loading) return null;
-  if (!token) return <Redirect href="/sign-in" />;
+  // W0 — signed-out users land on the welcome screen, not straight on
+  // sign-in; it decides for itself whether to promote Sign in (returning
+  // device) or Start now (organic/claim/referral).
+  if (!token) return <Redirect href="/welcome" />;
 
   if (meLoading && !me) {
     return (

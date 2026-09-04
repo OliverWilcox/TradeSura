@@ -5,6 +5,7 @@ import {
   clearToken,
   getStripeSkipped,
   getToken,
+  setHasSignedInBefore,
   setStripeSkipped,
   setToken,
 } from "./api";
@@ -86,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signIn(newToken: string) {
     await setToken(newToken);
+    await setHasSignedInBefore();
     setTokenState(newToken);
   }
 

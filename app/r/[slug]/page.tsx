@@ -31,7 +31,10 @@ export default async function ReferralLanding({
   if (!referrer || !referrer.tradingName) notFound();
 
   await track("referral_link_opened", { type: "SYSTEM" }, { referrerId: referrer.id });
-  const appHref = `tradesura://sign-up?ref=${encodeURIComponent(slug)}`;
+  // W0 — lands on the welcome screen first (personalised sub-line), not
+  // straight on sign-up; it carries ref (and the real trading name, so the
+  // screen doesn't have to guess one from the slug) through when continuing.
+  const appHref = `tradesura://welcome?ref=${encodeURIComponent(slug)}&name=${encodeURIComponent(referrer.tradingName)}`;
 
   return (
     <div className="flex flex-col max-w-md w-full mx-auto min-h-screen bg-panel">

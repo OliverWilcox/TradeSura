@@ -13,6 +13,7 @@
     "expo-dev-client": "~57.0.13",
     "expo-document-picker": "~57.0.1",
     "expo-font": "~57.0.1",
+    "expo-haptics": "~57.0.2",
     "expo-image-picker": "~57.0.16",
     "expo-linear-gradient": "~57.0.1",
     "expo-linking": "~57.0.6",

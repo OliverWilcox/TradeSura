@@ -37,8 +37,11 @@ export function ClaimForm({
     }
   }
 
+  // W0 — lands on the welcome screen first (it resolves the code itself,
+  // server-side, same as this page does — never trusts what the web page
+  // already showed), not straight on sign-up.
   const appHref = (c?: string) =>
-    c ? `tradesura://sign-up?code=${encodeURIComponent(c)}` : "tradesura://sign-up";
+    c ? `tradesura://welcome?code=${encodeURIComponent(c)}` : "tradesura://welcome";
 
   return (
     <div className="flex flex-col gap-3">
