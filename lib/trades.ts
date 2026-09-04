@@ -22,6 +22,10 @@ export const TRADE_PACKS = [
   { code: "AIRCON", name: "Air conditioning", anchor: "Annual F-Gas service", live: false },
   { code: "CHIMNEY", name: "Chimney sweep", anchor: "Annual sweep · HETAS insurance condition", live: false },
   { code: "EV_CHARGER", name: "EV charger", anchor: "Annual check", live: false },
+  // Review #14 — largest adjacent trade, worth the free intent signal, even
+  // though plumbing has no natural recurring-service anchor (see file note
+  // above) and may never convert to a live pack the way the others can.
+  { code: "PLUMBING", name: "Plumbing", anchor: "General plumbing & drains — pack model still being defined", live: false },
 ] as const;
 
 export type TradeCode = (typeof TRADE_PACKS)[number]["code"];

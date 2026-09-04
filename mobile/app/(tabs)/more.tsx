@@ -107,6 +107,12 @@ export default function More() {
 
   // Review #15 — upload the image directly instead of asking for a hosted
   // URL most engineers don't have; stored in our own Blob store.
+  //
+  // Base64 JSON, not multipart FormData: this Expo SDK's fetch/FormData
+  // bridge throws "Unsupported FormDataPart implementation" on the picker's
+  // { uri, name, type } asset shape — a known, unresolved RN/Expo bug
+  // (github.com/expo/expo/issues/33134). base64: true on the picker plus a
+  // plain JSON POST sidesteps the native multipart path entirely.
   async function pickLogo() {
     setLogoError(null);
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -119,20 +125,18 @@ export default function More() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.85,
+      base64: true,
     });
-    if (result.canceled || !result.assets[0]) return;
+    if (result.canceled || !result.assets[0]?.base64) return;
     const asset = result.assets[0];
     setLogoBusy(true);
     try {
-      const form = new FormData();
-      form.append("file", {
-        uri: asset.uri,
-        name: asset.fileName ?? "logo.jpg",
-        type: asset.mimeType ?? "image/jpeg",
-      } as unknown as Blob);
       const { logoUrl } = await api<{ logoUrl: string }>("/api/settings/logo", {
         method: "POST",
-        body: form,
+        body: JSON.stringify({
+          base64: asset.base64,
+          mimeType: asset.mimeType ?? "image/jpeg",
+        }),
       });
       setSettings((prev) => (prev ? { ...prev, logoUrl } : prev));
       await refreshMe();
@@ -244,7 +248,12 @@ export default function More() {
             className="mt-1 rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-sm text-ink"
           />
           <Text className="mt-3 font-sans text-xs text-muted">Logo (optional)</Text>
-          <View className="mt-1.5 flex-row items-center gap-3">
+          <Pressable
+            onPress={pickLogo}
+            disabled={logoBusy}
+            className="mt-1.5 flex-row items-center gap-3"
+            style={({ pressed }) => (pressed ? { opacity: 0.5 } : undefined)}
+          >
             {settings?.logoUrl ? (
               <Image
                 source={{ uri: settings.logoUrl }}
@@ -255,12 +264,10 @@ export default function More() {
                 <Text className="text-lg text-faint">＋</Text>
               </View>
             )}
-            <Pressable onPress={pickLogo} disabled={logoBusy}>
-              <Text className="font-semibold text-sm text-flame">
-                {logoBusy ? "Uploading…" : settings?.logoUrl ? "Change logo" : "Add a logo"}
-              </Text>
-            </Pressable>
-          </View>
+            <Text className="font-semibold text-sm text-flame">
+              {logoBusy ? "Uploading…" : settings?.logoUrl ? "Change logo" : "Add a logo"}
+            </Text>
+          </Pressable>
           {logoError && <Text className="mt-1.5 font-sans text-xs text-danger">{logoError}</Text>}
           {settings && (
             <Text className="mt-2 font-sans text-[11px] text-faint">
