@@ -50,7 +50,7 @@ export default function Trades() {
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader right={<Micro className="text-[#AEB9C4]">Trades</Micro>} />
+        <AppHeader title="Trades" />
       </SafeAreaView>
       <ScrollView
         className="flex-1"
@@ -59,9 +59,9 @@ export default function Trades() {
       >
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
-        <Card className="border-[#BBDCF4] bg-flame-tint">
+        <Card className="border-[#E1E8F0] bg-flame-tint">
           <Text className="font-sans text-xs text-flame-deep">
-            <Text className="font-sans-semibold">One pack per trade.</Text> A trade only gets a
+            <Text className="font-semibold">One pack per trade.</Text> A trade only gets a
             care plan where a recurring service event anchors it — that annual visit is what makes
             the plan honest. Register interest and we&apos;ll tell you when your pack&apos;s
             clause library clears legal review.
@@ -76,7 +76,7 @@ export default function Trades() {
                 className="flex-row items-center justify-between gap-2 border-b border-line-soft py-2.5 last:border-b-0"
               >
                 <View className="shrink">
-                  <Text className="font-sans-bold text-sm text-ink">{p.name}</Text>
+                  <Text className="font-bold text-sm text-ink">{p.name}</Text>
                   <Micro>{p.anchor}</Micro>
                 </View>
                 {p.live ? (
@@ -86,7 +86,7 @@ export default function Trades() {
                 ) : (
                   <Pressable onPress={() => register(p.code)} disabled={busy === p.code}>
                     <Text
-                      className={`font-sans-semibold text-xs ${busy === p.code ? "text-faint" : "text-flame-deep"}`}
+                      className={`font-semibold text-xs ${busy === p.code ? "text-faint" : "text-flame-deep"}`}
                     >
                       {busy === p.code ? "…" : "Register interest →"}
                     </Text>

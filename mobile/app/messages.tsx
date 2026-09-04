@@ -3,7 +3,7 @@ import { View, Text, ScrollView, RefreshControl } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
-import { AppHeader, Card, Micro, Pill } from "@/components/ui";
+import { AppHeader, Card, Pill } from "@/components/ui";
 
 type Tag = { label: string; tone: "danger" | "warn" | "info" | "off"; rank: number };
 type Ticket = {
@@ -52,7 +52,7 @@ export default function Messages() {
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader right={<Micro className="text-[#AEB9C4]">Messages</Micro>} />
+        <AppHeader title="Messages" />
       </SafeAreaView>
       <ScrollView
         className="flex-1"
@@ -62,8 +62,8 @@ export default function Messages() {
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
         {recentEmergencies > 0 && (
-          <View className="rounded-[10px] border border-[#F1BDBD] bg-danger-tint px-3 py-2.5">
-            <Text className="font-sans-semibold text-xs text-[#8F2323]">
+          <View className="rounded-[10px] border border-[#E1E8F0] bg-danger-tint px-3 py-2.5">
+            <Text className="font-semibold text-xs text-danger">
               ⚠ GAS EMERGENCY WORDING TRIGGERED this week — the customer was shown the emergency
               script and told to call 0800 111 999 before anything else.
             </Text>
@@ -72,7 +72,7 @@ export default function Messages() {
 
         {tickets && tickets.length === 0 && (
           <Card className="items-center py-8">
-            <Text className="font-sans-semibold text-sm text-ink">No messages yet</Text>
+            <Text className="font-semibold text-sm text-ink">No messages yet</Text>
             <Text className="mt-1.5 text-center font-sans text-xs text-muted">
               Problem reports from your plan customers land here, triaged automatically.
             </Text>
@@ -85,7 +85,7 @@ export default function Messages() {
               <View key={t.id} className="border-b border-line-soft py-2.5 last:border-b-0">
                 <View className="flex-row items-start justify-between gap-2">
                   <View className="shrink">
-                    <Text className="font-sans-bold text-sm text-ink">{t.customerName}</Text>
+                    <Text className="font-bold text-sm text-ink">{t.customerName}</Text>
                     <Text className="mt-0.5 font-sans text-xs text-muted">
                       &ldquo;{t.message.slice(0, 90)}
                       {t.message.length > 90 ? "…" : ""}&rdquo;
@@ -103,7 +103,7 @@ export default function Messages() {
         )}
 
         <Card>
-          <Text className="mb-1 font-sans-semibold text-sm text-ink">
+          <Text className="mb-1 font-semibold text-sm text-ink">
             Smart triage on every ticket
           </Text>
           <Text className="font-sans text-xs text-muted">
