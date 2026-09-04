@@ -12,12 +12,17 @@ import {
 } from "@/lib/stripe";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
-// One endpoint for both platform events (checkout, invoices, subscriptions)
-// and Connect events (account.updated). Register it in the Stripe dashboard
-// with "Listen to events on Connected accounts" enabled.
+// One URL for both platform events (checkout, invoices, subscriptions) and
+// Connect events (account.updated) — but Stripe requires two separate
+// webhook endpoint *objects* registered against it, one per scope, each
+// with its own signing secret (docs.stripe.com/connect/webhooks): an
+// "account" endpoint (STRIPE_WEBHOOK_SECRET) and a "Connect" endpoint
+// (STRIPE_WEBHOOK_SECRET_CONNECT, "Listen to events on Connected accounts").
 export async function POST(req: Request) {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret) {
+  const secrets = [process.env.STRIPE_WEBHOOK_SECRET, process.env.STRIPE_WEBHOOK_SECRET_CONNECT].filter(
+    (s): s is string => Boolean(s),
+  );
+  if (secrets.length === 0) {
     return NextResponse.json({ error: "webhook secret not configured" }, { status: 500 });
   }
 
@@ -26,7 +31,7 @@ export async function POST(req: Request) {
 
   let event: Stripe.Event;
   try {
-    event = constructWebhookEvent(rawBody, signature, secret);
+    event = constructWebhookEvent(rawBody, signature, secrets);
   } catch (err) {
     console.error("[stripe-webhook] signature verification failed:", err);
     return NextResponse.json({ error: "invalid signature" }, { status: 400 });

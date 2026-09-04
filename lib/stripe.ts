@@ -276,10 +276,24 @@ export async function payReferralBounty(accountId: string, amountPence: number, 
 // Webhooks
 // ---------------------------------------------------------------------------
 
+// Stripe requires two separate webhook endpoint objects for one URL to
+// receive both scopes (docs.stripe.com/connect/webhooks): an "account"
+// endpoint (connect:false) for platform events — checkout, invoices,
+// subscriptions — and a "Connect" endpoint (connect:true) for
+// account.updated on connected accounts. Each has its own signing secret,
+// so a single request may have been signed with either — try each in turn.
 export function constructWebhookEvent(
   rawBody: string,
   signature: string,
-  secret: string,
+  secrets: string[],
 ): Stripe.Event {
-  return getStripe().webhooks.constructEvent(rawBody, signature, secret);
+  let lastErr: unknown;
+  for (const secret of secrets) {
+    try {
+      return getStripe().webhooks.constructEvent(rawBody, signature, secret);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
 }
