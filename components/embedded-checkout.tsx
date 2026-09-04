@@ -82,7 +82,7 @@ function CheckoutForm({
           type="checkbox"
           checked={agreed}
           onChange={(e) => setAgreed(e.target.checked)}
-          className="mt-0.5 h-4 w-4 accent-[#1966CC]"
+          className="mt-0.5 h-4 w-4 accent-[#5FA3F0]"
         />
         I agree to the plan terms and the Direct Debit mandate.
       </label>
@@ -114,7 +114,20 @@ export function EmbeddedCheckout(props: {
       stripe={stripePromise}
       options={{
         clientSecret: props.clientSecret,
-        appearance: { theme: "stripe", variables: { colorPrimary: "#1966CC" } },
+        // The page around this is dark navy (v2) — Stripe's light "stripe"
+        // theme would float as a bright white box, so start from "night" and
+        // match our exact tokens rather than its defaults.
+        appearance: {
+          theme: "night",
+          variables: {
+            colorPrimary: "#5FA3F0",
+            colorBackground: "#193150",
+            colorText: "#F3F7FB",
+            colorTextSecondary: "#9FB6D0",
+            colorDanger: "#FF6B6B",
+            borderRadius: "12px",
+          },
+        },
       }}
     >
       <CheckoutForm

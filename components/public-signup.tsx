@@ -113,14 +113,14 @@ export function PublicSignup({
           onClick={() => setSelectedId(t.id)}
           className={`relative text-left bg-paper rounded-xl p-3.5 border-[1.5px] ${
             t.id === selectedId
-              ? "border-flame shadow-[0_4px_14px_rgba(14,127,208,0.14)]"
+              ? "border-flame shadow-[0_0_20px_rgba(95,163,240,0.25)]"
               : t.isRecommended
-                ? "border-copper shadow-[0_4px_14px_rgba(194,98,46,0.14)]"
+                ? "border-copper shadow-[0_0_20px_rgba(61,214,140,0.20)]"
                 : "border-line"
           }`}
         >
           {t.isRecommended && (
-            <span className="absolute -top-2 left-3 bg-copper text-white font-mono text-[9px] font-semibold px-2 py-0.5 rounded-full tracking-wide">
+            <span className="absolute -top-2 left-3 bg-copper text-[#052614] font-mono text-[9px] font-semibold px-2 py-0.5 rounded-full tracking-wide">
               MOST CHOSEN
             </span>
           )}
