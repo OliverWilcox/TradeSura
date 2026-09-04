@@ -61,8 +61,19 @@ model Engineer {
   gasSafeCompany    String?
   gasSafeCategories String?
   gasSafeVerifiedAt DateTime?
-  gcOrganisationId  String?    @unique
-  gcAccessToken     String? // sandbox org token; never logged
+  stripeAccountId        String?  @unique // Connect Express account (acct_…)
+  stripeDetailsSubmitted Boolean  @default(false)
+  stripeChargesEnabled   Boolean  @default(false)
+  stripePayoutsEnabled   Boolean  @default(false)
+  // How the engineer arrived: { heardVia, referralCode?, letterBatch?, variantCell? }
+  attribution      Json?
+  packAddress      String? // founding-member pack postal address
+  packRequestedAt  DateTime?
+  // E10 — who brought this engineer in, and whether their £50 bounty is paid.
+  referrerId           String?
+  referrer             Engineer?  @relation("Referrals", fields: [referrerId], references: [id])
+  referrals            Engineer[] @relation("Referrals")
+  referralBountyPaidAt DateTime?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
   customers         Customer[]
@@ -79,7 +90,8 @@ model Customer {
   phone        String // normalised E.164
   email        String?
   smsOptOut    Boolean    @default(false)
-  gcCustomerId String?
+  stripeCustomerId String?
+  source       String     @default("added") // added | doorstep | web | import | contacts
   createdAt    DateTime   @default(now())
   properties   Property[]
   plans        Plan[]
@@ -163,13 +175,14 @@ model Plan {
   signupToken            String     @unique
   portalToken            String     @unique
   linkOpenedAt           DateTime?
-  gcBillingRequestId     String?
-  gcBillingRequestFlowId String?
-  gcMandateId            String?
-  gcSubscriptionId       String?
+  stripeCheckoutSessionId String?
+  stripeSubscriptionId    String?
+  stripeCustomerId        String?
+  mandateStatus           String? // pending | active | inactive
   coolingOffEndsAt       DateTime?
   activatedAt            DateTime?
   cancelledAt            DateTime?
+  paymentFailedAt        DateTime? // S2 — set on invoice.payment_failed, cleared on recovery
   createdAt              DateTime   @default(now())
   updatedAt              DateTime   @updatedAt
 }
@@ -195,25 +208,52 @@ model Event {
 
 // Quiet-hours queue + abandon nudges.
 model OutboundSms {
-  id         String       @id @default(cuid())
-  engineerId String
-  toPhone    String
-  senderName String // trading name
-  body       String
-  class      MessageClass
-  status     SmsStatus    @default(QUEUED)
-  sendAfter  DateTime
-  cancelKey  String? // e.g. "nudge:<planId>" — cancelled on activation
-  sentAt     DateTime?
+  id           String       @id @default(cuid())
+  engineerId   String
+  toPhone      String
+  senderName   String // trading name
+  body         String
+  class        MessageClass
+  status       SmsStatus    @default(QUEUED)
+  sendAfter    DateTime
+  cancelKey    String? // e.g. "nudge:<planId>" — cancelled on activation
+  // plan-member-transactional | engineer-initiated | marketing
+  consentBasis String?
+  sentAt       DateTime?
 
   @@index([status, sendAfter])
 }
 
-// GoCardless webhook idempotency guard.
-model GcWebhookEvent {
-  id           String   @id // GoCardless event id
-  resourceType String
-  action       String
-  payload      Json
-  processedAt  DateTime @default(now())
+// One cross-channel opt-out store (CLAUDE.md §Compliance 5): STOP/unsubscribe
+// writes here, every send path checks it. Kept alongside Customer.smsOptOut
+// (which stays as the per-engineer-book flag surfaced in the UI).
+model Suppression {
+  channel   String // sms | email
+  value     String // normalised E.164 phone or lowercased email
+  source    String // sms_stop | unsubscribe_link | manual
+  createdAt DateTime @default(now())
+
+  @@id([channel, value])
+}
+
+// Letter-campaign claim codes (C5). One row per letter recipient; the split
+// test's variant cell is the attribution that must survive to the account.
+model ClaimCode {
+  code                String    @id // e.g. TS-48217 (normalised: upper, no spaces)
+  firstName           String
+  businessName        String
+  letterBatch         String
+  variantCell         String // A | B | C | D
+  suppressedAt        DateTime? // opted out — resolve to the generic path
+  redeemedByEngineerId String?  @unique
+  redeemedAt          DateTime?
+  createdAt           DateTime  @default(now())
+}
+
+// Stripe webhook idempotency guard.
+model StripeWebhookEvent {
+  id          String   @id // Stripe event id (evt_…)
+  type        String
+  payload     Json
+  processedAt DateTime @default(now())
 }

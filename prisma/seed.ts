@@ -25,6 +25,17 @@ async function main() {
   }
   console.log(`Seeded ${CLAUSE_TEMPLATES.length} clause templates`);
 
+  // A few letter-campaign claim codes for the C5 demo (fictional).
+  const claimCodes = [
+    { code: "TS-48217", firstName: "Dave", businessName: "Dave Smith Heating", letterBatch: "2026-09-A", variantCell: "A" },
+    { code: "TS-51022", firstName: "Priya", businessName: "Kaur Gas Services", letterBatch: "2026-09-A", variantCell: "B" },
+    { code: "TS-51999", firstName: "Tom", businessName: "Riley Plumbing & Heating", letterBatch: "2026-09-A", variantCell: "C", suppressedAt: new Date() },
+  ];
+  for (const cc of claimCodes) {
+    await prisma.claimCode.upsert({ where: { code: cc.code }, update: cc, create: cc });
+  }
+  console.log(`Seeded ${claimCodes.length} claim codes`);
+
   // A book of no-plan customers for an engineer to import against is created
   // via the CSV import in the demo; here we only add a handful of faker
   // customers for the first engineer if one exists (dashboard has data on
