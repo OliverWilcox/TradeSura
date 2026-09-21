@@ -19,6 +19,17 @@ enum ClauseKind {
   ADD
 }
 
+// Build Guide v2 Part 7.3/7.4 — a plan is a listing, not a fixed "tier":
+// DRAFT (built in the wizard, never offered — deletable), LIVE (offerable,
+// counted for gates), STOPPED (was live, now retired — a reversible toggle,
+// existing customers untouched). New rows default to DRAFT; only "Make this
+// plan live" moves one to LIVE.
+enum PlanTierStatus {
+  DRAFT
+  LIVE
+  STOPPED
+}
+
 // SAFE ships in the picker; CARE is hidden until solicitor sign-off.
 enum ClauseStatus {
   SAFE
@@ -65,10 +76,25 @@ model Engineer {
   // engineer entered didn't match our register on signup, so they can
   // continue (manual-review escape hatch) rather than being dead-ended.
   gasSafeReviewRequestedAt DateTime?
+  // Build Guide v2 Part 11 — push notifications. Set once the app has asked
+  // permission (after the first plan goes live, per spec) and registered a
+  // real device token via POST /api/me/push-token. Null means either the
+  // engineer hasn't reached that point yet or denied permission — either
+  // way, sendPushNotification (lib/push.ts) no-ops rather than erroring, so
+  // nothing that fires a push needs to check this first.
+  expoPushToken          String?
   stripeAccountId        String?  @unique // Connect Express account (acct_…)
   stripeDetailsSubmitted Boolean  @default(false)
   stripeChargesEnabled   Boolean  @default(false)
   stripePayoutsEnabled   Boolean  @default(false)
+  // Build Guide v2 Part 6.4 — the standing-strip state machine's two states
+  // with no trigger UI yet (no admin tool exists to set these; a human sets
+  // them directly for now). The mechanism ships so the priority ladder
+  // (banned > paused > ...) is real; ship-now, policy-later per Part 19.
+  pausedAt   DateTime?
+  pauseReason String?
+  bannedAt   DateTime?
+  banReason  String?
   // How the engineer arrived: { heardVia, referralCode?, letterBatch?, variantCell? }
   attribution      Json?
   packAddress      String? // founding-member pack postal address
@@ -149,7 +175,7 @@ model PlanTier {
   priceMonthlyPence Int
   isRecommended     Boolean      @default(false)
   sortOrder         Int
-  archived          Boolean      @default(false)
+  status            PlanTierStatus @default(DRAFT)
   // Display-only extras; blocklist-checked; never enter the plan document.
   customLabels      String[]     @default([])
   clauses           TierClause[]
@@ -189,6 +215,12 @@ model Plan {
   paymentFailedAt        DateTime? // S2 — set on invoice.payment_failed, cleared on recovery
   termsVersion           String? // review #18 — which CURRENT_TERMS_VERSION (lib/terms.ts) they agreed to
   termsAgreedAt          DateTime?
+  // LAW (plan wording is locked) — the tier as the customer agreed it,
+  // snapshotted at tier-selection. Reads of the agreed contract (plan
+  // document, portal "what's included", CP12 reminder logic) resolve through
+  // lib/plan-tier.ts and prefer this, so editing the live tier never rewrites
+  // an existing agreement. Null for plans created before this column.
+  agreedTier             Json?
   createdAt              DateTime   @default(now())
   updatedAt              DateTime   @updatedAt
 }

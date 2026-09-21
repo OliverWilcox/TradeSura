@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from "react";
-import { View, Text, TextInput, ScrollView } from "react-native";
+import { View, Text, TextInput, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
 import { router } from "expo-router";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { stripeResultError } from "@/lib/stripe";
-import { AppHeader, Card, Micro, Button } from "@/components/ui";
+import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
+import { AppHeader, Card, Micro, Button, Tick } from "@/components/ui";
 
 // E2 — post-signup onboarding wizard. Four steps, sequenced for activation:
 // get paid → first plan → import book → founding pack. Only step 1 gates the
@@ -40,13 +40,13 @@ function StepCard({
     >
       <View className="flex-row items-start justify-between gap-2">
         <View className="shrink">
-          <Micro className={state === "done" ? "text-ok" : state === "next" ? "text-flame" : ""}>
-            {state === "done" ? "✓ Done" : `Step ${n}`}
+          <Micro className={state === "next" ? "text-flame" : ""}>
+            {state === "done" ? "Done" : `Step ${n}`}
           </Micro>
           <Text className="mt-0.5 font-semibold text-[15px] text-ink">{title}</Text>
           <Text className="mt-0.5 font-sans text-xs text-muted">{body}</Text>
         </View>
-        {state === "done" && <Text className="text-lg text-ok">✓</Text>}
+        {state === "done" && <Tick size={18} />}
       </View>
       {children}
       {state !== "done" && cta && onPress && (
@@ -75,8 +75,17 @@ export default function Onboarding() {
     setBusy(true);
     setError(null);
     try {
-      const { url } = await api<{ url: string }>("/api/stripe/connect-link");
-      const result = await WebBrowser.openAuthSessionAsync(url, "tradesura://onboarding");
+      // Build Guide v2 review 17 Sept, B3 — see lib/stripe.ts's
+      // getConnectLinkWithRetry for why a single retry belongs here.
+      const { url } = await getConnectLinkWithRetry();
+      // Build Guide v2 Part 17.1 — "Kill the iOS 'wants to use stripe.com'
+      // popup: run Stripe onboarding in an ephemeral web session (no
+      // shared-cookie prompt)." preferEphemeralSession is iOS-only
+      // (ASWebAuthenticationSession's prefersEphemeralWebBrowserSession);
+      // it's ignored, harmlessly, on Android.
+      const result = await WebBrowser.openAuthSessionAsync(url, "tradesura://onboarding", {
+        preferEphemeralSession: true,
+      });
       const err = stripeResultError(result);
       if (err) setError(err);
       else if (result.type === "success") await refreshMe();
@@ -134,7 +143,17 @@ export default function Onboarding() {
           onPress={connectStripe}
         >
           {busy && <Text className="mt-2 font-sans text-xs text-muted">Opening…</Text>}
-          {error && <Text className="mt-2 font-sans text-xs text-danger">{error}</Text>}
+          {/* Build Guide v2 review 17 Sept, B3 — "catch it gracefully with a
+              retry prompt rather than a bare failure." getConnectLinkWithRetry
+              already retries once silently before this ever shows; if it
+              still fails, the copy itself now reads as an invitation to tap
+              the button above again, not a dead-end error report. */}
+          {error && (
+            <Text className="mt-2 font-sans text-xs text-danger">
+              {error} Tap &ldquo;{me?.stripeDetailsSubmitted ? "Finish payment setup" : "Set up payments"}
+              &rdquo; above to try again.
+            </Text>
+          )}
         </StepCard>
 
         <StepCard
@@ -145,9 +164,15 @@ export default function Onboarding() {
               ? "Your plan page is live — customers can join it now."
               : "We've drafted Boiler Care at £12/month — approve it or set your own price."
           }
-          state={stepState(hasPlan, paid && !hasPlan)}
+          // Per the user's direct ask: getting paid and building a plan can
+          // happen in either order — neither blocks the other (see B6's
+          // fix, (tabs)/_layout.tsx). This card now matches that: "next"
+          // (highlighted, flame button) as soon as it isn't done yet,
+          // exactly like Step 1, not only once Step 1 also happens to be
+          // done. "Done" still means hasPlan, unchanged.
+          state={stepState(hasPlan, !hasPlan)}
           cta="Set up my plan"
-          onPress={() => router.push("/(tabs)/plans")}
+          onPress={() => router.push("/plans")}
         />
 
         <StepCard
@@ -195,10 +220,16 @@ export default function Onboarding() {
           )}
         </StepCard>
 
+        {/* Part 5 — "How TradeSura works → the How it works page (Part 14)."
+            Never gated, same as every other route into that room. */}
+        <Pressable onPress={() => router.push("/how-it-works")} className="items-center py-1">
+          <Text className="font-semibold text-sm text-flame-deep">How TradeSura works</Text>
+        </Pressable>
+
         <Button
           onPress={() => {
             if (!paid) skipStripe();
-            router.replace("/(tabs)");
+            router.replace("/");
           }}
           variant={paid ? "flame" : "ghost"}
           className="mt-1"

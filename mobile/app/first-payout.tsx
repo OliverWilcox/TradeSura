@@ -97,7 +97,7 @@ export default function FirstPayout() {
             <Text className="text-base font-extrabold text-on-light">Share this</Text>
           </Pressable>
           <Pressable
-            onPress={() => router.replace("/(tabs)")}
+            onPress={() => router.replace("/")}
             className="min-h-11 items-center justify-center rounded-2xl border-[1.5px] border-white/55 py-3.5"
           >
             <Text className="font-semibold text-white">Back to dashboard</Text>

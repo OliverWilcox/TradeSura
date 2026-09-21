@@ -8,6 +8,7 @@ import { normaliseClaimCode, resolveClaimCode } from "@/lib/claim";
 import { sendEmail } from "@/lib/email";
 import { engineerWelcomeEmailHtml } from "@/lib/engineer-welcome-email";
 import { notifyEngineer } from "@/lib/sms";
+import { sendPushNotification } from "@/lib/push";
 
 // Everything the sign-up wizard (steps 1-3) collects.
 const SignupData = z.object({
@@ -86,7 +87,12 @@ export async function POST(req: Request) {
       );
     }
     trades = rest.trades;
-    const slug = await uniqueSlug(email.split("@")[0]);
+    // Build Guide v2 Part 13 — the public address derives from the trading
+    // name, never the email local part ("today's /p/info/… is the bug").
+    // /api/settings and /api/onboarding already got this right when a
+    // trading name changes later; this was the one place still keying off
+    // the email.
+    const slug = await uniqueSlug(rest.tradingName);
 
     // Resolve a claim code (C5): fold the letter cell into attribution so it
     // reaches the account, even if the client didn't pass it explicitly.
@@ -141,6 +147,26 @@ export async function POST(req: Request) {
         attribution,
       },
     });
+    // Build Guide v2 Part 6.4 — "Badge-granted is one event with four
+    // effects: push notification ... → strip flips to quiet active →
+    // avatar gets its tick → member-pack shipment fires." This is that
+    // event, for the immediate-register-match path. In practice this call
+    // almost always no-ops today — push permission is asked "after the
+    // first plan goes live" (Part 11), well after signup, so there's no
+    // token to send to yet — but it's the correct trigger point per spec,
+    // and free to include since sendPushNotification no-ops silently
+    // without a registered token. The other place gasSafeVerifiedAt is set
+    // (app/api/onboarding/route.ts) fires the same event; a future
+    // manual-review-resolution path (review #11's escape hatch has no
+    // admin UI yet — see verification-state.ts) will need to call this too
+    // once one exists.
+    if (!rest.gasSafeReviewRequested) {
+      await sendPushNotification(
+        engineer.id,
+        "You're verified",
+        "You're Gas Safe verified — your member pack is on its way",
+      );
+    }
     await track("engineer_signed_up", { type: "ENGINEER", id: engineer.id }, {
       slug,
       heardVia: attribution.heardVia,
@@ -188,7 +214,7 @@ export async function POST(req: Request) {
         // this is the earlier "signed up" stage ping the review also asked for.
         await notifyEngineer(
           referrer.id,
-          `👋 ${engineer.tradingName ?? engineer.firstName ?? "Someone"} just signed up with your referral link.`,
+          `👋 ${engineer.tradingName?.trim() || engineer.firstName || "Someone"} just signed up with your referral link.`,
         );
       }
     }

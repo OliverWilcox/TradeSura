@@ -62,7 +62,7 @@ export async function getOrCreateConnectAccount(engineer: {
     email: engineer.email,
     business_type: engineer.businessType ? BUSINESS_TYPE[engineer.businessType] : undefined,
     business_profile: {
-      name: engineer.tradingName ?? undefined,
+      name: engineer.tradingName?.trim() || undefined,
       // "Get paid" runs before the engineer has a live plan (onboarding step
       // 1 of 4), so this page can 404 for a little while — still the correct
       // URL to have on file, and it's what Stripe otherwise flags as an

@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { CustomerShell } from "@/components/shells";
 import { Card, NotIncluded, Pill, RowLine } from "@/components/ui";
 import { poundsFromPence } from "@/lib/plan-doc";
+import { resolvePlanTier } from "@/lib/plan-tier";
 
 export default async function PortalPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -17,11 +19,11 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   });
   if (!plan) notFound();
 
-  const brand = plan.engineer.tradingName ?? plan.engineer.slug;
+  const brand = brandName(plan.engineer);
   const firstName = plan.engineer.gasSafeName?.split(" ").at(-1) ?? brand;
-  const clauses = (plan.tier?.clauses ?? [])
-    .map((tc) => tc.clause)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
+  // The plan as the customer agreed it (snapshot), else the live tier.
+  const tier = resolvePlanTier(plan);
+  const clauses = tier?.clauses ?? [];
   const property = plan.customer.properties[0];
   const nextService = plan.activatedAt
     ? new Date(new Date(plan.activatedAt).setFullYear(plan.activatedAt.getFullYear() + 1))
@@ -37,7 +39,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
         <Card variant="raised">
           <div className="flex justify-between items-baseline">
             <p className="font-semibold">
-              {plan.tier?.name} — {brand}
+              {tier?.name} — {brand}
             </p>
             <span className="font-mono font-semibold">
               {poundsFromPence(plan.priceMonthlyPence ?? 0)}/mo
@@ -71,10 +73,10 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
           <h2 className="text-sm font-semibold mb-1">What your plan includes</h2>
           {clauses.map((c) => (
             <RowLine
-              key={c.id}
+              key={c.code}
               left={
                 <>
-                  <span className="text-ok font-bold mr-1.5">✓</span>
+                  <span className="text-ink font-bold mr-1.5">✓</span>
                   {c.title}
                 </>
               }

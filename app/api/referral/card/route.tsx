@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { activeMonthlyPence } from "@/lib/plans";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export async function GET(req: Request) {
 
   const { totalPence } = await activeMonthlyPence(engineer.id);
   const yearly = Math.round((totalPence * 12) / 100).toLocaleString();
-  const brand = engineer.tradingName ?? engineer.slug;
+  const brand = brandName(engineer);
 
   return new ImageResponse(
     (

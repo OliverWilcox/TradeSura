@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { sendSms } from "@/lib/sms";
 import { normaliseUkPhone } from "@/lib/phone";
 import { newPlanRef, newToken } from "@/lib/plans";
 import { createEmbeddedSubscription, publishableKey } from "@/lib/stripe";
+import { snapshotTier } from "@/lib/plan-tier";
+import type { Prisma } from "@/lib/generated/prisma/client";
 
 const Body = z.object({
   tierId: z.string().min(1),
@@ -32,13 +35,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   if (!engineer) return NextResponse.json({ error: "Not found." }, { status: 404 });
   if (!engineer.stripeAccountId || !engineer.stripeChargesEnabled) {
     return NextResponse.json(
-      { error: `${engineer.tradingName ?? "This engineer"} hasn't finished their payment setup yet.` },
+      { error: `${engineer.tradingName?.trim() || "This engineer"} hasn't finished their payment setup yet.` },
       { status: 409 },
     );
   }
 
   const tier = await prisma.planTier.findFirst({
-    where: { id: b.tierId, engineerId: engineer.id, archived: false },
+    where: { id: b.tierId, engineerId: engineer.id, status: "LIVE" },
+    include: { clauses: { include: { clause: true } } },
   });
   if (!tier) return NextResponse.json({ error: "Pick a plan." }, { status: 400 });
 
@@ -77,13 +81,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       customerId: customer.id,
       tierId: tier.id,
       priceMonthlyPence: tier.priceMonthlyPence,
+      // LAW (plan wording is locked) — freeze the tier as agreed here too.
+      agreedTier: snapshotTier(tier) as unknown as Prisma.InputJsonValue,
       signupToken: newToken(),
       portalToken: newToken(),
       linkOpenedAt: new Date(),
     },
   });
 
-  const brand = engineer.tradingName ?? engineer.slug;
+  const brand = brandName(engineer);
   const base = `${process.env.APP_URL}/p/${engineer.slug}/signup/${plan.signupToken}`;
 
   await track("tier_selected", { type: "CUSTOMER", id: customer.id }, {

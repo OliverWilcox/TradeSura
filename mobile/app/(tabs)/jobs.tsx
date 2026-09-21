@@ -24,66 +24,63 @@ type JobsData = { upcoming: DueItem[]; overdue: DueItem[]; past: PastItem[] };
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
-function CalendarCard({ month, jobDates }: { month: Date; jobDates: Set<number> }) {
-  const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const leadBlanks = (first.getDay() + 6) % 7; // Monday-first
+// Build Guide v2 Part 11 — "the calendar is a compact week strip... it earns
+// more size only with content." Replaces the old full month grid: this
+// shows the current Mon–Sun only, with a dot under days that have a job.
+function WeekStrip({ jobDates }: { jobDates: Set<string> }) {
   const today = new Date();
-  const isThisMonth =
-    today.getMonth() === month.getMonth() && today.getFullYear() === month.getFullYear();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
 
-  const cells: (number | null)[] = [
-    ...Array.from({ length: leadBlanks }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
-  const weeks: (number | null)[][] = [];
-  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+  const key = (d: Date) => d.toISOString().slice(0, 10);
 
   return (
     <Card>
-      <Text className="mb-2 font-semibold text-sm text-ink">
-        {month.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
-      </Text>
       <View className="flex-row">
-        {WEEKDAYS.map((d, i) => (
-          <Text key={i} className="flex-1 py-1 text-center font-mono text-[10px] text-faint">
-            {d}
-          </Text>
-        ))}
-      </View>
-      {weeks.map((week, wi) => (
-        <View key={wi} className="flex-row">
-          {week.map((day, di) => {
-            if (day === null) return <View key={di} className="flex-1 py-1.5" />;
-            const hasJob = jobDates.has(day);
-            const isToday = isThisMonth && today.getDate() === day;
-            return (
-              <View key={di} className="flex-1 items-center py-1.5">
-                <View
-                  className={`h-7 w-7 items-center justify-center rounded-lg ${
-                    isToday ? "bg-flame" : hasJob ? "bg-flame-tint" : ""
-                  }`}
-                >
-                  <Text
-                    className={`text-xs ${
-                      isToday
-                        ? "font-semibold text-white"
-                        : hasJob
-                          ? "font-semibold text-flame-deep"
-                          : "text-ink"
-                    }`}
-                  >
-                    {day}
-                  </Text>
-                </View>
+        {days.map((d, i) => {
+          const isToday = key(d) === key(today);
+          const hasJob = jobDates.has(key(d));
+          return (
+            <View key={i} className="flex-1 items-center gap-1 py-1">
+              <Text className="font-mono text-[10px] text-faint">{WEEKDAYS[i]}</Text>
+              <View
+                className={`h-7 w-7 items-center justify-center rounded-lg ${isToday ? "bg-flame" : ""}`}
+              >
+                <Text className={`text-xs ${isToday ? "font-semibold text-white" : "text-ink"}`}>
+                  {d.getDate()}
+                </Text>
               </View>
-            );
-          })}
-        </View>
-      ))}
+              <View
+                className={`h-1 w-1 rounded-full ${hasJob ? "bg-flame" : "bg-transparent"}`}
+              />
+            </View>
+          );
+        })}
+      </View>
     </Card>
   );
+}
+
+// Build Guide v2 Part 11 — "Rows show what the machine did or will do
+// ('Reminder sent — she can reply to book.' / '3-day text goes out
+// Tuesday.')." The reminder engine's actual sends live in OutboundSms, but
+// its offsets (30/14/3 days) are fixed, so which one is next is derivable
+// straight from the due date without a second query.
+const REMINDER_OFFSETS = [30, 14, 3] as const;
+
+function reminderLine(dueDate: Date): string {
+  const daysUntilDue = (dueDate.getTime() - Date.now()) / 864e5;
+  const nextOffset = REMINDER_OFFSETS.find((o) => daysUntilDue >= o);
+  if (nextOffset === undefined) return "Reminder sent — they can reply to book.";
+  const sendDate = new Date(dueDate);
+  sendDate.setDate(sendDate.getDate() - nextOffset);
+  const weekday = sendDate.toLocaleDateString("en-GB", { weekday: "long" });
+  return `${nextOffset}-day text goes out ${weekday}.`;
 }
 
 function JobRow({
@@ -98,7 +95,10 @@ function JobRow({
   offerBusy?: boolean;
 }) {
   return (
-    <View className="flex-row items-center justify-between gap-2 border-b border-line-soft py-2.5 last:border-b-0">
+    <Pressable
+      onPress={() => router.push(`/customer/${d.customerId}`)}
+      className="flex-row items-center justify-between gap-2 border-b border-line-soft py-2.5 last:border-b-0"
+    >
       <View className="shrink">
         <Text className="font-bold text-sm text-ink">{d.customerName}</Text>
         <Micro>
@@ -110,8 +110,8 @@ function JobRow({
             .toUpperCase()}
         </Micro>
         {d.onPlan ? (
-          <Text className="mt-0.5 font-sans text-[11px] text-ok">
-            ✓ We&apos;ve messaged them to book a weekday with you
+          <Text className="mt-0.5 font-sans text-[11px] text-muted">
+            {reminderLine(new Date(d.dueDate))}
           </Text>
         ) : (
           <Text className="mt-0.5 font-sans text-[11px] text-muted">
@@ -122,7 +122,7 @@ function JobRow({
       {urgent ? (
         <Pill tone="warn">URGENT</Pill>
       ) : d.onPlan ? (
-        <Pill tone="ok">AUTO</Pill>
+        <Pill tone="info">AUTO</Pill>
       ) : onOffer ? (
         <Button variant="flame" className="px-3 py-1.5" onPress={onOffer} disabled={offerBusy}>
           {offerBusy ? "…" : "Book + offer"}
@@ -130,7 +130,7 @@ function JobRow({
       ) : (
         <Pill tone="off">NO PLAN</Pill>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -182,20 +182,9 @@ export default function Jobs() {
   soon.setDate(soon.getDate() + 30);
 
   const upcoming = data?.upcoming ?? [];
-  const hasJobThisMonth = upcoming.some((d) => {
-    const dd = new Date(d.dueDate);
-    return dd.getMonth() === now.getMonth() && dd.getFullYear() === now.getFullYear();
-  });
-  const calendarMonth =
-    hasJobThisMonth || upcoming.length === 0 ? now : new Date(upcoming[0].dueDate);
-  const jobDates = new Set(
-    upcoming
-      .map((d) => new Date(d.dueDate))
-      .filter(
-        (dd) => dd.getMonth() === calendarMonth.getMonth() && dd.getFullYear() === calendarMonth.getFullYear(),
-      )
-      .map((dd) => dd.getDate()),
-  );
+  // Part 11 — the strip only ever shows this Mon–Sun, so it only needs to
+  // know which of those 7 dates have a job.
+  const jobDates = new Set(upcoming.map((d) => new Date(d.dueDate).toISOString().slice(0, 10)));
 
   const nextJobs = showAllNext ? upcoming : upcoming.slice(0, 3);
   const pastJobs = data ? (showAllPast ? data.past : data.past.slice(0, 3)) : [];
@@ -203,13 +192,14 @@ export default function Jobs() {
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader title="Reminders" />
+        <AppHeader />
       </SafeAreaView>
       <ScrollView
         className="flex-1"
         contentContainerClassName="gap-3.5 px-4 pb-8 pt-4"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        <Text className="text-[28px] font-extrabold tracking-tight text-ink">Reminders</Text>
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
         {data && (
@@ -218,7 +208,7 @@ export default function Jobs() {
               Gas engineers fit and forget. You won&apos;t — plan members are reminded and booked
               automatically; everyone else is a one-tap pitch.
             </Text>
-            <CalendarCard month={calendarMonth} jobDates={jobDates} />
+            <WeekStrip jobDates={jobDates} />
 
             {data.overdue.length > 0 && (
               <Card>
@@ -294,7 +284,7 @@ export default function Jobs() {
                           .toUpperCase()}
                       </Micro>
                     </View>
-                    <Pill tone="ok">DONE</Pill>
+                    <Pill tone="info">DONE</Pill>
                   </View>
                 ))
               )}
@@ -304,12 +294,17 @@ export default function Jobs() {
               <Text className="mb-1 font-semibold text-sm text-ink">Reminder engine</Text>
               <View className="flex-row items-center justify-between border-b border-line-soft py-2.5">
                 <Text className="font-sans text-sm text-ink">Customer reminders</Text>
-                <Pill tone="ok">AUTO · SMS · 30/14/3 DAYS</Pill>
+                <Pill tone="info">AUTO · SMS · 30/14/3 DAYS</Pill>
               </View>
-              <View className="flex-row items-center justify-between py-2.5">
+              <View className="flex-row items-center justify-between border-b border-line-soft py-2.5">
                 <Text className="font-sans text-sm text-ink">Booking</Text>
                 <Text className="font-sans text-xs text-muted">Customer replies to book</Text>
               </View>
+              {/* Part 11 — "Tapping a row opens that customer's detail,
+                  where Mark service done lives — the footer line says so." */}
+              <Text className="pt-2.5 font-sans text-[11px] text-faint">
+                Tap a job to open their page — Mark service done lives there.
+              </Text>
             </Card>
 
             <Button variant="copper" onPress={() => router.push("/offer")}>

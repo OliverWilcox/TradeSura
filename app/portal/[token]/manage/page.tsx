@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { CustomerShell } from "@/components/shells";
 import { CancelFlow } from "@/components/cancel-flow";
 import { poundsFromPence } from "@/lib/plan-doc";
@@ -12,7 +13,7 @@ export default async function ManagePage({ params }: { params: Promise<{ token: 
   });
   if (!plan) notFound();
 
-  const brand = plan.engineer.tradingName ?? plan.engineer.slug;
+  const brand = brandName(plan.engineer);
   return (
     <CustomerShell tradingName={brand} sub={`Manage plan · ${plan.ref}`}>
       <CancelFlow

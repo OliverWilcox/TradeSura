@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, Share } from "react-native";
+import { View, Text, ScrollView, RefreshControl, Pressable, Share } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, apiText, ApiError, getHasSeenFirstPayout, setHasSeenFirstPayout } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, RowLine, Button } from "@/components/ui";
+import { RingProgress, payoutWeekProgress } from "@/components/ring-progress";
 
 type FailedPlan = { id: string; customerName: string; priceMonthlyPence: number };
 type StripeSummary = {
@@ -12,6 +13,7 @@ type StripeSummary = {
   nextPayout: { amountPence: number; arrivalDate: string; status: string } | null;
   history: { id: string; amountPence: number; arrivalDate: string; status: string }[];
 };
+type Standing = { state: string; tone: "amber" | "red" | "quiet"; text: string };
 type PayoutsData = {
   totalPence: number;
   count: number;
@@ -23,6 +25,8 @@ type PayoutsData = {
   stripe: StripeSummary | null;
   stripeError: boolean;
   accountRestricted: boolean;
+  standing: Standing;
+  payments: Standing;
   failedPlans: FailedPlan[];
 };
 
@@ -102,41 +106,66 @@ export default function Payouts() {
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader title="Payouts" />
+        <AppHeader />
       </SafeAreaView>
       <ScrollView
         className="flex-1"
         contentContainerClassName="gap-3.5 px-4 pb-8 pt-4"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        <Text className="text-[28px] font-extrabold tracking-tight text-ink">Payouts</Text>
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
-        {data?.accountRestricted && (
+        {/* Part 12 LAW — "an amber slim banner... reads the standing strip's
+            truth source. Red stays reserved for genuinely broken." Banned/
+            paused (genuinely broken) still gets red; Stripe mid-onboarding
+            is amber, not red. */}
+        {data && (data.standing.state === "BANNED" || data.standing.state === "PAUSED") && (
           <Card className="border-danger-tint bg-danger-tint">
-            <Text className="font-semibold text-sm text-danger">
-              Stripe needs more information
-            </Text>
-            <Text className="mt-1 font-sans text-xs text-danger">
-              Your payouts are on hold until you finish verifying your account. Open the payment
-              setup from More → Payments to complete it.
-            </Text>
+            <Text className="font-semibold text-sm text-danger">{data.standing.text}</Text>
           </Card>
+        )}
+        {data && data.payments.tone === "amber" && data.standing.state !== "BANNED" && data.standing.state !== "PAUSED" && (
+          <Pressable onPress={() => router.push("/more")}>
+            <Card className="border-warn-tint bg-warn-tint">
+              <Text className="font-semibold text-sm text-warn">{data.payments.text}</Text>
+            </Card>
+          </Pressable>
         )}
 
         {data && (
           <>
-            {/* E11 — the next-payout figure is the screen's money moment. */}
+            {/* E11 / Part 12 — "NEXT PAYOUT hero with the ring docked,"
+                drawing in the payout week's progress (see
+                components/ring-progress.tsx for the LAW exception this is
+                built under). */}
             <Card variant="hero">
-              <Micro>
-                {s?.nextPayout ? `Next payout · ${shortDate(s.nextPayout.arrivalDate)}` : "Expected monthly payout"}
-              </Micro>
-              <Text className="mt-0.5 font-mono font-semibold text-3xl text-copper">
-                {pounds(s?.nextPayout ? s.nextPayout.amountPence : expectedToBank)}
-              </Text>
-              <Text className="mt-1 font-sans text-xs text-night-muted">
-                {s
-                  ? `${pounds(s.availablePence)} available · ${pounds(s.pendingPence)} still clearing`
-                  : `${data.count} active plan${data.count === 1 ? "" : "s"} · paid out direct to your bank`}
+              <View className="flex-row items-center gap-3">
+                <RingProgress size={44} progress={payoutWeekProgress()} dormant={data.count === 0} />
+                <View className="flex-1">
+                  <Micro>
+                    {s?.nextPayout ? `Next payout · ${shortDate(s.nextPayout.arrivalDate)}` : "Expected monthly payout"}
+                  </Micro>
+                  <Text className="mt-0.5 font-mono font-semibold text-3xl text-copper">
+                    {pounds(s?.nextPayout ? s.nextPayout.amountPence : expectedToBank)}
+                  </Text>
+                </View>
+              </View>
+              <Text className="mt-2 font-sans text-xs text-night-muted">
+                {/* Part 12 — "before anything's live" means before any PLAN
+                    is live, independent of Stripe connection status. An
+                    engineer can have Stripe connected with zero plans (this
+                    is the common early-onboarding order — payments first,
+                    plan second per Part 5), and the guide's empty-state
+                    line must still win in that case, not the live Stripe
+                    balance (found live-testing a real account in exactly
+                    this state — the balance line used to take priority over
+                    `data.count === 0` here). */}
+                {data.count === 0
+                  ? "Payouts start when your first plan goes live — paid every Friday."
+                  : s
+                    ? `${pounds(s.availablePence)} available · ${pounds(s.pendingPence)} still clearing`
+                    : `${data.count} active plan${data.count === 1 ? "" : "s"} · paid out direct to your bank`}
               </Text>
               {!s && !data.stripeError && (
                 <Text className="mt-1 font-sans text-[11px] text-night-muted">
@@ -199,7 +228,7 @@ export default function Payouts() {
                     key={h.id}
                     left={shortDate(h.arrivalDate)}
                     right={
-                      <Text className="font-mono font-semibold text-copper">{pounds(h.amountPence)} ✓</Text>
+                      <Text className="font-mono font-semibold text-copper">{pounds(h.amountPence)}</Text>
                     }
                   />
                 ))}

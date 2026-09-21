@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { CustomerShell } from "@/components/shells";
 import { SignupConfirmed } from "@/components/signup-confirmed";
 
@@ -15,7 +16,7 @@ export default async function ConfirmedPage({
   });
   if (!plan || plan.engineer.slug !== slug) notFound();
 
-  const brand = plan.engineer.tradingName ?? plan.engineer.slug;
+  const brand = brandName(plan.engineer);
   return (
     <CustomerShell tradingName={brand} sub={`Plan ${plan.ref} · ${plan.customer.firstName} ${plan.customer.lastName}`}>
       <SignupConfirmed

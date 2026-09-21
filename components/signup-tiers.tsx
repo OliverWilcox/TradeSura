@@ -25,15 +25,24 @@ type Started = {
 
 export function SignupTiers({
   token,
-  tiers,
+  tiers: rawTiers,
   engineerName,
+  pinnedTierId,
+  pinnedGreeting,
 }: {
   token: string;
   tiers: Tier[];
   engineerName: string;
+  /** Build Guide v2 Part 15.1 — the personal-link greeting: "{Engineer
+   * first name} suggested {plan name}" pins that plan first. */
+  pinnedTierId?: string | null;
+  pinnedGreeting?: string | null;
 }) {
+  const tiers = pinnedTierId
+    ? [...rawTiers].sort((a, b) => (a.id === pinnedTierId ? -1 : b.id === pinnedTierId ? 1 : 0))
+    : rawTiers;
   const [selectedId, setSelectedId] = useState(
-    tiers.find((t) => t.isRecommended)?.id ?? tiers[0]?.id,
+    pinnedTierId ?? tiers.find((t) => t.isRecommended)?.id ?? tiers[0]?.id,
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -85,6 +94,9 @@ export function SignupTiers({
 
   return (
     <>
+      {pinnedGreeting && (
+        <p className="text-sm font-semibold text-flame-deep">{pinnedGreeting}</p>
+      )}
       {tiers.map((t) => (
         <button
           key={t.id}

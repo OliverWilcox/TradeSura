@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLAUSE_TEMPLATES, TIER_PRESETS, suggestedPricePence } from "@/lib/clauses";
+import { CLAUSE_TEMPLATES, TIER_PRESETS, suggestedPricePence, withRequiredClauses } from "@/lib/clauses";
 import { checkWording } from "@/lib/compliance/blocklist";
 
 describe("plan service library", () => {
@@ -34,5 +34,28 @@ describe("plan service library", () => {
   it("suggested price stacks uplifts on the base", () => {
     expect(suggestedPricePence([])).toBe(700);
     expect(suggestedPricePence([200, 150, null, 0])).toBe(1050);
+  });
+
+  // Build Guide v2 Part 7.1 LAW — required options are pre-ticked and
+  // unremovable. This is the standing proof that no request, however
+  // malformed, can produce a plan missing one.
+  describe("withRequiredClauses", () => {
+    it("adds every CORE code even from an empty selection", () => {
+      const core = CLAUSE_TEMPLATES.filter((c) => c.kind === "CORE").map((c) => c.code);
+      expect(withRequiredClauses([]).sort()).toEqual(core.sort());
+    });
+
+    it("never drops a CORE code the caller tries to omit", () => {
+      const result = withRequiredClauses(["NO_CALLOUT_FEE"]);
+      for (const c of CLAUSE_TEMPLATES.filter((c) => c.kind === "CORE")) {
+        expect(result).toContain(c.code);
+      }
+      expect(result).toContain("NO_CALLOUT_FEE");
+    });
+
+    it("de-duplicates when the caller already included a CORE code", () => {
+      const result = withRequiredClauses(["ANNUAL_SERVICE", "ANNUAL_SERVICE"]);
+      expect(result.filter((c) => c === "ANNUAL_SERVICE")).toHaveLength(1);
+    });
   });
 });

@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Link, router } from "expo-router";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { Lockup } from "@/components/ui";
 
 export default function SignIn() {
   const { signIn } = useAuth();
@@ -25,7 +26,7 @@ export default function SignIn() {
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
       await signIn(data.token);
-      router.replace("/(tabs)");
+      router.replace("/");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Something went wrong.");
     } finally {
@@ -42,11 +43,9 @@ export default function SignIn() {
         >
           <View className="flex-1 justify-center gap-2.5">
             <Text className="font-mono font-medium text-[11px] uppercase tracking-[3px] text-brand-blue-lift">
-              Care Plan Platform
+              Care plan platform
             </Text>
-            <Text className="font-bold text-[42px] uppercase leading-[1.05] tracking-wide text-night-text">
-              Trade<Text className="text-brand-blue-lift">Sura</Text>
-            </Text>
+            <Lockup height={44} />
             <Text className="mt-1 max-w-[30ch] font-sans text-[15px] leading-5 text-night-muted">
               Care plans your customers sign at the end of the job, collected by Direct Debit.
             </Text>

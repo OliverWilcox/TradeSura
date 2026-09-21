@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { verifyGasSafe } from "@/lib/gas-safe";
 import { uniqueSlug } from "@/lib/slug";
+import { sendPushNotification } from "@/lib/push";
 
 const Body = z.object({
   regNo: z.string().min(1).max(20),
@@ -43,5 +44,15 @@ export async function POST(req: Request) {
       slug,
     },
   });
+  // Build Guide v2 Part 6.4 — badge-granted's push effect (see
+  // app/api/auth/request/route.ts for the fuller note). This route isn't
+  // currently called by the mobile app (no /api/onboarding caller found),
+  // but it's real, reachable code that grants the badge, so it fires the
+  // same event as the signup path for whenever something does call it.
+  await sendPushNotification(
+    engineerId,
+    "You're verified",
+    "You're Gas Safe verified — your member pack is on its way",
+  );
   return NextResponse.json({ ok: true, slug });
 }

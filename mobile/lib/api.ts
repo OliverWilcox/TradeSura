@@ -1,4 +1,22 @@
-import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
+import * as ExpoSecureStore from "expo-secure-store";
+
+// expo-secure-store has no web implementation (getItemAsync throws
+// "getValueWithKeyAsync is not a function"), which made `expo start --web`
+// die on first render. Web is a dev-preview surface only (mobile/CLAUDE.md),
+// so a localStorage shim is fine there; native keeps the real secure store.
+const SecureStore =
+  Platform.OS === "web"
+    ? {
+        getItemAsync: async (k: string) => globalThis.localStorage?.getItem(k) ?? null,
+        setItemAsync: async (k: string, v: string) => {
+          globalThis.localStorage?.setItem(k, v);
+        },
+        deleteItemAsync: async (k: string) => {
+          globalThis.localStorage?.removeItem(k);
+        },
+      }
+    : ExpoSecureStore;
 
 const TOKEN_KEY = "ts_engineer_token";
 const STRIPE_SKIPPED_KEY = "ts_stripe_skipped";
@@ -83,6 +101,11 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   try {
     res = await fetch(`${API_URL}${path}`, {
       ...init,
+      // Web preview only: lets a Vercel Deployment Protection session
+      // cookie (set by signing in through Vercel's own SSO prompt on the
+      // API origin directly) ride along on these cross-origin calls. A
+      // no-op for native — RN's fetch has no browser cookie jar to send.
+      credentials: "include",
       headers: {
         ...(init.body && !(init.body instanceof FormData)
           ? { "Content-Type": "application/json" }
@@ -114,6 +137,7 @@ export async function apiText(path: string): Promise<string> {
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
+      credentials: "include",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
   } catch (e) {

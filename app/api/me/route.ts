@@ -40,8 +40,13 @@ export async function GET() {
     }
   }
 
-  const [tierCount, customerCount, activePlans] = await Promise.all([
-    prisma.planTier.count({ where: { engineerId, archived: false } }),
+  // Build Guide v2 Part 7.3 — the routing distinction is "any plan at all"
+  // (anyTierCount, any status: zero → every door opens the wizard directly)
+  // vs. "a plan is actually offerable" (hasPlan: LIVE only — gates the
+  // Add-customer hero, the offer flow, and onboarding's step 2).
+  const [anyTierCount, liveTierCount, customerCount, activePlans] = await Promise.all([
+    prisma.planTier.count({ where: { engineerId } }),
+    prisma.planTier.count({ where: { engineerId, status: "LIVE" } }),
     prisma.customer.count({ where: { engineerId } }),
     prisma.plan.count({ where: { engineerId, status: "ACTIVE" } }),
   ]);
@@ -68,7 +73,8 @@ export async function GET() {
     stripeConnected: engineer.stripeChargesEnabled,
     stripeDetailsSubmitted: engineer.stripeDetailsSubmitted,
     stripePayoutsEnabled: engineer.stripePayoutsEnabled,
-    hasPlan: tierCount > 0,
+    hasPlan: liveTierCount > 0,
+    anyTierCount,
     customerCount,
     activePlans,
     packRequestedAt: engineer.packRequestedAt,

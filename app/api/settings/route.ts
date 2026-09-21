@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { uniqueSlug } from "@/lib/slug";
+import { standingCopy, gasSafeStatus, paymentsStatus } from "@/lib/verification-state";
 
 const Body = z.object({
   tradingName: z.string().min(2).max(80),
@@ -28,6 +29,13 @@ export async function GET() {
     businessType: engineer.businessType,
     companyNumber: engineer.companyNumber,
     postcode: engineer.postcode,
+    // Part 6.4/17.3 — the same truth source the dashboard strip and Payouts'
+    // banner read. `standing` is the collapsed single-line ladder (used only
+    // when banned/paused outranks everything else); `gasSafe`/`payments` are
+    // Part 13's two independent status lines.
+    standing: standingCopy(engineer),
+    gasSafe: gasSafeStatus(engineer),
+    payments: paymentsStatus(engineer),
   });
 }
 

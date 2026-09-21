@@ -2,35 +2,54 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
-import { CLAUSE_TEMPLATES, TIER_PRESETS } from "@/lib/clauses";
+import { TIER_PRESETS, TIER_PRICE_MIN_PENCE, TIER_PRICE_MAX_PENCE, withRequiredClauses } from "@/lib/clauses";
 
-// Mobile counterpart to the tier list query in app/plans/page.tsx.
+// Build Guide v2 Part 7 — "My plans" hub. Every plan the engineer has ever
+// started, any status: the hub (not this endpoint) decides whether a draft,
+// a live plan or a stopped one gets its own card. There is no "archived and
+// hidden" state any more and no cap on how many plans exist.
 export async function GET() {
   const engineerId = await getEngineerId();
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   const tiers = await prisma.planTier.findMany({
-    where: { engineerId, archived: false },
+    where: { engineerId },
     orderBy: { sortOrder: "asc" },
-    include: { clauses: { include: { clause: true } }, _count: { select: { plans: true } } },
+    include: {
+      clauses: { include: { clause: true }, orderBy: { clause: { sortOrder: "asc" } } },
+      // "N customers" on the card is live+paused; "ever had a customer" (any
+      // status, including cancelled) is what makes a draft undeletable — see
+      // Part 7.4's delete rule.
+      _count: { select: { plans: true } },
+    },
   });
+  const activeCounts = await prisma.plan.groupBy({
+    by: ["tierId"],
+    where: { engineerId, status: { in: ["ACTIVE", "PAUSED"] } },
+    _count: true,
+  });
+  const activeByTier = new Map(activeCounts.map((c) => [c.tierId, c._count]));
+
   return NextResponse.json(
     tiers.map((t) => ({
       id: t.id,
       name: t.name,
       priceMonthlyPence: t.priceMonthlyPence,
       isRecommended: t.isRecommended,
+      status: t.status,
       customLabels: t.customLabels,
       clauseTitles: t.clauses.map((tc) => tc.clause.title),
-      planCount: t._count.plans,
+      activePlanCount: activeByTier.get(t.id) ?? 0,
+      everHadCustomer: t._count.plans > 0,
     })),
   );
 }
 
-// POST /api/tiers { template: "Boiler Care" } → create that one named preset
-// (E6: pick a template, then customise and publish).
-// POST /api/tiers { preset: true } → create all 3 recommended tiers (two-tap).
-// POST /api/tiers {} → create one blank tier.
+// POST /api/tiers — always creates a DRAFT (Part 7.3: nothing is live until
+// "Make this plan live" — see /api/tiers/[tierId]/publish). Pass a full
+// wizard payload to create it pre-filled (the wizard's own "keep as draft"
+// exit, and quick-start templates); publishNow skips straight to LIVE (the
+// wizard's Step 4 "Make this plan live" on a brand-new plan).
 export async function POST(req: Request) {
   const engineerId = await getEngineerId();
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
@@ -39,74 +58,50 @@ export async function POST(req: Request) {
   const clauses = await prisma.clauseTemplate.findMany();
   const byCode = new Map(clauses.map((c) => [c.code, c.id]));
 
-  const existing = await prisma.planTier.count({ where: { engineerId, archived: false } });
-  if (existing >= 3) {
-    return NextResponse.json({ error: "You already have three tiers." }, { status: 400 });
-  }
+  let name = "New plan";
+  let priceMonthlyPence = 1200;
+  let clauseCodes: string[] = [];
 
   if (typeof body.template === "string") {
     const p = TIER_PRESETS.find((t) => t.name === body.template);
     if (!p) return NextResponse.json({ error: "Unknown template." }, { status: 400 });
-    const tier = await prisma.planTier.create({
-      data: {
-        engineerId,
-        name: p.name,
-        priceMonthlyPence: p.priceMonthlyPence,
-        isRecommended: p.isRecommended,
-        sortOrder: existing,
-        clauses: { create: p.clauseCodes.map((code) => ({ clauseId: byCode.get(code)! })) },
-      },
-    });
-    await track("tier_created", { type: "ENGINEER", id: engineerId }, {
-      tierId: tier.id,
-      name: tier.name,
-      priceMonthlyPence: tier.priceMonthlyPence,
-      template: p.name,
-    });
-    return NextResponse.json({ ok: true, id: tier.id });
+    name = p.name;
+    priceMonthlyPence = p.priceMonthlyPence;
+    clauseCodes = [...p.clauseCodes];
   }
+  if (typeof body.name === "string" && body.name.trim()) name = body.name.trim().slice(0, 28);
+  if (Number.isInteger(body.priceMonthlyPence)) priceMonthlyPence = body.priceMonthlyPence;
+  if (Array.isArray(body.clauseCodes)) clauseCodes = body.clauseCodes;
 
-  if (body.preset) {
-    const created = [];
-    for (const [i, p] of TIER_PRESETS.entries()) {
-      const tier = await prisma.planTier.create({
-        data: {
-          engineerId,
-          name: p.name,
-          priceMonthlyPence: p.priceMonthlyPence,
-          isRecommended: p.isRecommended,
-          sortOrder: i,
-          clauses: {
-            create: p.clauseCodes.map((code) => ({ clauseId: byCode.get(code)! })),
-          },
-        },
-      });
-      await track("tier_created", { type: "ENGINEER", id: engineerId }, {
-        tierId: tier.id,
-        name: tier.name,
-        priceMonthlyPence: tier.priceMonthlyPence,
-        preset: true,
-      });
-      created.push(tier.id);
-    }
-    return NextResponse.json({ ok: true, created });
-  }
+  priceMonthlyPence = Math.min(
+    TIER_PRICE_MAX_PENCE,
+    Math.max(TIER_PRICE_MIN_PENCE, priceMonthlyPence),
+  );
+  // Part 7.1 LAW — required options are pre-ticked and unremovable. Enforced
+  // here too, not just in the picker, so a malformed request can't drop one.
+  const finalCodes = withRequiredClauses(clauseCodes).filter((c) => byCode.has(c));
 
-  const core = CLAUSE_TEMPLATES.filter((c) => c.kind === "CORE").map((c) => c.code);
+  const existing = await prisma.planTier.count({ where: { engineerId } });
   const tier = await prisma.planTier.create({
     data: {
       engineerId,
-      name: `Tier ${existing + 1}`,
-      priceMonthlyPence: 1200,
+      name,
+      priceMonthlyPence,
       sortOrder: existing,
-      clauses: { create: core.map((code) => ({ clauseId: byCode.get(code)! })) },
+      status: body.publishNow === true ? "LIVE" : "DRAFT",
+      customLabels: Array.isArray(body.customLabels) ? body.customLabels : [],
+      clauses: { create: finalCodes.map((code) => ({ clauseId: byCode.get(code)! })) },
     },
   });
-  await track("tier_created", { type: "ENGINEER", id: engineerId }, {
+  await track(tier.status === "LIVE" ? "plan_live" : "plan_draft_saved", { type: "ENGINEER", id: engineerId }, {
     tierId: tier.id,
     name: tier.name,
     priceMonthlyPence: tier.priceMonthlyPence,
-    preset: false,
+    template: typeof body.template === "string" ? body.template : undefined,
   });
-  return NextResponse.json({ ok: true, id: tier.id });
+  const engineer = await prisma.engineer.findUnique({
+    where: { id: engineerId },
+    select: { slug: true },
+  });
+  return NextResponse.json({ ok: true, id: tier.id, status: tier.status, slug: engineer?.slug ?? null });
 }

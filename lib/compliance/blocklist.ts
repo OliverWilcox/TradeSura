@@ -16,6 +16,15 @@ const BLOCKED: { re: RegExp; label: string; suggestCode: string }[] = [
     suggestCode: "PRIORITY_48H",
   },
   { re: /\binsurance\b/i, label: "insurance", suggestCode: "ANNUAL_SERVICE" },
+  // Build Guide v2 Part 18 blocklist — bare "guarantee" and "emergency
+  // response" are banned anywhere a customer could read them, not just in
+  // the "guaranteed fix" phrasing above.
+  { re: /\bguarantee[sd]?\b/i, label: "guarantee", suggestCode: "PRIORITY_48H" },
+  {
+    re: /\bemergency\s+(response|call[\s-]?outs?|cover)\b/i,
+    label: "emergency response",
+    suggestCode: "PRIORITY_48H",
+  },
   {
     re: /\bcover(ed)?\s+(for|against)\s+break[\s-]?downs?\b/i,
     label: "cover for breakdowns",

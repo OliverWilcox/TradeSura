@@ -4,6 +4,7 @@ import { getEngineerId } from "@/lib/auth";
 import { activeMonthlyPence } from "@/lib/plans";
 import { appFeePence } from "@/lib/clauses";
 import { getPayoutSummary, stripeConfigured, type PayoutSummary } from "@/lib/stripe";
+import { standingCopy, paymentsStatus } from "@/lib/verification-state";
 
 // E11 — Payouts & collections. When the engineer's Stripe account is live this
 // returns real balance + payout history; until then it falls back to the
@@ -88,6 +89,12 @@ export async function GET() {
     stripe,
     stripeError,
     accountRestricted: Boolean(engineer.stripeAccountId) && !engineer.stripeChargesEnabled,
+    // Part 12 LAW — "an amber slim banner... it reads the standing strip's
+    // truth source. Red stays reserved for genuinely broken." `standing`
+    // covers banned/paused (genuinely red); `payments` covers Stripe
+    // specifically (amber while mid-onboarding).
+    standing: standingCopy(engineer),
+    payments: paymentsStatus(engineer),
     failedPlans: failedPlans.map((p) => ({
       id: p.id,
       customerName: `${p.customer.firstName} ${p.customer.lastName}`,

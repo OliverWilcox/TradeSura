@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { createEmbeddedSubscription, publishableKey } from "@/lib/stripe";
+import { snapshotTier } from "@/lib/plan-tier";
+import type { Prisma } from "@/lib/generated/prisma/client";
 
 const Body = z.object({ tierId: z.string().min(1) });
 
@@ -21,14 +24,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   }
 
   const tier = await prisma.planTier.findFirst({
-    where: { id: parsed.data.tierId, engineerId: plan.engineerId, archived: false },
+    where: { id: parsed.data.tierId, engineerId: plan.engineerId, status: "LIVE" },
+    include: { clauses: { include: { clause: true } } },
   });
   if (!tier) return NextResponse.json({ error: "Pick a plan." }, { status: 400 });
 
   if (!plan.engineer.stripeAccountId || !plan.engineer.stripeChargesEnabled) {
     return NextResponse.json(
       {
-        error: `${plan.engineer.tradingName ?? "Your engineer"} hasn't finished their payment setup yet — let them know.`,
+        error: `${plan.engineer.tradingName?.trim() || "Your engineer"} hasn't finished their payment setup yet — let them know.`,
       },
       { status: 409 },
     );
@@ -36,7 +40,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
 
   await prisma.plan.update({
     where: { id: plan.id },
-    data: { tierId: tier.id, priceMonthlyPence: tier.priceMonthlyPence },
+    data: {
+      tierId: tier.id,
+      priceMonthlyPence: tier.priceMonthlyPence,
+      // LAW (plan wording is locked) — freeze the tier as agreed; a later
+      // edit to the live tier must not rewrite this customer's plan document.
+      agreedTier: snapshotTier(tier) as unknown as Prisma.InputJsonValue,
+    },
   });
   await track("tier_selected", { type: "CUSTOMER", id: plan.customerId }, {
     planId: plan.id,
@@ -46,7 +56,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     channel: "doorstep",
   });
 
-  const brand = plan.engineer.tradingName ?? plan.engineer.slug;
+  const brand = brandName(plan.engineer);
   const base = `${process.env.APP_URL}/p/${plan.engineer.slug}/signup/${token}`;
 
   try {

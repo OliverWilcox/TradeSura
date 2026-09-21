@@ -1,8 +1,22 @@
 # Planlock — project instructions
 
-[DECISION 2026-07-07, human] Product renamed **TradeSura** (logo at
-`public/logo.svg`). All user-facing branding uses TradeSura; repo/folder/db
-names stay `planlock`. Plan refs are now `TSH-`.
+[DECISION 2026-07-07, human] Product renamed **TradeSura**. All user-facing
+branding uses TradeSura; repo/folder/db names stay `planlock`. Plan refs are
+now `TSH-`.
+[DECISION 2026-09-11, human] Brand kit is **TradeSura Build Guide v2 Part 2**
+(`app/assets/TradeSura_Build_Guide_v2.html`). Supplied assets live at
+`public/brand/` and `mobile/assets/brand/` (lockup = ring + wordmark, the
+in-app masthead; ring = app icon / avatar mark / payout indicator) — always
+place the asset, never redraw the ring. The old `public/logo.svg`,
+`logo-mark.svg`, `icon.svg` and the "TRADESURA ✓" text mark are retired.
+Standing rules from Part 2: green (#3DD68C) is money only (£ figures, the
+ring's payout segment, the Gas Safe credential tick) — status chips are
+blue, list ticks are white, and the engineer's WhatsApp share is a white
+primary (supersedes the green-WhatsApp line below); sentence case
+everywhere; one native icon family (`mobile/components/icon.tsx`, SF
+Symbols / Material Symbols), no emoji as icons; pushed-page titles sit
+left-aligned beside the back chevron; avatar initials are first + last name.
+The Verified Member seal PNG is concept-only (mirrored text) — never ship it.
 
 Care-plan platform for UK gas engineers. Engineers build tiered maintenance plans,
 sell them on the doorstep via a link/QR, customers pay by Direct Debit (Stripe

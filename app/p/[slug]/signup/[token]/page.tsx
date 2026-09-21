@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
-import { CustomerShell, GasSafeBadge } from "@/components/shells";
+import { CustomerShell } from "@/components/shells";
 import { SignupTiers } from "@/components/signup-tiers";
 
 export default async function SignupPage({
@@ -32,21 +33,21 @@ export default async function SignupPage({
   }
 
   const tiers = await prisma.planTier.findMany({
-    where: { engineerId: plan.engineerId, archived: false },
+    where: { engineerId: plan.engineerId, status: "LIVE" },
     orderBy: { sortOrder: "asc" },
     include: { clauses: { include: { clause: true } } },
   });
 
-  const brand = plan.engineer.tradingName ?? plan.engineer.slug;
+  const brand = brandName(plan.engineer);
+  // Build Guide v2 Part 9.2/15.1 — a personal offer link (route 2) pins the
+  // offered plan first with "{Engineer first name} suggested {plan name}".
+  // plan.tierId is set the moment the engineer picks a plan to offer
+  // (/api/offer); it's only a suggestion until /choose freezes it for real.
+  const pinnedTier = plan.tierId ? tiers.find((t) => t.id === plan.tierId) : null;
   return (
     <CustomerShell
       tradingName={brand}
-      sub={
-        <>
-          Your engineer: {plan.engineer.gasSafeName ?? brand}{" "}
-          {plan.engineer.gasSafeNo && <GasSafeBadge regNo={plan.engineer.gasSafeNo} />}
-        </>
-      }
+      sub={plan.engineer.gasSafeVerifiedAt ? "Gas Safe verified · Backed by TradeSura" : "Backed by TradeSura"}
     >
       <p className="text-sm">
         Hi {plan.customer.firstName} — pick the plan that suits you. The monthly price you see is
@@ -55,6 +56,10 @@ export default async function SignupPage({
       <SignupTiers
         token={token}
         engineerName={brand}
+        pinnedTierId={pinnedTier?.id}
+        pinnedGreeting={
+          pinnedTier ? `${plan.engineer.firstName ?? brand} suggested ${pinnedTier.name}` : null
+        }
         tiers={tiers.map((t) => ({
           id: t.id,
           name: t.name,

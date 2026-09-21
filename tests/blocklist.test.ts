@@ -15,6 +15,11 @@ describe("wording blocklist", () => {
     "guaranteed fix or your money back",
     "cheaper than boiler insurance",
     "covered for breakdowns all year",
+    // Build Guide v2 Part 18
+    "Satisfaction guarantee on every visit",
+    "Guaranteed to keep you warm",
+    "24-hour emergency response",
+    "emergency call-outs included",
   ];
   for (const text of blocked) {
     it(`blocks: "${text}"`, () => {

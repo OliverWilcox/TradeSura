@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { sendSms } from "@/lib/sms";
@@ -16,6 +17,10 @@ const Body = z.object({
   addressLine1: z.string().max(120).optional().or(z.literal("")),
   town: z.string().max(60).optional().or(z.literal("")),
   postcode: z.string().max(12).optional().or(z.literal("")),
+  // Build Guide v2 Part 9.2 — "Pick the customer, pick the plan, see the
+  // exact text, send." Required: the engineer's own plans are the only
+  // valid choices, checked server-side against status: "LIVE" below.
+  tierId: z.string().min(1),
   // 'sms' sends our branded text now; 'whatsapp' skips it (the engineer shares
   // the link himself) but still queues the follow-up nudges.
   channel: z.enum(["sms", "whatsapp"]).default("sms"),
@@ -26,17 +31,32 @@ export async function GET() {
   const engineerId = await getEngineerId();
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
-  const customers = await prisma.customer.findMany({
-    where: { engineerId },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    select: { id: true, firstName: true, lastName: true, phone: true },
-  });
-  const [tierCount, offersSent] = await Promise.all([
-    prisma.planTier.count({ where: { engineerId, archived: false } }),
+  const [customers, tiers, offersSent] = await Promise.all([
+    prisma.customer.findMany({
+      where: { engineerId },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      select: { id: true, firstName: true, lastName: true, phone: true },
+    }),
+    prisma.planTier.findMany({
+      where: { engineerId, status: "LIVE" },
+      orderBy: { sortOrder: "asc" },
+      include: { clauses: { include: { clause: true } } },
+    }),
     prisma.plan.count({ where: { engineerId } }),
   ]);
-  return NextResponse.json({ customers, tierCount, offersSent });
+
+  return NextResponse.json({
+    customers,
+    tierCount: tiers.length,
+    offersSent,
+    tiers: tiers.map((t) => ({
+      id: t.id,
+      name: t.name,
+      priceMonthlyPence: t.priceMonthlyPence,
+      lines: t.clauses.sort((a, b) => a.clause.sortOrder - b.clause.sortOrder).map((tc) => tc.clause.title),
+    })),
+  });
 }
 
 export async function POST(req: Request) {
@@ -48,6 +68,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Check the form and try again." }, { status: 400 });
   }
   const b = parsed.data;
+
+  const tier = await prisma.planTier.findFirst({
+    where: { id: b.tierId, engineerId, status: "LIVE" },
+    include: { clauses: { include: { clause: true } } },
+  });
+  if (!tier) return NextResponse.json({ error: "Pick a live plan to offer." }, { status: 400 });
 
   let customer;
   if (b.customerId) {
@@ -86,18 +112,33 @@ export async function POST(req: Request) {
   }
 
   const engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
+  // tierId here is a suggestion, not a commitment — /api/signup/[token]/choose
+  // overwrites it (and freezes the real agreedTier snapshot) the moment the
+  // customer actually picks, same plan or otherwise.
   const plan = await prisma.plan.create({
     data: {
       ref: await newPlanRef(),
       engineerId,
       customerId: customer.id,
+      tierId: tier.id,
       signupToken: newToken(),
       portalToken: newToken(),
     },
   });
 
   const link = `${process.env.APP_URL}/p/${engineer.slug}/signup/${plan.signupToken}`;
-  const brand = engineer.tradingName ?? engineer.slug;
+  const brand = brandName(engineer);
+  const benefits = tier.clauses
+    .sort((a, b2) => a.clause.sortOrder - b2.clause.sortOrder)
+    .map((tc) => tc.clause.title.toLowerCase())
+    .join(", ");
+  const pricePounds = (tier.priceMonthlyPence / 100).toFixed(2).replace(/\.00$/, "");
+
+  // Build Guide v2 Part 18 — the offer text template, verbatim, with
+  // variables filled: "Hi {first name} — {engineer first name} from
+  // {trading name}. My {plan name} plan is £{X} a month: {benefits, lower
+  // case, comma-run}. Sign up here — takes a minute: {personal link}"
+  const messageBody = `Hi ${customer.firstName} — ${engineer.firstName ?? brand} from ${brand}. My ${tier.name} plan is £${pricePounds} a month: ${benefits}. Sign up here — takes a minute: ${link}`;
 
   // Signup link is customer-requested at the end of the job → transactional.
   // On the WhatsApp path the engineer shares it himself, so skip our text.
@@ -105,7 +146,7 @@ export async function POST(req: Request) {
     await sendSms({
       engineerId,
       to: customer.phone,
-      body: `Hi ${customer.firstName} — your ${brand} care plan link: ${link}`,
+      body: messageBody,
       messageClass: "TRANSACTIONAL",
       consentBasis: "engineer-initiated",
     });
@@ -119,7 +160,7 @@ export async function POST(req: Request) {
   if (evening <= now) evening.setTime(now.getTime() + 30 * 60 * 1000);
   const day3 = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
   day3.setHours(10, 0, 0, 0);
-  const nudgeBody = `Your quote for ${brand}'s care plan is still open — pick your plan: ${link}`;
+  const nudgeBody = `Your quote for ${brand}'s ${tier.name} plan is still open — pick your plan: ${link}`;
   for (const sendAfter of [evening, day3]) {
     await sendSms({
       engineerId,
@@ -135,6 +176,7 @@ export async function POST(req: Request) {
     planId: plan.id,
     ref: plan.ref,
     customerId: customer.id,
+    tierId: tier.id,
   });
   await track("offer_sent", { type: "ENGINEER", id: engineerId }, {
     planId: plan.id,
@@ -146,6 +188,7 @@ export async function POST(req: Request) {
     ok: true,
     planId: plan.id,
     link,
+    message: messageBody,
     customerFirstName: customer.firstName,
   });
 }

@@ -4,17 +4,19 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { checkWording } from "@/lib/compliance/blocklist";
-import { TIER_PRICE_MIN_PENCE, TIER_PRICE_MAX_PENCE } from "@/lib/clauses";
+import { TIER_PRICE_MIN_PENCE, TIER_PRICE_MAX_PENCE, withRequiredClauses } from "@/lib/clauses";
 
 const Body = z.object({
-  name: z.string().min(2).max(40),
+  name: z.string().min(2).max(28),
   priceMonthlyPence: z.number().int().min(TIER_PRICE_MIN_PENCE).max(TIER_PRICE_MAX_PENCE),
-  isRecommended: z.boolean(),
-  clauseCodes: z.array(z.string()).min(1).max(20),
+  clauseCodes: z.array(z.string()).max(20),
   customLabels: z.array(z.string().min(2).max(80)).max(5),
 });
 
-// Mobile counterpart to the tier + template queries in app/plans/[tierId]/page.tsx.
+// One wizard step editor at a time (Part 7.4: "each opening its wizard step
+// pre-filled") calls this with the fields it owns and the others unchanged —
+// so every field here is independently save-able, not a single all-or-nothing
+// form post.
 export async function GET(req: Request, ctx: { params: Promise<{ tierId: string }> }) {
   const engineerId = await getEngineerId();
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
@@ -22,9 +24,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ tierId: string 
   const { tierId } = await ctx.params;
   const tier = await prisma.planTier.findFirst({
     where: { id: tierId, engineerId },
-    include: { clauses: true },
+    include: { clauses: true, _count: { select: { plans: true } } },
   });
-  if (!tier) return NextResponse.json({ error: "Tier not found." }, { status: 404 });
+  if (!tier) return NextResponse.json({ error: "Plan not found." }, { status: 404 });
 
   // CARE clauses stay out of the picker until solicitor sign-off (handover §3).
   const templates = await prisma.clauseTemplate.findMany({
@@ -32,12 +34,21 @@ export async function GET(req: Request, ctx: { params: Promise<{ tierId: string 
     orderBy: { sortOrder: "asc" },
   });
 
+  // Customers already on this plan keep the version they agreed (agreedTier
+  // snapshot) — the editor surfaces this so a price/clause change doesn't feel
+  // like it's rewriting live contracts (Part 7.2's versioning line).
+  const activePlanCount = await prisma.plan.count({
+    where: { tierId, status: { in: ["ACTIVE", "PAUSED"] } },
+  });
+
   return NextResponse.json({
+    activePlanCount,
+    everHadCustomer: tier._count.plans > 0,
     tier: {
       id: tier.id,
       name: tier.name,
       priceMonthlyPence: tier.priceMonthlyPence,
-      isRecommended: tier.isRecommended,
+      status: tier.status,
       customLabels: tier.customLabels,
       clauseIds: tier.clauses.map((c) => c.clauseId),
     },
@@ -54,13 +65,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ tierId: string 
   });
 }
 
+// Content only — never touches status. Going live is a separate, explicit
+// act (POST .../publish); stopping/starting is another (POST .../status).
 export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string }> }) {
   const engineerId = await getEngineerId();
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   const { tierId } = await ctx.params;
   const tier = await prisma.planTier.findFirst({ where: { id: tierId, engineerId } });
-  if (!tier) return NextResponse.json({ error: "Tier not found." }, { status: 404 });
+  if (!tier) return NextResponse.json({ error: "Plan not found." }, { status: 404 });
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -75,9 +88,10 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
     }
   }
 
-  const clauses = await prisma.clauseTemplate.findMany({
-    where: { code: { in: parsed.data.clauseCodes } },
-  });
+  // Part 7.1 LAW — required (CORE) options are unremovable; union them in
+  // rather than trusting the client picker alone.
+  const wantedCodes = withRequiredClauses(parsed.data.clauseCodes);
+  const clauses = await prisma.clauseTemplate.findMany({ where: { code: { in: wantedCodes } } });
   if (clauses.length === 0) {
     return NextResponse.json({ error: "Pick at least one service." }, { status: 400 });
   }
@@ -89,22 +103,55 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
       data: {
         name: parsed.data.name,
         priceMonthlyPence: parsed.data.priceMonthlyPence,
-        isRecommended: parsed.data.isRecommended,
         customLabels: parsed.data.customLabels,
         clauses: { create: clauses.map((c) => ({ clauseId: c.id })) },
       },
     }),
   ]);
-  await track("plan_published", { type: "ENGINEER", id: engineerId }, {
+  await track("plan_edited", { type: "ENGINEER", id: engineerId }, {
     tierId,
     name: parsed.data.name,
     priceMonthlyPence: parsed.data.priceMonthlyPence,
+    status: tier.status,
   });
-  // The plan is live at this URL the moment it's saved — no separate publish
-  // step — so the client can show it straight away (E6's "Make it live").
   const engineer = await prisma.engineer.findUnique({
     where: { id: engineerId },
     select: { slug: true },
   });
-  return NextResponse.json({ ok: true, slug: engineer?.slug ?? null });
+  const activePlanCount = await prisma.plan.count({
+    where: { tierId, status: { in: ["ACTIVE", "PAUSED"] } },
+  });
+  return NextResponse.json({
+    ok: true,
+    slug: engineer?.slug ?? null,
+    activePlanCount,
+    status: tier.status,
+  });
+}
+
+// Delete exists only for drafts that never went live (Part 7.2 LAW). A plan
+// that ever had a customer can be stopped, never deleted.
+export async function DELETE(req: Request, ctx: { params: Promise<{ tierId: string }> }) {
+  const engineerId = await getEngineerId();
+  if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+
+  const { tierId } = await ctx.params;
+  const tier = await prisma.planTier.findFirst({
+    where: { id: tierId, engineerId },
+    include: { _count: { select: { plans: true } } },
+  });
+  if (!tier) return NextResponse.json({ error: "Plan not found." }, { status: 404 });
+  if (tier.status !== "DRAFT" || tier._count.plans > 0) {
+    return NextResponse.json(
+      { error: "A plan that's ever had a customer can be stopped, never deleted." },
+      { status: 409 },
+    );
+  }
+
+  await prisma.$transaction([
+    prisma.tierClause.deleteMany({ where: { tierId } }),
+    prisma.planTier.delete({ where: { id: tierId } }),
+  ]);
+  await track("plan_draft_deleted", { type: "ENGINEER", id: engineerId }, { tierId });
+  return NextResponse.json({ ok: true });
 }

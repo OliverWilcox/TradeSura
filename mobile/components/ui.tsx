@@ -1,6 +1,16 @@
 import type { ReactNode } from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, Image, Modal } from "react-native";
+import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
+import { useAuth } from "@/lib/auth-context";
+import { Icon } from "@/components/icon";
+
+// Build Guide v2 Part 2.2 — the supplied brand assets, never redrawn. The
+// lockup (ring + wordmark) is the in-app masthead; the ring on its own is
+// the avatar mark and (Part 6.3) the payout progress indicator.
+export const LOCKUP = require("../assets/brand/lockup.png");
+export const RING = require("../assets/brand/ring.png");
+const LOCKUP_RATIO = 676 / 94;
 
 // RN throws "Text strings must be rendered within a <Text> component" the
 // moment JSX text is a *sibling* of an interpolation (e.g. `Text {n} more`
@@ -23,21 +33,161 @@ function isTextLike(node: ReactNode): boolean {
 // in RN, so RowLine's slots accept a plain string (wrapped in Text) or a
 // composed node.
 
-// Home shows the wordmark; every other screen shows a plain bold title
-// (matches the interactive prototype's appbars).
+// Build Guide v2 Part 2: two header shapes and nothing else.
+//  - Tab screens: the ring + wordmark lockup top-left ("In-app masthead =
+//    ring + wordmark lockup, exact asset, top-left of every tab screen"),
+//    avatar top-right.
+//  - Pushed pages: back chevron with the title left-aligned beside it
+//    (Part 2.4 — "a couple of pictures centre them"; the text wins).
+// The retired "TRADESURA ✓" text mark is gone — every header wears the
+// final lockup.
 export function AppHeader({ title, right }: { title?: string; right?: ReactNode }) {
+  if (!title) {
+    return (
+      <View className="flex-row items-center justify-between border-b border-line bg-bg-deep px-4 py-3">
+        <Lockup height={26} />
+        {right ?? <Avatar />}
+      </View>
+    );
+  }
   return (
-    <View className="flex-row items-center justify-between border-b border-line bg-bg-deep px-4 py-3">
-      {title ? (
-        <Text className="text-[17px] font-bold text-ink">{title}</Text>
-      ) : (
-        <Text className="text-lg font-extrabold tracking-tight text-white">
-          TRADE<Text className="text-flame">SURA</Text>
-          <Text className="text-copper">✓</Text>
+    <View className="flex-row items-center justify-between border-b border-line bg-bg-deep px-3 py-3">
+      <View className="flex-1 flex-row items-center gap-1.5">
+        <Pressable
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          className="h-8 w-8 items-center justify-center"
+        >
+          <Icon name="back" size={20} weight="semibold" />
+        </Pressable>
+        <Text className="shrink text-[17px] font-bold text-ink" numberOfLines={1}>
+          {title}
         </Text>
-      )}
+      </View>
       {right}
     </View>
+  );
+}
+
+export function Lockup({ height = 26 }: { height?: number }) {
+  return (
+    <Image
+      source={LOCKUP}
+      accessibilityLabel="TradeSura"
+      style={{ height, width: Math.round(height * LOCKUP_RATIO) }}
+      resizeMode="contain"
+    />
+  );
+}
+
+// Part 2.4: initials are first + last name ("MW"), not the email's first
+// letter. The credential tick (Part 2.1 — the one green thing that isn't a
+// £ figure) sits on the avatar once Gas Safe verification has been granted.
+export function initials(me: { firstName?: string | null; lastName?: string | null; tradingName?: string | null; email?: string } | null | undefined): string {
+  if (!me) return "";
+  const fromName = `${me.firstName?.[0] ?? ""}${me.lastName?.[0] ?? ""}`;
+  if (fromName) return fromName.toUpperCase();
+  const words = (me.tradingName ?? "").split(/\s+/).filter(Boolean);
+  if (words.length) return words.slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  return (me.email?.[0] ?? "").toUpperCase();
+}
+
+export function Avatar({ size = 32 }: { size?: number }) {
+  const { me } = useAuth();
+  const verified = Boolean(me?.gasSafeVerifiedAt);
+  return (
+    <Pressable
+      onPress={() => router.push("/more")}
+      accessibilityRole="button"
+      accessibilityLabel="Account"
+      hitSlop={8}
+      style={{ width: size, height: size }}
+    >
+      <View
+        className="items-center justify-center overflow-hidden rounded-full bg-paper-3"
+        style={{ width: size, height: size }}
+      >
+        {me?.logoUrl ? (
+          <Image source={{ uri: me.logoUrl }} style={{ width: size, height: size }} />
+        ) : (
+          <Text className="font-bold text-ink" style={{ fontSize: Math.round(size * 0.36) }}>
+            {initials(me)}
+          </Text>
+        )}
+      </View>
+      {verified && (
+        <View
+          className="absolute items-center justify-center rounded-full bg-bg-deep"
+          style={{ right: -3, bottom: -3, width: 16, height: 16 }}
+        >
+          <Icon name="verified" size={13} color="#3dd68c" />
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+// Part 2.4: "Plan-benefit list ticks are white ... the small green tick
+// belongs to the credential line only." `credential` is the one exception.
+export function Tick({ credential = false, size = 14 }: { credential?: boolean; size?: number }) {
+  return (
+    <Icon
+      name={credential ? "verified" : "check"}
+      size={size}
+      color={credential ? "#3dd68c" : "#f3f7fb"}
+      weight="bold"
+    />
+  );
+}
+
+// Chevron for tappable rows.
+export function Chevron() {
+  return <Icon name="chevron" size={14} color="#6e86a3" weight="semibold" />;
+}
+
+// Build Guide v2 Part 3 / 6.5 — the soft-gate pattern. "Rooms are never
+// locked; actions are." A gated thing stays visible, muted and tappable;
+// the tap opens this short sheet with the reason and the route back. Never
+// hidden, never silently dead. Strings come from Part 18, verbatim.
+export function GateSheet({
+  visible,
+  onClose,
+  reason,
+  cta = "Continue setup",
+  onCta,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  reason: string;
+  cta?: string;
+  onCta: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable className="flex-1 justify-end bg-black/60" onPress={onClose}>
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          className="rounded-t-3xl border-t border-line-strong bg-paper px-5 pb-10 pt-4"
+        >
+          <View className="mb-4 h-1 w-10 self-center rounded-full bg-line-strong" />
+          <Text className="text-[16px] font-semibold leading-6 text-ink">{reason}</Text>
+          <Button
+            className="mt-4"
+            onPress={() => {
+              onClose();
+              onCta();
+            }}
+          >
+            {cta}
+          </Button>
+          <Pressable onPress={onClose} className="mt-2 items-center py-2.5">
+            <Text className="text-sm font-semibold text-muted">Not now</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -97,6 +247,10 @@ export function Micro({ children, className = "" }: { children: ReactNode; class
 // Status pills always carry text, never colour alone (v2 legibility rule) —
 // every tone below is a tinted background + matching-hue text, never a solid
 // fill (the old solid `danger` fill is replaced with the same tint pattern).
+// Build Guide v2 Part 2.1: blue = info / live-count chips, amber = pending,
+// red = broken or needs-you. `ok` is green and green is money — only a chip
+// whose content is a £ figure may use it; status words ("live", "on plan",
+// "auto") are `info`.
 const pillStyles = {
   ok: "bg-ok-tint text-ok",
   warn: "bg-warn-tint text-warn",
@@ -153,13 +307,13 @@ export function Money({
 }
 
 // v2 rule: primary is white-on-navy (not a filled brand colour) — it's the
-// signature and the brightest object on screen, one per screen. Green is
-// reserved for the customer's "Join" and the engineer's WhatsApp share, the
-// only two green buttons in the app. Disabled is opacity, never a colour swap.
+// signature and the brightest object on screen, one per screen. Build Guide
+// v2 Part 2.1: green is money, so there is no green button in the engineer
+// app — the WhatsApp share is a white primary too (the customer's green
+// "Join" lives on the web surface). Disabled is opacity, never a colour swap.
 const btnVariants = {
   flame: { container: "bg-white", text: "text-on-light" },
   copper: { container: "bg-white", text: "text-on-light" }, // legacy alias → primary
-  green: { container: "bg-ok", text: "text-[#052614]" },
   ghost: { container: "border-[1.5px] border-white/55 bg-transparent", text: "text-white" },
   dangerghost: { container: "border-[1.5px] border-danger bg-transparent", text: "text-danger" },
 } as const;

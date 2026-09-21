@@ -2,6 +2,9 @@
 // Kept as a separate v3-style config here because NativeWind v4 (stable) targets
 // Tailwind v3 — see mobile/CLAUDE.md for why v5/Tailwind v4 wasn't used.
 //
+// Brand kit: TradeSura Build Guide v2 Part 2 (tokens unchanged from the
+// Screen Designs v2 dark system; the guide adds the usage LAWs — green is
+// money only, blue = info/links/active tab, amber = pending, red = broken).
 // Design system: TradeSura Screen Designs v2 · Full Dark (supersedes Build
 // Spec v1 §1's light system — see CLAUDE.md's [DECISION] for the switch).
 // Navy depth, brand blue #5FA3F0, money-green #3DD68C (pounds only), system
@@ -11,6 +14,12 @@
 module.exports = {
   content: ["./app/**/*.{js,jsx,ts,tsx}", "./components/**/*.{js,jsx,ts,tsx}"],
   presets: [require("nativewind/preset")],
+  // NativeWind 4.2 web: with the default "media" dark mode, react-native-css-
+  // interop's own MutationObserver calls colorScheme.set() on boot and
+  // throws ("Cannot manually set color scheme, as dark mode is type 'media'"),
+  // freezing the web preview. "class" is inert here — there is no light
+  // variant (one-way navy palette) — and unblocks `expo start --web`.
+  darkMode: "class",
   theme: {
     extend: {
       colors: {

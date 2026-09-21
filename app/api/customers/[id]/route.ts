@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { cancelScheduledSms } from "@/lib/sms";
+import { resolvePlanTier } from "@/lib/plan-tier";
+import { nextServiceDate } from "@/lib/reminders";
 
 type TimelineItem = { at: string; icon: string; text: string };
 
@@ -15,12 +17,20 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     where: { id, engineerId },
     include: {
       properties: { include: { appliances: true } },
-      plans: { include: { tier: { select: { name: true } } }, orderBy: { createdAt: "desc" } },
+      plans: {
+        include: { tier: { include: { clauses: { include: { clause: true } } } } },
+        orderBy: { createdAt: "desc" },
+      },
     },
   });
   if (!customer) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
-  const active = customer.plans.find((p) => p.status === "ACTIVE");
+  // A paused plan is still "on a plan" — only a cancelled one isn't.
+  const active = customer.plans.find((p) => p.status === "ACTIVE" || p.status === "PAUSED");
+  // Part 10 — "Text the manage link" needs a portal token for whatever the
+  // customer's most relevant plan is, active or not (a lapsed customer can
+  // still open their old portal to see history).
+  const mostRecentPlan = active ?? customer.plans[0] ?? null;
   const planIds = customer.plans.map((p) => p.id);
   const payments = planIds.length
     ? await prisma.event.findMany({
@@ -66,6 +76,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
   timeline.sort((a, b) => b.at.localeCompare(a.at));
 
+  // Part 10 — "'Her plan — as signed' card showing the signed version
+  // (title, price, benefits — frozen snapshot, Part 7.2)." No pronoun is
+  // ever captured at signup, so this always falls back to "Their plan —
+  // as signed" rather than guessing one.
+  const signedTier = active ? resolvePlanTier(active) : null;
+
+  const nextDue = appliance?.lastServicedAt
+    ? nextServiceDate(appliance.lastServicedAt)
+    : active?.activatedAt
+      ? nextServiceDate(active.activatedAt)
+      : null;
+
   return NextResponse.json({
     id: customer.id,
     firstName: customer.firstName,
@@ -84,17 +106,20 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           lastServicedAt: appliance.lastServicedAt?.toISOString() ?? null,
         }
       : null,
+    nextServiceDue: nextDue?.toISOString() ?? null,
+    serviceOverdue: Boolean(nextDue && nextDue.getTime() < Date.now()),
     plan: active
       ? {
           id: active.id,
-          tierName: active.tier?.name ?? "Plan",
+          tierName: signedTier?.name ?? active.tier?.name ?? "Plan",
           priceMonthlyPence: active.priceMonthlyPence ?? 0,
+          benefitLines: signedTier?.clauses.map((c) => c.title) ?? [],
           status: active.status,
           mandateStatus: active.mandateStatus,
           activatedAt: active.activatedAt?.toISOString() ?? null,
-          portalToken: active.portalToken,
         }
       : null,
+    canTextManageLink: Boolean(mostRecentPlan),
     timeline,
   });
 }
@@ -109,9 +134,9 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     include: { plans: true },
   });
   if (!customer) return NextResponse.json({ error: "Not found." }, { status: 404 });
-  if (customer.plans.some((p) => p.status === "ACTIVE")) {
+  if (customer.plans.some((p) => p.status === "ACTIVE" || p.status === "PAUSED")) {
     return NextResponse.json(
-      { error: "Cancel this customer's active plan before removing them." },
+      { error: "This customer has a live plan — text them the manage link to cancel it." },
       { status: 409 },
     );
   }

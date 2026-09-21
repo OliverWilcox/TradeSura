@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { cancelStripeSubscription } from "@/lib/stripe";
 import { sendEmail } from "@/lib/email";
@@ -55,7 +56,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     `${plan.customer.firstName} ${plan.customer.lastName} cancelled their ${plan.tier?.name ?? "care"} plan${reason ? ` (${reason})` : ""}.`,
   );
 
-  const brand = plan.engineer.tradingName ?? plan.engineer.slug;
+  const brand = brandName(plan.engineer);
   if (plan.customer.email) {
     await sendEmail({
       to: plan.customer.email,

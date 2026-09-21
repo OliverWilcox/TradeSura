@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { AppHeader, Card, Micro, Button } from "@/components/ui";
+import { AppHeader, Card, Micro, Button, Tick } from "@/components/ui";
 
 type LinkInfo = { link: string; qrDataUrl: string };
 
@@ -67,8 +67,8 @@ export default function OfferLive() {
   if (status?.status === "ACTIVE") {
     return (
       <View className="flex-1 items-center justify-center gap-3 bg-panel px-8">
-        <View className="h-[74px] w-[74px] items-center justify-center rounded-full bg-ok-tint">
-          <Text className="text-4xl text-ok">✓</Text>
+        <View className="h-[74px] w-[74px] items-center justify-center rounded-full bg-flame-tint">
+          <Tick size={36} />
         </View>
         <Text className="text-center text-[21px] font-extrabold text-ink">
           {status.customerFirstName} joined — +£
@@ -88,7 +88,7 @@ export default function OfferLive() {
         <Text className="font-mono text-xs text-faint">
           locked in across {status.activePlans} active plan{status.activePlans === 1 ? "" : "s"}
         </Text>
-        <Button onPress={() => router.replace("/(tabs)")} className="mt-4 w-64">
+        <Button onPress={() => router.replace("/")} className="mt-4 w-64">
           Back to the dashboard
         </Button>
       </View>

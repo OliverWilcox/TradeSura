@@ -5,6 +5,7 @@ import { WebView } from "react-native-webview";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Button } from "@/components/ui";
+import { Icon } from "@/components/icon";
 
 // E5 — demo mode. In-app, full screen, with a slim hand-over ribbon and ✕ to
 // exit — never the system browser, so the engineer's account stays hidden
@@ -25,14 +26,14 @@ export default function Demo() {
         <SafeAreaView edges={["top"]} className="bg-bg-deep">
           <View className="flex-row items-center justify-between px-4 py-2.5">
             <Text className="flex-1 font-sans text-xs text-muted" numberOfLines={1}>
-              Viewing {me?.tradingName ?? "your"} plan page — hand the phone over 👋
+              Viewing {me?.tradingName ?? "your"} plan page — hand the phone over
             </Text>
             <Pressable
-              onPress={() => router.replace("/(tabs)")}
+              onPress={() => router.replace("/")}
               hitSlop={10}
               className="ml-3 h-7 w-7 items-center justify-center rounded-full bg-line-soft"
             >
-              <Text className="text-sm text-white">✕</Text>
+              <Icon name="close" size={14} weight="semibold" />
             </Pressable>
           </View>
         </SafeAreaView>

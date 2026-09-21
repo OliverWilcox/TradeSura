@@ -2,6 +2,7 @@
 // (CLAUDE.md §Compliance 1). No free text enters this document.
 import { prisma } from "@/lib/db";
 import { EMERGENCY_LINE } from "@/lib/compliance/interlock";
+import { resolvePlanTier } from "@/lib/plan-tier";
 
 export function poundsFromPence(pence: number): string {
   return `£${(pence / 100).toFixed(2)}`;
@@ -16,15 +17,16 @@ export async function getPlanDocument(planId: string) {
       tier: { include: { clauses: { include: { clause: true } } } },
     },
   });
-  const clauses = (plan.tier?.clauses ?? [])
-    .map((tc) => tc.clause)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
-  return { plan, clauses };
+  // Resolves to the agreed snapshot when the customer joined a versioned
+  // tier, else the live tier — never a mix.
+  const tier = resolvePlanTier(plan);
+  const clauses = tier?.clauses ?? [];
+  return { plan, tier, clauses };
 }
 
 export async function planDocumentEmailHtml(planId: string) {
-  const { plan, clauses } = await getPlanDocument(planId);
-  const brand = plan.engineer.tradingName ?? "Your engineer";
+  const { plan, tier, clauses } = await getPlanDocument(planId);
+  const brand = plan.engineer.tradingName?.trim() || "Your engineer";
   const price = poundsFromPence(plan.priceMonthlyPence ?? 0);
   const portalUrl = `${process.env.APP_URL}/portal/${plan.portalToken}`;
   const coolingOffEnds = plan.coolingOffEndsAt?.toLocaleDateString("en-GB", {
@@ -38,12 +40,12 @@ export async function planDocumentEmailHtml(planId: string) {
     .join("\n");
 
   return {
-    subject: `Your ${brand} care plan — ${plan.tier?.name ?? ""} (${plan.ref})`,
+    subject: `Your ${brand} care plan — ${tier?.name ?? ""} (${plan.ref})`,
     html: `
 <div style="font-family:sans-serif;max-width:560px">
   <h1 style="margin-bottom:2px">${brand} Care Plans</h1>
   <p style="color:#5E6975;margin-top:0">Plan ${plan.ref} · ${plan.customer.firstName} ${plan.customer.lastName}</p>
-  <p><b>You're on the ${plan.tier?.name} plan</b> — ${price}/month by Direct Debit.</p>
+  <p><b>You're on the ${tier?.name ?? ""} plan</b> — ${price}/month by Direct Debit.</p>
   <h2>What your plan includes</h2>
   ${clauseHtml}
   <h2>What's not included</h2>

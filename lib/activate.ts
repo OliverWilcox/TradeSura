@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { cancelScheduledSms, notifyEngineer, sendSms } from "@/lib/sms";
 import { sendEmail } from "@/lib/email";
@@ -46,7 +47,7 @@ export async function activatePlan(
     where: { id: plan.engineerId },
     select: { tradingName: true, slug: true },
   });
-  const brand = engineer.tradingName ?? engineer.slug;
+  const brand = brandName(engineer);
   const portalUrl = `${process.env.APP_URL}/portal/${plan.portalToken}`;
 
   // C3 — welcome message (SMS; email is the plan document below).

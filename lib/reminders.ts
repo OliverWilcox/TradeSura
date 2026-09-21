@@ -2,7 +2,9 @@
 // ponytail: no self-book slots; reminders say "reply to book" until an
 // availability system exists. SMS only; email reminders when there's a queue.
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { sendSms } from "@/lib/sms";
+import { resolvePlanTier } from "@/lib/plan-tier";
 
 export const REMINDER_OFFSETS_DAYS = [30, 14, 3] as const;
 
@@ -32,15 +34,19 @@ export async function dueServices(engineerId: string): Promise<DueService[]> {
       tier: { include: { clauses: { include: { clause: true } } } },
     },
   });
-  const due: DueService[] = plans.map((p) => ({
-    customerId: p.customerId,
-    customerName: `${p.customer.firstName} ${p.customer.lastName}`,
-    dueDate: nextServiceDate(p.activatedAt!),
-    onPlan: true,
-    tierName: p.tier?.name,
-    hasCp12: (p.tier?.clauses ?? []).some((tc) => tc.clause.code === "CP12"),
-    planId: p.id,
-  }));
+  const due: DueService[] = plans.map((p) => {
+    // Follow the plan the customer agreed to, not later edits to the tier.
+    const tier = resolvePlanTier(p);
+    return {
+      customerId: p.customerId,
+      customerName: `${p.customer.firstName} ${p.customer.lastName}`,
+      dueDate: nextServiceDate(p.activatedAt!),
+      onPlan: true,
+      tierName: tier?.name,
+      hasCp12: (tier?.clauses ?? []).some((c) => c.code === "CP12"),
+      planId: p.id,
+    };
+  });
 
   const noPlanCustomers = await prisma.customer.findMany({
     where: {
@@ -80,7 +86,7 @@ export async function queueServiceReminders(): Promise<number> {
   let queued = 0;
   for (const plan of plans) {
     const due = nextServiceDate(plan.activatedAt!);
-    const brand = plan.engineer.tradingName ?? plan.engineer.slug;
+    const brand = brandName(plan.engineer);
     for (const offset of REMINDER_OFFSETS_DAYS) {
       const sendAfter = new Date(due);
       sendAfter.setDate(sendAfter.getDate() - offset);

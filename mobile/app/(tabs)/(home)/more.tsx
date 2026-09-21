@@ -1,0 +1,407 @@
+import { useCallback, useState } from "react";
+import { View, Text, TextInput, ScrollView, RefreshControl, Pressable, Linking, Image } from "react-native";
+import { useFocusEffect, router } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
+import * as ImagePicker from "expo-image-picker";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
+import { AppHeader, Avatar, Card, Pill, RowLine, Button, Chevron } from "@/components/ui";
+
+type MoreData = {
+  totalPence: number;
+  count: number;
+  fee: number;
+  confirmed: number;
+  failed: number;
+  queuedSms: number;
+};
+type Status = { tone: "amber" | "red" | "quiet"; text: string };
+type Settings = {
+  tradingName: string;
+  logoUrl: string;
+  slug: string;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  phoneVerifiedAt: string | null;
+  businessType: string | null;
+  companyNumber: string | null;
+  postcode: string | null;
+  standing: { state: string } & Status;
+  gasSafe: Status;
+  payments: Status;
+};
+
+function StatusLine({ status }: { status: Status }) {
+  return (
+    <Text className={`font-sans text-sm ${status.tone === "quiet" ? "text-ink" : "text-warn"}`}>
+      {status.text}
+    </Text>
+  );
+}
+
+const BUSINESS_TYPE_LABELS: Record<string, string> = {
+  sole_trader: "Sole trader",
+  ltd: "Limited company",
+  partnership: "Partnership",
+};
+
+// More hub — settings, Stripe status, payouts summary, sign out.
+// The full Payouts & Collections screen (Screen 12) is P1 and stays web-only;
+// this is just the summary CLAUDE.md scoped into the hub.
+export default function More() {
+  const { me, refreshMe, signOut } = useAuth();
+  const [data, setData] = useState<MoreData | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [tradingName, setTradingName] = useState("");
+  const [savedSettings, setSavedSettings] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+
+  const [stripeBusy, setStripeBusy] = useState(false);
+  const [stripeError, setStripeError] = useState<string | null>(null);
+
+  const [flushBusy, setFlushBusy] = useState(false);
+  const [flushResult, setFlushResult] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [m, s] = await Promise.all([api<MoreData>("/api/more"), api<Settings>("/api/settings")]);
+      setData(m);
+      setSettings(s);
+      setTradingName(s.tradingName);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't load this page.");
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }
+
+  const dirty = settings ? tradingName !== settings.tradingName : false;
+
+  async function saveSettings() {
+    if (!settings) return;
+    setSavingSettings(true);
+    setSettingsError(null);
+    try {
+      await api("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ tradingName, logoUrl: settings.logoUrl }),
+      });
+      setSettings({ ...settings, tradingName });
+      setSavedSettings(true);
+      await refreshMe();
+    } catch (e) {
+      setSettingsError(e instanceof ApiError ? e.message : "Could not save.");
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
+  // Review #15 — upload the image directly instead of asking for a hosted
+  // URL most engineers don't have; stored in our own Blob store.
+  //
+  // Base64 JSON, not multipart FormData: this Expo SDK's fetch/FormData
+  // bridge throws "Unsupported FormDataPart implementation" on the picker's
+  // { uri, name, type } asset shape — a known, unresolved RN/Expo bug
+  // (github.com/expo/expo/issues/33134). base64: true on the picker plus a
+  // plain JSON POST sidesteps the native multipart path entirely.
+  async function pickLogo() {
+    setLogoError(null);
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      setLogoError("Allow photo access to change your logo.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+      base64: true,
+    });
+    if (result.canceled || !result.assets[0]?.base64) return;
+    const asset = result.assets[0];
+    setLogoBusy(true);
+    try {
+      const { logoUrl } = await api<{ logoUrl: string }>("/api/settings/logo", {
+        method: "POST",
+        body: JSON.stringify({
+          base64: asset.base64,
+          mimeType: asset.mimeType ?? "image/jpeg",
+        }),
+      });
+      setSettings((prev) => (prev ? { ...prev, logoUrl } : prev));
+      await refreshMe();
+    } catch (e) {
+      setLogoError(e instanceof ApiError ? e.message : "Couldn't upload that image.");
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  async function connectStripe() {
+    setStripeBusy(true);
+    setStripeError(null);
+    try {
+      // Build Guide v2 review 17 Sept, B3 — single retry; see
+      // lib/stripe.ts's getConnectLinkWithRetry for the reasoning.
+      const { url } = await getConnectLinkWithRetry();
+      // Build Guide v2 Part 17.1 — ephemeral session, no shared-cookie
+      // "wants to use stripe.com" popup. See onboarding.tsx's connectStripe
+      // for the same fix on this screen's other entry point into Connect.
+      const result = await WebBrowser.openAuthSessionAsync(url, "tradesura://onboarding", {
+        preferEphemeralSession: true,
+      });
+      const err = stripeResultError(result);
+      if (err) setStripeError(err);
+      else if (result.type === "success") await refreshMe();
+    } catch (e) {
+      setStripeError(e instanceof ApiError ? e.message : "Couldn't start payment setup.");
+    } finally {
+      setStripeBusy(false);
+    }
+  }
+
+  async function flushQueue() {
+    setFlushBusy(true);
+    try {
+      const result = await api<{ sent: number; remindersQueued: number }>(
+        "/api/jobs/flush-sms",
+        { method: "POST" },
+      );
+      setFlushResult(`${result.sent} sent, ${result.remindersQueued} reminders queued`);
+      await load();
+    } catch {
+      // dev-only tool; silent on failure is acceptable here
+    } finally {
+      setFlushBusy(false);
+    }
+  }
+
+  return (
+    <View className="flex-1 bg-panel">
+      <SafeAreaView edges={["top"]} className="bg-iron">
+        <AppHeader title="Account" />
+      </SafeAreaView>
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="gap-3.5 px-4 pb-8 pt-4"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
+
+        {/* Build Guide v2 Part 13 — identity header: initials avatar (with
+            the tick once verified), name, email. */}
+        <View className="flex-row items-center gap-3 px-1">
+          <Avatar size={56} />
+          <View className="shrink">
+            <Text className="font-bold text-base text-ink" numberOfLines={1}>
+              {me?.tradingName || `${me?.firstName ?? ""} ${me?.lastName ?? ""}`.trim() || "Your account"}
+            </Text>
+            <Text className="font-sans text-xs text-muted" numberOfLines={1}>
+              {me?.email}
+            </Text>
+          </View>
+        </View>
+
+        {/* Part 13 — "Status card reads the standing strip's truth source —
+            same words, same state machine." Gas Safe and Payments are two
+            independent facts (unlike the dashboard's single collapsed
+            line), except banned/paused, which outrank both and take over
+            the whole card. */}
+        <Card>
+          <Text className="mb-1.5 font-semibold text-sm text-ink">Status</Text>
+          {settings && (settings.standing.state === "BANNED" || settings.standing.state === "PAUSED") ? (
+            <StatusLine status={settings.standing} />
+          ) : (
+            <View className="gap-2">
+              {settings && <StatusLine status={settings.gasSafe} />}
+              {settings &&
+                (settings.payments.tone === "quiet" ? (
+                  <StatusLine status={settings.payments} />
+                ) : (
+                  <Pressable onPress={connectStripe} disabled={stripeBusy}>
+                    <Text className="font-sans text-sm text-warn">
+                      {stripeBusy ? "Opening…" : settings.payments.text}
+                    </Text>
+                  </Pressable>
+                ))}
+              {stripeError && <Text className="font-sans text-xs text-danger">{stripeError}</Text>}
+            </View>
+          )}
+        </Card>
+
+        <Card>
+          <Text className="mb-1 font-semibold text-sm text-ink">Your business</Text>
+          {settings && (settings.firstName || settings.phone || settings.businessType) && (
+            <View className="mb-1 mt-1">
+              {(settings.firstName || settings.lastName) && (
+                <RowLine
+                  left="Name"
+                  right={`${settings.firstName ?? ""} ${settings.lastName ?? ""}`.trim()}
+                />
+              )}
+              {settings.phone && (
+                <RowLine
+                  left="Mobile"
+                  right={
+                    <Text className="font-mono text-sm text-ink">
+                      {settings.phone}
+                      {settings.phoneVerifiedAt ? " ✓" : ""}
+                    </Text>
+                  }
+                />
+              )}
+              {settings.businessType && (
+                <RowLine
+                  left="Business type"
+                  right={BUSINESS_TYPE_LABELS[settings.businessType] ?? settings.businessType}
+                />
+              )}
+              {settings.companyNumber && (
+                <RowLine left="Company number" right={settings.companyNumber} />
+              )}
+              {settings.postcode && <RowLine left="Business postcode" right={settings.postcode} />}
+            </View>
+          )}
+          <Text className="mt-2 font-sans text-xs text-muted">Trading name</Text>
+          <TextInput
+            value={tradingName}
+            onChangeText={(v) => {
+              setTradingName(v);
+              setSavedSettings(false);
+            }}
+            className="mt-1 rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-sm text-ink"
+          />
+          <Text className="mt-3 font-sans text-xs text-muted">Logo (optional)</Text>
+          <Pressable
+            onPress={pickLogo}
+            disabled={logoBusy}
+            className="mt-1.5 flex-row items-center gap-3"
+            style={({ pressed }) => (pressed ? { opacity: 0.5 } : undefined)}
+          >
+            {settings?.logoUrl ? (
+              <Image
+                source={{ uri: settings.logoUrl }}
+                className="h-12 w-12 rounded-lg bg-paper-2"
+              />
+            ) : (
+              <View className="h-12 w-12 items-center justify-center rounded-lg border border-dashed border-line bg-paper-2">
+                <Text className="text-lg text-faint">＋</Text>
+              </View>
+            )}
+            <Text className="font-semibold text-sm text-flame">
+              {logoBusy ? "Uploading…" : settings?.logoUrl ? "Change logo" : "Add a logo"}
+            </Text>
+          </Pressable>
+          {logoError && <Text className="mt-1.5 font-sans text-xs text-danger">{logoError}</Text>}
+          {settings && (
+            <View className="mt-3 border-t border-line-soft pt-2.5">
+              <RowLine
+                left="Your page"
+                right={
+                  <Text className="font-mono text-xs text-flame-deep">tradesura.com/p/{settings.slug}</Text>
+                }
+              />
+              <Text className="mt-1 font-sans text-[11px] text-faint">
+                The address updates if you rename your trading name.
+              </Text>
+            </View>
+          )}
+          {settingsError && (
+            <Text className="mt-2 font-sans text-sm text-danger">{settingsError}</Text>
+          )}
+          {dirty && (
+            <Button
+              variant="ghost"
+              onPress={saveSettings}
+              disabled={savingSettings || tradingName.length < 2}
+              className="mt-3"
+            >
+              {savingSettings ? "Saving…" : "Save changes"}
+            </Button>
+          )}
+          {savedSettings && !dirty && (
+            <Text className="mt-2 font-semibold text-xs text-ink">Saved</Text>
+          )}
+        </Card>
+
+        {/* Dev-only tooling — never shown in a production build. */}
+        {__DEV__ && data && (
+          <Card>
+            <Text className="mb-1 font-semibold text-sm text-ink">Message queue (dev)</Text>
+            <RowLine
+              left="Queued texts (nudges, reminders, quiet hours)"
+              right={<Pill tone={data.queuedSms > 0 ? "info" : "off"}>{data.queuedSms}</Pill>}
+            />
+            <Button variant="ghost" onPress={flushQueue} disabled={flushBusy} className="mt-2">
+              {flushBusy ? "Flushing…" : "Run queue now"}
+            </Button>
+            {flushResult && (
+              <Text className="mt-1.5 font-semibold text-xs text-ink">{flushResult}</Text>
+            )}
+          </Card>
+        )}
+
+        {/* Build Guide v2 Part 13 — four rows, each with a chevron: My
+            plans / Invite an engineer · £50 / WhatsApp support / Terms &
+            privacy. Cut: "Payouts & collections" (duplicates the tab), "How
+            to sell more plans" (moves into How it works — one home),
+            "Trades & TradePacks" (hidden for October). "Messages & tickets"
+            is the exception Part 13 allows for: it's the engineer's only
+            visibility into the gas-emergency interlock firing (see
+            messages.tsx) — load-bearing, so it stays. */}
+        <Card>
+          <Pressable onPress={() => router.push("/plans")}>
+            <RowLine left="My plans" right={<Chevron />} />
+          </Pressable>
+          <Pressable onPress={() => router.push("/messages")}>
+            <RowLine left="Messages & tickets" right={<Chevron />} />
+          </Pressable>
+          <Pressable onPress={() => router.push("/referral")}>
+            <RowLine left="Invite an engineer · £50" right={<Chevron />} />
+          </Pressable>
+          <Pressable
+            onPress={() =>
+              Linking.openURL(
+                "https://wa.me/447700900000?text=" + encodeURIComponent("TradeSura support: "),
+              )
+            }
+          >
+            <RowLine left="WhatsApp support" right={<Chevron />} />
+          </Pressable>
+          <Pressable
+            onPress={() => router.push({ pathname: "/coming-soon", params: { title: "Terms & privacy" } })}
+          >
+            <RowLine left="Terms & privacy" right={<Chevron />} />
+          </Pressable>
+        </Card>
+
+        {/* Part 13: "Then a muted Sign out." */}
+        <Button variant="ghost" onPress={signOut}>
+          Sign out
+        </Button>
+      </ScrollView>
+    </View>
+  );
+}

@@ -463,6 +463,18 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
   },
 ];
 
+// Build Guide v2 Part 7.1 LAW — "required options render pre-ticked and
+// unremovable in the wizard." CORE is that required flag. Used both by the
+// wizard's checklist (can't untick) and server-side (union these in
+// regardless of what a request claims — see app/api/tiers/**).
+export const REQUIRED_CLAUSE_CODES = CLAUSE_TEMPLATES.filter((c) => c.kind === "CORE").map(
+  (c) => c.code,
+);
+
+export function withRequiredClauses(codes: string[]): string[] {
+  return [...new Set([...codes, ...REQUIRED_CLAUSE_CODES])];
+}
+
 // Base for the self-assembling price suggestion: the two core clauses plus the
 // engineer's own margin. Uplifts stack on top of this.
 export const SUGGESTED_BASE_PENCE = 700;

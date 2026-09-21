@@ -40,7 +40,11 @@ async function main() {
   // via the CSV import in the demo; here we only add a handful of faker
   // customers for the first engineer if one exists (dashboard has data on
   // first open after onboarding).
-  const engineer = await prisma.engineer.findFirst();
+  // Off by default: this attaches fake customers to whichever engineer is
+  // first in the DB, which on a shared dev database is a real account. Opt in
+  // explicitly (SEED_FAKE_CUSTOMERS=1) when you want a populated dashboard.
+  const engineer =
+    process.env.SEED_FAKE_CUSTOMERS === "1" ? await prisma.engineer.findFirst() : null;
   if (engineer) {
     const existing = await prisma.customer.count({ where: { engineerId: engineer.id } });
     if (existing === 0) {

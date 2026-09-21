@@ -5,6 +5,7 @@ import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, getHasSignedInBefore } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { Lockup } from "@/components/ui";
 
 type ClaimResolved =
   | { valid: true; personalised: boolean; firstName?: string; businessName?: string }
@@ -49,7 +50,7 @@ export default function Welcome() {
   // (an old claim/referral link tapped after already signing up) skips
   // straight through, same as if he'd never seen this screen.
   useEffect(() => {
-    if (token) router.replace("/(tabs)");
+    if (token) router.replace("/");
   }, [token]);
 
   useEffect(() => {
@@ -151,10 +152,9 @@ export default function Welcome() {
           <Text className="font-mono text-[11px] font-medium uppercase tracking-[3px] text-brand-blue-lift">
             Care plan platform
           </Text>
-          <Text className="mt-2 text-[40px] font-extrabold leading-none tracking-tight text-white">
-            TRADE<Text className="text-flame">SURA</Text>
-            <Text className="text-copper">✓</Text>
-          </Text>
+          <View className="mt-2">
+            <Lockup height={46} />
+          </View>
           <Text className="mt-2 text-[13.5px] tracking-wide text-night-muted">
             Your trade. On plan.
           </Text>
@@ -173,7 +173,7 @@ export default function Welcome() {
           ) : (
             <>
               <Text className="text-[30px] font-extrabold leading-[1.12] tracking-tight text-white">
-                Your customers,{"\n"}paying you <Text className="text-copper">every month.</Text>
+                Your customers,{"\n"}paying you every month.
               </Text>
               <Text className="mt-3.5 text-[15px] leading-5 text-night-muted">
                 Sell your own care plans at the end of the job. We collect the Direct Debit, you

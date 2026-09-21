@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { verifyGasSafe } from "@/lib/gas-safe";
-import { CustomerShell, GasSafeBadge } from "@/components/shells";
+import { CustomerShell } from "@/components/shells";
 import { PublicSignup } from "@/components/public-signup";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ async function loadEngineer(slug: string) {
   const engineer = await prisma.engineer.findUnique({ where: { slug } });
   if (!engineer || !engineer.tradingName) return null;
   const tiers = await prisma.planTier.findMany({
-    where: { engineerId: engineer.id, archived: false },
+    where: { engineerId: engineer.id, status: "LIVE" },
     orderBy: { sortOrder: "asc" },
     include: { clauses: { include: { clause: true } } },
   });
@@ -105,12 +105,10 @@ export default async function PublicPlanPage({
   return (
     <CustomerShell
       tradingName={brand}
-      sub={
-        <>
-          Your engineer: {gasSafe?.name ?? engineer.gasSafeName ?? brand}{" "}
-          {gasSafe && <GasSafeBadge regNo={gasSafe.regNo} />}
-        </>
-      }
+      // Build Guide v2 Part 15.1 — the trust line, verbatim. Never asserted
+      // for an engineer who isn't actually verified — a false compliance
+      // claim to a customer matters more than matching the string exactly.
+      sub={gasSafe ? "Gas Safe verified · Backed by TradeSura" : "Backed by TradeSura"}
     >
       <p className="text-sm">
         Pick the plan that suits you. The monthly price you see is the full price — no joining

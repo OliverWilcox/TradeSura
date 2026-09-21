@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { sendSms } from "@/lib/sms";
@@ -40,7 +41,7 @@ export async function GET() {
     where: { engineerId, smsOptOut: false, plans: { none: { status: { in: ["ACTIVE", "PAUSED"] } } } },
   });
   const tiers = await prisma.planTier.findMany({
-    where: { engineerId, archived: false },
+    where: { engineerId, status: "LIVE" },
     orderBy: { priceMonthlyPence: "asc" },
     select: { id: true, name: true, priceMonthlyPence: true },
   });
@@ -62,9 +63,9 @@ export async function POST(req: Request) {
   }
 
   const engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
-  const brand = engineer.tradingName ?? engineer.slug;
+  const brand = brandName(engineer);
   const cheapest = await prisma.planTier.findFirst({
-    where: { engineerId, archived: false },
+    where: { engineerId, status: "LIVE" },
     orderBy: { priceMonthlyPence: "asc" },
   });
   if (!cheapest) {

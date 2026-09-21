@@ -4,14 +4,25 @@ import { notifyEngineer } from "@/lib/sms";
 import { payReferralBounty, stripeConfigured } from "@/lib/stripe";
 
 export const REFERRAL_BOUNTY_PENCE = 5000;
-export const REFERRAL_REQUIRED_PLANS = 5;
+// Build Guide v2 Part 14 RULED — "the £50 pays when the invited engineer's
+// first plan goes live," closing the old five-plans question. Kept as a
+// named config value, per Part 19's pattern, rather than inlining a literal
+// 1 at every call site.
+export const REFERRAL_REQUIRED_PLANS = 1;
 
-export type ReferralStage = "invited" | "signed_up" | "building" | "paid";
+// Build Guide v2 Part 14 — "The referral ladder per invitee: Signed up →
+// Verified → Plan live → £50 paid."
+export type ReferralStage = "signed_up" | "verified" | "plan_live" | "paid";
 
-export function referralStage(activePlans: number, bountyPaid: boolean): ReferralStage {
-  if (bountyPaid) return "paid";
-  if (activePlans >= REFERRAL_REQUIRED_PLANS) return "building"; // paid on next check
-  return activePlans > 0 ? "building" : "signed_up";
+export function referralStage(opts: {
+  verified: boolean;
+  activePlans: number;
+  bountyPaid: boolean;
+}): ReferralStage {
+  if (opts.bountyPaid) return "paid";
+  if (opts.activePlans > 0) return "plan_live"; // bounty pays synchronously on activation
+  if (opts.verified) return "verified";
+  return "signed_up";
 }
 
 // Called after a plan goes live: if this engineer was referred and has now hit
@@ -57,6 +68,6 @@ export async function checkReferralBounty(inviteeEngineerId: string) {
   });
   await notifyEngineer(
     invitee.referrerId,
-    `💷 ${invitee.tradingName ?? "Your referral"} just hit ${REFERRAL_REQUIRED_PLANS} live plans — your £${REFERRAL_BOUNTY_PENCE / 100} is in your next payout.`,
+    `💷 ${invitee.tradingName?.trim() || "Your referral"}'s first plan just went live — your £${REFERRAL_BOUNTY_PENCE / 100} is in your next payout.`,
   );
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { sendSms } from "@/lib/sms";
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
   if (!customer) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
   const engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
-  const brand = engineer.tradingName ?? engineer.slug;
+  const brand = brandName(engineer);
   const link = `${process.env.APP_URL}/p/${engineer.slug}?src=reminder`;
 
   const res = await sendSms({

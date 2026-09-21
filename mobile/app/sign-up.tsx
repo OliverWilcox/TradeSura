@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { Lockup, Tick } from "@/components/ui";
 
 type ClaimResolved =
   | { valid: true; personalised: boolean; firstName?: string; businessName?: string; letterBatch: string; variantCell: string }
@@ -26,11 +27,11 @@ const HEARD_OPTIONS: { value: HeardVia; label: string }[] = [
 // cross-repo. Only display names/codes here; the compliance-relevant lookup
 // itself (verifyGasSafe) stays server-side via /api/verify.
 const OTHER_TRADES = [
-  { code: "HEAT_PUMP", name: "Heat Pump" },
+  { code: "HEAT_PUMP", name: "Heat pump" },
   { code: "ELECTRICAL", name: "Electrical" },
   { code: "OIL", name: "Oil (OFTEC)" },
   { code: "SOLAR", name: "Solar" },
-  { code: "AIRCON", name: "Air Con" },
+  { code: "AIRCON", name: "Air con" },
 ] as const;
 
 const inputCls =
@@ -247,7 +248,7 @@ export default function SignUp() {
           // best-effort — a missed interest registration isn't worth blocking signup over
         });
       }
-      router.replace("/(tabs)");
+      router.replace("/");
     } catch (e) {
       if (e instanceof ApiError) {
         const body = e.body as { code?: string } | undefined;
@@ -276,9 +277,7 @@ export default function SignUp() {
       <SafeAreaView edges={["top", "bottom"]} className="flex-1">
       <ScrollView className="flex-1" contentContainerClassName="px-6 pb-10 pt-4 gap-1">
         <View className="mb-3.5 flex-row items-center justify-between">
-          <Text className="font-bold text-[22px] text-night-text uppercase tracking-wide">
-            Trade<Text className="text-brand-blue-lift">Sura</Text>
-          </Text>
+          <Lockup height={24} />
           <Text className="font-mono font-medium text-[11px] tracking-widest text-night-muted">
             STEP {step} OF 3
           </Text>
@@ -336,10 +335,9 @@ export default function SignUp() {
               </Text>
 
               {phoneToken ? (
-                <View className="mt-2.5 rounded-[10px] border border-ok-tint bg-ok-tint px-3.5 py-2.5">
-                  <Text className="font-semibold text-[13.5px] text-ok">
-                    ✓ Mobile verified
-                  </Text>
+                <View className="mt-2.5 flex-row items-center gap-1.5 rounded-[10px] border border-line bg-night-card px-3.5 py-2.5">
+                  <Tick size={14} />
+                  <Text className="font-semibold text-[13.5px] text-night-text">Mobile verified</Text>
                 </View>
               ) : otpRequestToken ? (
                 <View className="mt-2.5 gap-2">
@@ -401,9 +399,9 @@ export default function SignUp() {
               </Text>
 
               {claim?.valid && claim.personalised ? (
-                <View className="mt-3 rounded-[10px] border border-ok-tint bg-ok-tint px-3.5 py-2.5">
-                  <Text className="font-semibold text-[13px] text-ok">
-                    ✓ Claiming the account reserved for {claim.businessName}
+                <View className="mt-3 rounded-[10px] border border-flame-tint bg-flame-tint px-3.5 py-2.5">
+                  <Text className="font-semibold text-[13px] text-flame">
+                    Claiming the account reserved for {claim.businessName}
                   </Text>
                 </View>
               ) : (
@@ -505,16 +503,17 @@ export default function SignUp() {
                 className={inputCls}
               />
               {gasSafeMatch ? (
-                <View className="mt-2.5 rounded-[10px] border border-ok-tint bg-ok-tint px-3.5 py-2.5">
-                  <Text className="font-semibold text-[13px] text-ok">
-                    ✓ Verified against the register — {gasSafeMatch.name} · {gasSafeMatch.company} ·{" "}
+                <View className="mt-2.5 flex-row items-start gap-1.5 rounded-[10px] border border-line bg-night-card px-3.5 py-2.5">
+                  <Tick credential size={16} />
+                  <Text className="shrink font-semibold text-[13px] text-night-text">
+                    Verified against the register — {gasSafeMatch.name} · {gasSafeMatch.company} ·{" "}
                     {gasSafeMatch.categories}
                   </Text>
                 </View>
               ) : gasReviewPending ? (
                 <View className="mt-2.5 rounded-[10px] border border-line bg-night-card px-3.5 py-2.5">
                   <Text className="font-semibold text-[13px] text-night-text">
-                    ◐ Continuing without a match — we&apos;ll verify {gasSafeNo} manually before your
+                    Continuing without a match — we&apos;ll verify {gasSafeNo} manually before your
                     plans go live.
                   </Text>
                 </View>
@@ -524,7 +523,7 @@ export default function SignUp() {
                 // (a real mismatch, or the check itself failing to complete).
                 <View className="mt-2.5 rounded-[10px] border border-warn-tint bg-warn-tint px-3.5 py-2.5">
                   <Text className="font-semibold text-[13px] text-warn">
-                    ▲ {gasError ?? "No match on the register."}
+                    {gasError ?? "No match on the register."}
                   </Text>
                   <Text className="mt-1 font-sans text-xs text-night-muted">
                     Double check the number, or continue and we&apos;ll verify it manually.

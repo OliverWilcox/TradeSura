@@ -15,8 +15,15 @@ export function CustomerShell({
   return (
     <div className="flex-1 flex flex-col max-w-md w-full mx-auto min-h-screen bg-panel">
       <header className="bg-paper px-4 pt-4 pb-2.5 border-b border-line-soft">
-        <div className="font-disp text-xl font-bold uppercase tracking-wide">
-          {tradingName} <span className="text-flame">Care Plans</span>
+        <div className="flex items-center gap-2">
+          {/* Build Guide v2 Part 15.1 — "Header: ring + trading name." The
+              supplied brand asset, never redrawn (Part 2.2). */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- small
+              static brand asset, not worth Next/Image's optimisation path */}
+          <img src="/brand/ring.png" alt="" width={22} height={22} />
+          <div className="font-disp text-xl font-bold uppercase tracking-wide">
+            {tradingName} <span className="text-flame">Care Plans</span>
+          </div>
         </div>
         {sub && <div className="text-[11px] text-muted mt-0.5">{sub}</div>}
       </header>

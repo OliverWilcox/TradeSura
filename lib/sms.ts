@@ -3,6 +3,7 @@
 // sender = engineer trading name; marketing SMS end "Reply STOP to opt out";
 // opt-outs honoured platform-wide; no sends 20:00–08:00 (queued instead).
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import type { MessageClass } from "@/lib/generated/prisma/enums";
 import { isSuppressed } from "@/lib/suppression";
 
@@ -125,7 +126,7 @@ export async function sendSms(opts: {
     where: { id: opts.engineerId },
     select: { tradingName: true, slug: true },
   });
-  const senderName = engineer.tradingName ?? engineer.slug;
+  const senderName = brandName(engineer);
 
   let body = opts.body;
   if (opts.messageClass === "MARKETING") {

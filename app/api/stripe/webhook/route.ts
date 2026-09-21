@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { prisma } from "@/lib/db";
+import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { activatePlan } from "@/lib/activate";
 import { sendSms, notifyEngineer } from "@/lib/sms";
@@ -175,7 +176,7 @@ async function handleEvent(event: Stripe.Event) {
           data: { paymentFailedAt: new Date() },
         });
         // S2 — one plain nudge to the customer; Stripe Smart Retries do the rest.
-        const brand = plan.engineer.tradingName ?? plan.engineer.slug;
+        const brand = brandName(plan.engineer);
         const portal = `${process.env.APP_URL}/portal/${plan.portalToken}`;
         await sendSms({
           engineerId: plan.engineerId,
