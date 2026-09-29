@@ -90,7 +90,7 @@ const FIELD_STEP: Record<FieldKey, 1 | 2 | 3> = {
   terms: 3,
 };
 
-const labelCls = "mb-1.5 mt-3 text-[13.5px] font-medium text-white";
+const labelCls = "mb-1 mt-2.5 text-[12.5px] font-medium text-white";
 
 // 29 Sept review: outlined, high-contrast inputs sized for thumbs in a van.
 // Placeholders are hint text only — never pre-filled values.
@@ -108,18 +108,18 @@ function Input({ error, ...props }: TextInputProps & { error?: string | null }) 
         setFocused(false);
         props.onBlur?.(e);
       }}
-      className={`min-h-[42px] rounded-lg border bg-[#081321] px-3 text-[15px] text-white ${error ? "border-danger" : focused ? "border-brand-blue" : "border-white/30"}`}
+      className={`h-9 rounded-md border bg-[#081321] px-2.5 py-0 text-[14px] text-white ${error ? "border-danger" : focused ? "border-brand-blue" : "border-white/30"}`}
     />
   );
 }
 
 function FieldError({ children }: { children?: string | null }) {
   if (!children) return null;
-  return <Text className="mt-1.5 text-[12.5px] leading-[17px] text-danger">{children}</Text>;
+  return <Text className="mt-1 text-[11.5px] leading-[15px] text-danger">{children}</Text>;
 }
 
 function Hint({ children }: { children: ReactNode }) {
-  return <Text className="mt-1.5 text-[12px] leading-[16px] text-white/75">{children}</Text>;
+  return <Text className="mt-1 text-[11px] leading-[14px] text-white/75">{children}</Text>;
 }
 
 function OutlineButton({
@@ -135,12 +135,12 @@ function OutlineButton({
     <Pressable
       onPress={onPress}
       disabled={busy}
-      className="mt-2.5 min-h-[40px] items-center justify-center rounded-lg border border-brand-blue"
+      className="mt-2 h-9 items-center justify-center rounded-md border border-brand-blue"
     >
       {busy ? (
         <ActivityIndicator color="#8cc0f7" />
       ) : (
-        <Text className="text-[14.5px] font-medium text-brand-blue-lift">{children}</Text>
+        <Text className="text-[13.5px] font-medium text-brand-blue-lift">{children}</Text>
       )}
     </Pressable>
   );
@@ -596,13 +596,13 @@ export default function SignUp() {
                   <Icon name="back" size={22} weight="semibold" />
                 </Pressable>
                 <View className="flex-1">
-                  <Lockup height={26} />
+                  <Lockup height={24} />
                 </View>
-                <Text className="font-mono text-[11px] font-medium tracking-widest text-white/80">
+                <Text className="font-mono text-[10.5px] font-medium tracking-widest text-white/80">
                   STEP {step} OF 3
                 </Text>
               </View>
-              <View className="mb-5 h-1 overflow-hidden rounded-full bg-white/15">
+              <View className="mb-4 h-1 overflow-hidden rounded-full bg-white/15">
                 <View
                   className="h-full rounded-full bg-brand-blue"
                   style={{ width: `${(step / 3) * 100}%` }}
@@ -611,14 +611,14 @@ export default function SignUp() {
 
               {step === 1 && (
                 <>
-                  <Text className="text-[25px] font-extrabold uppercase tracking-wide text-white">
+                  <Text className="text-[23px] font-extrabold uppercase tracking-wide text-white">
                     Create your account
                   </Text>
-                  <Text className="mb-3 mt-0.5 text-[14px] text-white/85">
+                  <Text className="mb-3 mt-0.5 text-[13px] text-white/85">
                     Takes about 2 minutes. No card needed.
                   </Text>
 
-                  <View className="rounded-xl border border-white/10 bg-white/[0.04] px-3.5 pb-4 pt-0.5">
+                  <View className="rounded-xl bg-white/[0.04] px-3 pb-3.5 pt-0.5">
                     <View className="flex-row gap-3">
                       <View ref={fieldRef("firstName")} collapsable={false} className="flex-1">
                         <Text className={labelCls}>First name</Text>
@@ -767,16 +767,16 @@ export default function SignUp() {
                         )}
 
                         <Text className={labelCls}>How did you hear about us?</Text>
-                        <View className="flex-row flex-wrap gap-2">
+                        <View className="flex-row flex-wrap gap-1.5">
                           {HEARD_OPTIONS.map((o) => {
                             const on = heardVia === o.value;
                             return (
                               <Pressable
                                 key={o.value}
                                 onPress={() => setHeardVia(o.value)}
-                                className={`min-h-[34px] justify-center rounded-lg border px-3 ${on ? "border-brand-blue bg-brand-blue" : "border-white/30"}`}
+                                className={`h-7 justify-center rounded-md border px-2.5 ${on ? "border-brand-blue bg-brand-blue" : "border-white/30"}`}
                               >
-                                <Text className={`text-[13.5px] ${on ? "font-semibold" : ""} text-white`}>
+                                <Text className={`text-[12.5px] ${on ? "font-semibold" : ""} text-white`}>
                                   {o.label}
                                 </Text>
                               </Pressable>
@@ -801,12 +801,12 @@ export default function SignUp() {
                   <Pressable
                     onPress={continueStep1}
                     disabled={step1Busy}
-                    className="mt-3.5 items-center rounded-xl bg-white py-3"
+                    className="mt-3.5 items-center rounded-lg bg-white py-2.5"
                   >
                     {step1Busy ? (
                       <ActivityIndicator color="#0F2140" />
                     ) : (
-                      <Text className="text-[15px] font-bold text-on-light">Continue</Text>
+                      <Text className="text-[14.5px] font-bold text-on-light">Continue</Text>
                     )}
                   </Pressable>
                   <Link href="/sign-in" asChild>
@@ -821,19 +821,19 @@ export default function SignUp() {
 
               {step === 2 && (
                 <>
-                  <Text className="text-[25px] font-extrabold uppercase tracking-wide text-white">
+                  <Text className="text-[23px] font-extrabold uppercase tracking-wide text-white">
                     Verify your trade
                   </Text>
-                  <Text className="mb-3 mt-0.5 text-[14px] leading-[20px] text-white/85">
+                  <Text className="mb-3 mt-0.5 text-[13px] leading-[18px] text-white/85">
                     Customers see your verified badge on every plan you sell — it&apos;s your
                     biggest closer.
                   </Text>
 
-                  <View className="rounded-xl border border-white/10 bg-white/[0.04] px-3.5 pb-4 pt-0.5">
+                  <View className="rounded-xl bg-white/[0.04] px-3 pb-3.5 pt-0.5">
                     <Text className={labelCls}>Your trade</Text>
-                    <View className="min-h-[42px] flex-row items-center gap-2 rounded-lg border-[1.5px] border-brand-blue px-3">
-                      <Icon name="check" size={13} weight="bold" />
-                      <Text className="text-[15px] text-white">Gas / Heating</Text>
+                    <View className="h-9 flex-row items-center gap-2 rounded-md border-[1.5px] border-brand-blue px-2.5">
+                      <Icon name="check" size={12} weight="bold" />
+                      <Text className="text-[14px] text-white">Gas / Heating</Text>
                     </View>
                     <ScrollView
                       horizontal
@@ -847,9 +847,9 @@ export default function SignUp() {
                           <Pressable
                             key={t.code}
                             onPress={() => toggleInterest(t.code)}
-                            className={`min-h-[32px] flex-row items-center gap-1.5 rounded-lg border px-2.5 ${on ? "border-brand-blue" : "border-white/25"}`}
+                            className={`h-7 flex-row items-center gap-1.5 rounded-md border px-2 ${on ? "border-brand-blue" : "border-white/25"}`}
                           >
-                            <Text className="text-[13px] text-white">{t.name}</Text>
+                            <Text className="text-[12.5px] text-white">{t.name}</Text>
                             <Text className="overflow-hidden rounded bg-white/10 px-1.5 py-0.5 font-mono text-[9px] text-white/70">
                               {on ? "NOTED" : "SOON"}
                             </Text>
@@ -933,12 +933,12 @@ export default function SignUp() {
                   <Pressable
                     onPress={continueStep2}
                     disabled={cardBusy}
-                    className="mt-4 items-center rounded-xl bg-white py-3"
+                    className="mt-4 items-center rounded-lg bg-white py-2.5"
                   >
                     {cardBusy ? (
                       <ActivityIndicator color="#0F2140" />
                     ) : (
-                      <Text className="text-[15px] font-bold text-on-light">Continue</Text>
+                      <Text className="text-[14.5px] font-bold text-on-light">Continue</Text>
                     )}
                   </Pressable>
                   <Pressable onPress={() => goToStep(1)} className="mt-3 items-center py-2">
@@ -949,14 +949,14 @@ export default function SignUp() {
 
               {step === 3 && (
                 <>
-                  <Text className="text-[25px] font-extrabold uppercase tracking-wide text-white">
+                  <Text className="text-[23px] font-extrabold uppercase tracking-wide text-white">
                     Your business
                   </Text>
-                  <Text className="mb-3 mt-0.5 text-[14px] text-white/85">
+                  <Text className="mb-3 mt-0.5 text-[13px] text-white/85">
                     This is the name your customers see on their plan.
                   </Text>
 
-                  <View className="rounded-xl border border-white/10 bg-white/[0.04] px-3.5 pb-4 pt-0.5">
+                  <View className="rounded-xl bg-white/[0.04] px-3 pb-3.5 pt-0.5">
                     <View ref={fieldRef("tradingName")} collapsable={false}>
                       <Text className={labelCls}>Trading name</Text>
                       <Input
@@ -983,9 +983,9 @@ export default function SignUp() {
                               setBusinessType(value);
                               clearError("companyNumber");
                             }}
-                            className={`min-h-[36px] justify-center rounded-lg border-[1.5px] px-3 ${on ? "border-brand-blue bg-brand-blue/10" : "border-white/30"}`}
+                            className={`h-8 justify-center rounded-md border-[1.5px] px-2.5 ${on ? "border-brand-blue bg-brand-blue/10" : "border-white/30"}`}
                           >
-                            <Text className={`text-[14px] ${on ? "text-brand-blue-lift" : "text-white"}`}>
+                            <Text className={`text-[13px] ${on ? "text-brand-blue-lift" : "text-white"}`}>
                               {label}
                             </Text>
                           </Pressable>
@@ -1082,12 +1082,12 @@ export default function SignUp() {
                   <Pressable
                     onPress={submit}
                     disabled={busy || !termsConsent}
-                    className={`mt-3.5 items-center rounded-xl bg-white py-3 ${termsConsent ? "" : "opacity-50"}`}
+                    className={`mt-3.5 items-center rounded-lg bg-white py-2.5 ${termsConsent ? "" : "opacity-50"}`}
                   >
                     {busy ? (
                       <ActivityIndicator color="#0F2140" />
                     ) : (
-                      <Text className="text-[15px] font-bold text-on-light">Create my account</Text>
+                      <Text className="text-[14.5px] font-bold text-on-light">Create my account</Text>
                     )}
                   </Pressable>
                   <Pressable onPress={() => goToStep(2)} className="mt-3 items-center py-2">
