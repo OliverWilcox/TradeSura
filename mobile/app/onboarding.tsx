@@ -221,7 +221,7 @@ export default function Onboarding() {
                 placeholder="Full postal address"
                 placeholderTextColor="#6E86A3"
                 multiline
-                className="min-h-[80px] rounded-[10px] border border-line bg-paper px-3.5 py-3 font-sans text-[16px] text-ink"
+                className="min-h-[64px] rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-[15px] text-ink"
               />
               {packError && <Text className="font-sans text-xs text-danger">{packError}</Text>}
               <Button
