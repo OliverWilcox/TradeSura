@@ -54,7 +54,14 @@
           "contactsPermission": "TradeSura uses your contacts to import customers into your book."
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "TradeSura uses your camera to photograph your Gas Safe ID card for verification.",
+          "photosPermission": "TradeSura uses your photos to upload your logo and Gas Safe ID card."
+        }
+      ]
     ],
     "extra": {
       "router": {},

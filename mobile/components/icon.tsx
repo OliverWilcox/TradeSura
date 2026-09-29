@@ -26,6 +26,10 @@ const ICONS = {
   chat: { ios: "bubble.left", android: "chat" },
   document: { ios: "doc.text", android: "description" },
   close: { ios: "xmark", android: "close" },
+  camera: { ios: "camera", android: "photo_camera" },
+  invite: { ios: "heart", android: "volunteer_activism" },
+  howItWorks: { ios: "checkmark.circle", android: "task_alt" },
+  shop: { ios: "shippingbox", android: "inventory_2" },
 } as const;
 
 export type IconName = keyof typeof ICONS;

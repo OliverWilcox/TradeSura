@@ -26,6 +26,11 @@ const HAS_SEEN_FIRST_PAYOUT_KEY = "ts_has_seen_first_payout";
 // process.env.EXPO_PUBLIC_* is inlined by Metro at build time — see .env.example.
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
+// Absolute URL for a backend web page (terms, privacy) opened in a browser.
+export function apiUrl(path: string): string {
+  return `${API_URL ?? ""}${path}`;
+}
+
 export async function getToken(): Promise<string | null> {
   return SecureStore.getItemAsync(TOKEN_KEY);
 }
