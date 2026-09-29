@@ -1,7 +1,16 @@
 import "../global.css";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { AuthProvider } from "@/lib/auth-context";
+import { View } from "react-native";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { LaunchOverlay } from "@/components/ring-loader";
+
+// Ready once we know who's signed in and (if anyone is) their profile has
+// loaded or failed — the moment the first real screen can render.
+function Launch() {
+  const { loading, token, me, meError } = useAuth();
+  return <LaunchOverlay ready={!loading && (!token || Boolean(me) || Boolean(meError))} />;
+}
 
 // Build Spec v1 §1: system font only — no custom webfonts. Weight comes from
 // the font-{medium,semibold,bold} utilities; `font-mono` falls back to the
@@ -10,7 +19,8 @@ import { AuthProvider } from "@/lib/auth-context";
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <StatusBar style="light" />
+      <View style={{ flex: 1, backgroundColor: "#0B1A2E" }}>
+        <StatusBar style="light" />
       {/* v2: "Screen transitions: fade + 8px rise, 220ms." Native Stack has
           no built-in fade+rise preset, so this uses its closest native
           equivalent (a plain fade) rather than a hand-rolled interpolator —
@@ -24,6 +34,8 @@ export default function RootLayout() {
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="first-payout" />
       </Stack>
+        <Launch />
+      </View>
     </AuthProvider>
   );
 }

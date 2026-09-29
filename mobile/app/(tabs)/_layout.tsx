@@ -7,7 +7,6 @@ import { useAuth } from "@/lib/auth-context";
 import { Button, GateSheet } from "@/components/ui";
 import { AddCustomerSheet } from "@/components/add-customer-sheet";
 import { Icon, type IconName } from "@/components/icon";
-import { RingLoader } from "@/components/ring-loader";
 
 // Build Guide v2 Part 3 — the whole map: Home · Customers · Add customer
 // (the labelled hero) · Reminders · Payouts. No Plans tab, no More tab — those
@@ -181,13 +180,14 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
 export default function TabsLayout() {
   const { token, loading, me, meLoading, meError, refreshMe, signOut } = useAuth();
 
-  if (loading) return <RingLoader />;
+  // The launch overlay (app/_layout.tsx) covers these first moments.
+  if (loading) return <View className="flex-1 bg-night" />;
   // W0 — signed-out users land on the welcome screen, not straight on
   // sign-in; it decides for itself whether to promote Sign in (returning
   // device) or Start now (organic/claim/referral).
   if (!token) return <Redirect href="/welcome" />;
 
-  if (meLoading && !me) return <RingLoader />;
+  if (meLoading && !me) return <View className="flex-1 bg-night" />;
 
   if (meError && !me) {
     return (

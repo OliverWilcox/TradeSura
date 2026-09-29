@@ -9,12 +9,18 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://tradesura.com"
+      }
     },
     "production": {
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://tradesura.com"
       }
     }
   },
