@@ -8,7 +8,13 @@ import { normaliseClaimCode, resolveClaimCode } from "@/lib/claim";
 import { sendEmail } from "@/lib/email";
 import { engineerWelcomeEmailHtml } from "@/lib/engineer-welcome-email";
 import { notifyEngineer } from "@/lib/sms";
-import { sendPushNotification } from "@/lib/push";
+import {
+  COMPANY_NUMBER,
+  GAS_SAFE_NO,
+  UK_POSTCODE,
+  normaliseCompanyNumber,
+  normalisePostcode,
+} from "@/lib/validate";
 
 // Everything the sign-up wizard (steps 1-3) collects.
 const SignupData = z.object({
@@ -16,27 +22,29 @@ const SignupData = z.object({
   lastName: z.string().min(2).max(60),
   phoneToken: z.string().min(1), // from /api/onboarding/phone/verify
   trades: z.array(z.string().max(40)).max(10).default([]),
-  // The regNo is required — Gas Safe is the only live trade right now, so
-  // it's mandatory at sign-up, same pattern as the wording blocklist
-  // re-check on tier save. Name/company/categories are only present when
-  // the number matched the register; review #11's escape hatch lets an
-  // engineer continue on an unmatched number, flagged for manual review
-  // instead of dead-ended (see gasSafeReviewRequested below).
-  gasSafeNo: z.string().min(1).max(20),
-  gasSafeName: z.string().max(120).optional(),
-  gasSafeCompany: z.string().max(120).optional(),
-  gasSafeCategories: z.string().max(200).optional(),
-  gasSafeReviewRequested: z.boolean().optional(),
+  // The regNo is required — Gas Safe is the only live trade right now.
+  // 29 Sept review: verification is "Submit for verification" into the
+  // admin queue — a legal position, not styling — so signup never grants
+  // the badge itself, whatever the register says. The ID-card photo arrives
+  // as a token from /api/onboarding/gas-safe-card. Optional here only so
+  // builds that predate the card step can still sign up; the current app
+  // requires it before step 2 continues.
+  gasSafeNo: z.string().max(20).transform((v) => v.replace(/\s/g, "")).pipe(z.string().regex(GAS_SAFE_NO)),
+  gasSafeCardToken: z.string().max(2000).optional(),
   tradingName: z.string().min(2).max(80),
   businessType: z.enum(["sole_trader", "ltd", "partnership"]),
   companyNumber: z.string().max(20).optional(),
-  postcode: z.string().min(4).max(10),
+  postcode: z
+    .string()
+    .max(10)
+    .transform(normalisePostcode)
+    .pipe(z.string().regex(UK_POSTCODE)),
   marketingConsent: z.boolean().default(false),
   // E1 — "How did you hear about us?" + optional referral code. Pre-filled and
   // hidden when arriving from a claim/referral link (Blocks 2 & 4).
   attribution: z
     .object({
-      heardVia: z.enum(["letter", "engineer", "online", "other"]).optional(),
+      heardVia: z.enum(["letter", "email", "engineer", "online", "other"]).optional(),
       referralCode: z.string().max(40).optional(),
       letterBatch: z.string().max(40).optional(),
       variantCell: z.string().max(8).optional(),
@@ -48,8 +56,27 @@ const SignupData = z.object({
 
 const Body = z.object({
   email: z.string().email().max(200),
-  signup: SignupData.optional(),
+  signup: SignupData.superRefine((d, ctx) => {
+    // Company number: format-checked always, required for a limited company.
+    const n = d.companyNumber ? normaliseCompanyNumber(d.companyNumber) : "";
+    if (d.businessType === "ltd" && !n) {
+      ctx.addIssue({ code: "custom", path: ["companyNumber"], message: "required" });
+    } else if (n && !COMPANY_NUMBER.test(n)) {
+      ctx.addIssue({ code: "custom", path: ["companyNumber"], message: "format" });
+    }
+  }).optional(),
 });
+
+// Plain-English messages for the fields the app also checks — a server
+// rejection names the field instead of a generic "check the form".
+const FIELD_MESSAGES: Record<string, string> = {
+  gasSafeNo: "Gas Safe numbers are 6 or 7 digits.",
+  postcode: "Enter a full UK postcode, like HD9 2TT.",
+  companyNumber: "Company numbers are 8 characters, like 12345678 or SC123456.",
+  tradingName: "Enter your trading name.",
+  firstName: "Enter your first name.",
+  lastName: "Enter your last name.",
+};
 
 // [DECISION — human, instant-login] No email click-through: this endpoint
 // authenticates and returns a live bearer token directly instead of emailing
@@ -64,12 +91,30 @@ const Body = z.object({
 export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
+    const issue = parsed.error.issues[0];
+    const field = issue?.path[0] === "signup" ? String(issue.path[1] ?? "") : "email";
+    return NextResponse.json(
+      {
+        error: FIELD_MESSAGES[field] ?? "Enter a valid email address.",
+        field,
+      },
+      { status: 400 },
+    );
   }
   const email = parsed.data.email.toLowerCase();
 
   let engineer = await prisma.engineer.findUnique({ where: { email } });
   let trades: string[] = [];
+
+  // Signing up with an email that already has an account used to fall
+  // straight through to "sign in as that account" — the signup data was
+  // silently dropped. Now it's a clear, handled state.
+  if (engineer && parsed.data.signup) {
+    return NextResponse.json(
+      { error: "This email already has an account — sign in instead.", code: "email_taken", field: "email" },
+      { status: 409 },
+    );
+  }
 
   if (!engineer) {
     if (!parsed.data.signup) {
@@ -112,11 +157,27 @@ export async function POST(req: Request) {
     // Review #13 — a Gas Safe number can only back one account. Checked here
     // (not just left to the DB's unique constraint) so the failure is a
     // clear, actionable message instead of a raw 500.
+    let gasSafeCardUrl: string | null = null;
+    if (rest.gasSafeCardToken) {
+      const card = await verifyToken(rest.gasSafeCardToken);
+      if (!card?.cardUrl || card.phone !== phonePayload.phone) {
+        return NextResponse.json(
+          { error: "Your ID card photo expired — take it again on step 2.", field: "gasSafeCard" },
+          { status: 400 },
+        );
+      }
+      gasSafeCardUrl = card.cardUrl;
+    }
+
     if (rest.gasSafeNo) {
       const dupe = await prisma.engineer.findUnique({ where: { gasSafeNo: rest.gasSafeNo } });
       if (dupe) {
         return NextResponse.json(
-          { error: "This licence is already registered — sign in instead?", code: "duplicate_gas_safe_no" },
+          {
+            error: "This Gas Safe number is already registered — sign in instead?",
+            code: "duplicate_gas_safe_no",
+            field: "gasSafeNo",
+          },
           { status: 409 },
         );
       }
@@ -132,41 +193,20 @@ export async function POST(req: Request) {
         phoneVerifiedAt: new Date(),
         tradingName: rest.tradingName,
         businessType: rest.businessType,
-        companyNumber: rest.companyNumber,
+        companyNumber:
+          rest.businessType === "ltd" && rest.companyNumber
+            ? normaliseCompanyNumber(rest.companyNumber)
+            : null,
         postcode: rest.postcode,
         marketingConsent: rest.marketingConsent,
         gasSafeNo: rest.gasSafeNo,
-        gasSafeName: rest.gasSafeName,
-        gasSafeCompany: rest.gasSafeCompany,
-        gasSafeCategories: rest.gasSafeCategories,
-        // review #11 — a real register match verifies immediately; an
-        // unmatched number the engineer chose to continue with (the
-        // manual-review escape hatch) is flagged pending instead.
-        gasSafeVerifiedAt: rest.gasSafeReviewRequested ? null : new Date(),
-        gasSafeReviewRequestedAt: rest.gasSafeReviewRequested ? new Date() : null,
+        gasSafeCardUrl,
+        // Into the admin queue — the badge is granted by a person
+        // (app/admin/verifications), never by signup.
+        gasSafeReviewRequestedAt: new Date(),
         attribution,
       },
     });
-    // Build Guide v2 Part 6.4 — "Badge-granted is one event with four
-    // effects: push notification ... → strip flips to quiet active →
-    // avatar gets its tick → member-pack shipment fires." This is that
-    // event, for the immediate-register-match path. In practice this call
-    // almost always no-ops today — push permission is asked "after the
-    // first plan goes live" (Part 11), well after signup, so there's no
-    // token to send to yet — but it's the correct trigger point per spec,
-    // and free to include since sendPushNotification no-ops silently
-    // without a registered token. The other place gasSafeVerifiedAt is set
-    // (app/api/onboarding/route.ts) fires the same event; a future
-    // manual-review-resolution path (review #11's escape hatch has no
-    // admin UI yet — see verification-state.ts) will need to call this too
-    // once one exists.
-    if (!rest.gasSafeReviewRequested) {
-      await sendPushNotification(
-        engineer.id,
-        "You're verified",
-        "You're Gas Safe verified — your member pack is on its way",
-      );
-    }
     await track("engineer_signed_up", { type: "ENGINEER", id: engineer.id }, {
       slug,
       heardVia: attribution.heardVia,

@@ -76,6 +76,13 @@ model Engineer {
   // engineer entered didn't match our register on signup, so they can
   // continue (manual-review escape hatch) rather than being dead-ended.
   gasSafeReviewRequestedAt DateTime?
+  // 29 Sept review — verification is a human decision, not a register
+  // auto-match: signup submits the number + ID-card photo into the admin
+  // queue (app/admin/verifications), which sets gasSafeVerifiedAt or
+  // gasSafeRejectedAt. Card photo lives in Blob under an unguessable path.
+  gasSafeCardUrl           String?
+  gasSafeRejectedAt        DateTime?
+  gasSafeRejectReason      String?
   // Build Guide v2 Part 11 — push notifications. Set once the app has asked
   // permission (after the first plan goes live, per spec) and registered a
   // real device token via POST /api/me/push-token. Null means either the

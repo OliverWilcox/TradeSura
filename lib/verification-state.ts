@@ -24,6 +24,8 @@ export type EngineerVerification = {
   gasSafeNo: string | null;
   gasSafeVerifiedAt: Date | null;
   gasSafeReviewRequestedAt: Date | null;
+  gasSafeRejectedAt: Date | null;
+  gasSafeRejectReason: string | null;
 };
 
 export function standingState(e: EngineerVerification): StandingState {
@@ -45,11 +47,13 @@ export function standingState(e: EngineerVerification): StandingState {
   // verified yet." This function now works the same way, so the two can
   // never again disagree the way Home and Account just did.
   if (e.gasSafeVerifiedAt) return "ACTIVE";
-  if (e.gasSafeReviewRequestedAt) return "CHECK_PENDING";
-  // No retry flow exists yet to distinguish "failed, try again" from a
-  // number that was simply never checked — CHECK_FAILED covers both; either
-  // way it's never ACTIVE without a real gasSafeVerifiedAt above.
-  return "CHECK_FAILED";
+  // 29 Sept review — "shows the FAILURE state on a fresh account that never
+  // submitted anything". Failed now means a reviewer actually rejected it
+  // (app/admin/verifications); anything else unverified is still in the
+  // queue, so it reads as pending. Still never ACTIVE without a real
+  // gasSafeVerifiedAt above.
+  if (e.gasSafeRejectedAt) return "CHECK_FAILED";
+  return "CHECK_PENDING";
 }
 
 // Build Guide v2 Part 13 — the Account status card shows the Gas Safe and
@@ -57,19 +61,19 @@ export function standingState(e: EngineerVerification): StandingState {
 // the dashboard strip uses), rather than the strip's single collapsed
 // priority-ladder value. Same truth source, same words, different shape.
 export function gasSafeStatus(
-  e: Pick<EngineerVerification, "gasSafeNo" | "gasSafeVerifiedAt" | "gasSafeReviewRequestedAt">,
+  e: Pick<
+    EngineerVerification,
+    "gasSafeNo" | "gasSafeVerifiedAt" | "gasSafeReviewRequestedAt" | "gasSafeRejectedAt"
+  >,
 ): { tone: StandingTone; text: string } {
   if (e.gasSafeVerifiedAt) return { tone: "quiet", text: "Gas Safe verified — account active." };
-  if (e.gasSafeReviewRequestedAt) {
-    return { tone: "amber", text: "Gas Safe check in progress — we'll text you within 24 hours." };
-  }
-  if (e.gasSafeNo) {
+  if (e.gasSafeRejectedAt) {
     return {
       tone: "amber",
       text: "We couldn't verify your Gas Safe number — check it and try again →",
     };
   }
-  return { tone: "amber", text: "Not yet Gas Safe verified" };
+  return { tone: "amber", text: "Gas Safe check in progress — we'll text you within 24 hours." };
 }
 
 export function paymentsStatus(
