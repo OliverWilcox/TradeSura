@@ -4,7 +4,9 @@ import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import CursorGlow from "@/components/cursor-glow";
+import Link from "next/link";
 import { RingMark } from "@/components/ring-mark";
+import { SiteHeader } from "@/components/site-header";
 
 // Same language law as the mobile app's welcome screen (app/assets/TradeSura_Welcome_Screen_W0.html
 // §1): never "insurance", "cover", "protection", "warranty", "doorstep" in customer-facing copy.
@@ -102,6 +104,7 @@ export default function HomePage() {
   return (
     <div ref={root} className="flex min-h-full flex-col bg-black text-ink">
       <CursorGlow />
+      <SiteHeader />
       <main className="flex-1">
         {/* Hero */}
         <section className="relative flex min-h-[92vh] flex-col items-center justify-center overflow-hidden px-6 py-24 text-center">
@@ -240,7 +243,15 @@ export default function HomePage() {
       <footer className="relative border-t border-line px-6 py-4 text-xs text-faint">
         <div className="flex items-center justify-between">
           <span className="font-semibold text-ink">TradeSura.com</span>
-          <span>© 2026 TradeSura Ltd · info@tradesura.com</span>
+          <span className="flex items-center gap-4">
+            <Link href="/terms" className="hover:text-ink">
+              Terms of service
+            </Link>
+            <Link href="/privacy" className="hover:text-ink">
+              Privacy
+            </Link>
+            <span>© 2026 TradeSura Ltd · info@tradesura.com</span>
+          </span>
         </div>
         <p className="mt-2 text-center text-[11px] text-faint/80 sm:text-left">
           TradeSura Ltd · Registered in England &amp; Wales, Company No. 17325346 · Registered
