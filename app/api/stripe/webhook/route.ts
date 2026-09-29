@@ -7,10 +7,11 @@ import { activatePlan } from "@/lib/activate";
 import { sendSms, notifyEngineer } from "@/lib/sms";
 import {
   constructWebhookEvent,
-  accountStatusFrom,
+  getConnectAccountStatus,
   getStripe,
   computeApplicationFeePence,
 } from "@/lib/stripe";
+import { appUrl } from "@/lib/app-url";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 // One URL for both platform events (checkout, invoices, subscriptions) and
@@ -62,13 +63,20 @@ export async function POST(req: Request) {
 
 async function handleEvent(event: Stripe.Event) {
   switch (event.type) {
+    // Stripe still emits the v1-shaped account.updated event for v2 Accounts
+    // (docs.stripe.com/connect/webhooks), but this platform's accounts are
+    // created via v2 now (see lib/stripe.ts) — rather than trust whichever
+    // fields happen to be populated on that v1-compat payload, treat the
+    // event purely as a "something changed" signal and re-fetch current v2
+    // status via the connected account id on the event.
     case "account.updated": {
-      const account = event.data.object as Stripe.Account;
+      const accountId = event.account;
+      if (!accountId) return;
       const engineer = await prisma.engineer.findFirst({
-        where: { stripeAccountId: account.id },
+        where: { stripeAccountId: accountId },
       });
       if (!engineer) return;
-      const s = accountStatusFrom(account);
+      const s = await getConnectAccountStatus(accountId);
       await prisma.engineer.update({
         where: { id: engineer.id },
         data: {
@@ -79,7 +87,7 @@ async function handleEvent(event: Stripe.Event) {
       });
       if (s.chargesEnabled && !engineer.stripeChargesEnabled) {
         await track("stripe_onboarded", { type: "ENGINEER", id: engineer.id }, {
-          accountId: account.id,
+          accountId,
         });
       }
       return;
@@ -177,7 +185,7 @@ async function handleEvent(event: Stripe.Event) {
         });
         // S2 — one plain nudge to the customer; Stripe Smart Retries do the rest.
         const brand = brandName(plan.engineer);
-        const portal = `${process.env.APP_URL}/portal/${plan.portalToken}`;
+        const portal = `${appUrl()}/portal/${plan.portalToken}`;
         await sendSms({
           engineerId: plan.engineerId,
           to: plan.customer.phone,

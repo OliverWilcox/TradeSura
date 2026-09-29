@@ -3,8 +3,9 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
-import { createEmbeddedSubscription, publishableKey } from "@/lib/stripe";
+import { createEmbeddedSubscription, ensureRecipientConfiguration, isMissingDestination, publishableKey } from "@/lib/stripe";
 import { snapshotTier } from "@/lib/plan-tier";
+import { appUrl } from "@/lib/app-url";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 const Body = z.object({ tierId: z.string().min(1) });
@@ -57,7 +58,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   });
 
   const brand = brandName(plan.engineer);
-  const base = `${process.env.APP_URL}/p/${plan.engineer.slug}/signup/${token}`;
+  const base = `${appUrl()}/p/${plan.engineer.slug}/signup/${token}`;
 
   try {
     const sub = await createEmbeddedSubscription({
@@ -95,6 +96,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     });
   } catch (err) {
     console.error("[signup] embedded subscription failed:", err);
+    if (isMissingDestination(err)) {
+      // The engineer's Stripe account can't receive transfers yet (merchant-
+      // only v2 account). Add the recipient configuration and mark payments
+      // unfinished so the app prompts them — a clear message beats a retry
+      // loop that can never succeed.
+      await ensureRecipientConfiguration(plan.engineer.stripeAccountId!).catch((e) =>
+        console.error("[signup] ensureRecipientConfiguration failed:", e),
+      );
+      await prisma.engineer.update({
+        where: { id: plan.engineer.id },
+        data: { stripeChargesEnabled: false },
+      });
+      return NextResponse.json(
+        {
+          error: `${plan.engineer.tradingName?.trim() || "This engineer"} needs to finish one step of their payment setup before you can join — nothing has been taken.`,
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { error: "Could not start the Direct Debit setup — try again in a minute." },
       { status: 502 },

@@ -6,8 +6,9 @@ import { track } from "@/lib/track";
 import { sendSms } from "@/lib/sms";
 import { normaliseUkPhone } from "@/lib/phone";
 import { newPlanRef, newToken } from "@/lib/plans";
-import { createEmbeddedSubscription, publishableKey } from "@/lib/stripe";
+import { createEmbeddedSubscription, ensureRecipientConfiguration, isMissingDestination, publishableKey } from "@/lib/stripe";
 import { snapshotTier } from "@/lib/plan-tier";
+import { appUrl } from "@/lib/app-url";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 const Body = z.object({
@@ -90,7 +91,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   });
 
   const brand = brandName(engineer);
-  const base = `${process.env.APP_URL}/p/${engineer.slug}/signup/${plan.signupToken}`;
+  const base = `${appUrl()}/p/${engineer.slug}/signup/${plan.signupToken}`;
 
   await track("tier_selected", { type: "CUSTOMER", id: customer.id }, {
     planId: plan.id,
@@ -152,6 +153,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     });
   } catch (err) {
     console.error("[p/start] embedded subscription failed:", err);
+    if (isMissingDestination(err)) {
+      // The engineer's Stripe account can't receive transfers yet (merchant-
+      // only v2 account). Add the recipient configuration and mark payments
+      // unfinished so the app prompts them — a clear message beats a retry
+      // loop that can never succeed.
+      await ensureRecipientConfiguration(engineer.stripeAccountId!).catch((e) =>
+        console.error("[p/start] ensureRecipientConfiguration failed:", e),
+      );
+      await prisma.engineer.update({
+        where: { id: engineer.id },
+        data: { stripeChargesEnabled: false },
+      });
+      return NextResponse.json(
+        {
+          error: `${engineer.tradingName?.trim() || "This engineer"} needs to finish one step of their payment setup before you can join — nothing has been taken.`,
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { error: "Could not start the Direct Debit setup — try again in a minute." },
       { status: 502 },
