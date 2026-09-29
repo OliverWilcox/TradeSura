@@ -71,7 +71,8 @@ function CheckoutForm({
       <PaymentElement options={{ layout: "tabs" }} />
 
       <Card className="bg-flame-tint border-flame-tint text-[12.5px]">
-        <b>Protected by the Direct Debit Guarantee.</b> Your first collection is a few working
+        <b>Protected by the Direct Debit Guarantee.</b>{" "}
+        Your first collection is a few working
         days after you join, then monthly. You&apos;ll get 3 days&apos; notice of any change, and
         you can cancel anytime.
       </Card>

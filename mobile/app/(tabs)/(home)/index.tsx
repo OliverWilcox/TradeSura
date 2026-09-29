@@ -159,7 +159,9 @@ export default function Home() {
     ? "Your first plan is step 2 of setup — Continue setup →"
     : !verified
       ? "Offers unlock with your Gas Safe badge — we'll text you when it's live."
-      : null;
+      : !me?.stripeConnected
+        ? "Finish your payment setup first — customers can't pay you until it's done."
+        : null;
 
   return (
     <View className="flex-1 bg-panel">
@@ -390,8 +392,8 @@ export default function Home() {
         visible={offerGate !== null}
         onClose={() => setOfferGate(null)}
         reason={offerGate ?? ""}
-        cta={awake ? "Check my status" : "Continue setup"}
-        onCta={() => router.push(awake ? "/more" : "/onboarding")}
+        cta={awake && !verified ? "Check my status" : "Continue setup"}
+        onCta={() => router.push(awake && !verified ? "/more" : "/onboarding")}
       />
       <GateSheet
         visible={shopGateOpen}

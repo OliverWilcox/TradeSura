@@ -44,10 +44,32 @@ export function AddCustomerSheet({
 }): ReactNode {
   const { me } = useAuth();
   const badgeGranted = Boolean(me?.gasSafeVerifiedAt);
+  // Routes 1-2 end at the customer paying by Direct Debit — if the engineer's
+  // Stripe setup isn't finished, the customer would hit "hasn't finished
+  // their payment setup" mid-signup. Stop it here, on the engineer's side.
+  const paymentsReady = Boolean(me?.stripeConnected);
 
   function go(path: Parameters<typeof router.push>[0]) {
     onClose();
     router.push(path);
+  }
+
+  function needsPayments() {
+    onClose();
+    Alert.alert(
+      "Finish your payment setup first",
+      "Customers pay you by Direct Debit through Stripe — until your payment setup is done, they can't join a plan.",
+      [
+        { text: "Not now", style: "cancel" },
+        { text: "Set up payments", onPress: () => router.push("/onboarding") },
+      ],
+    );
+  }
+
+  function customerFacing(path: Parameters<typeof router.push>[0]) {
+    if (!badgeGranted) return needsBadge();
+    if (!paymentsReady) return needsPayments();
+    go(path);
   }
 
   function needsBadge() {
@@ -75,14 +97,14 @@ export function AddCustomerSheet({
           <Row
             title="They're with me — show my plans"
             sub="Hand them the phone at the kitchen table"
-            muted={!badgeGranted}
-            onPress={() => (badgeGranted ? go("/demo") : needsBadge())}
+            muted={!badgeGranted || !paymentsReady}
+            onPress={() => customerFacing("/demo")}
           />
           <Row
             title="Text them the offer"
             sub="Pick a plan, see the exact text, send"
-            muted={!badgeGranted}
-            onPress={() => (badgeGranted ? go("/offer") : needsBadge())}
+            muted={!badgeGranted || !paymentsReady}
+            onPress={() => customerFacing("/offer")}
           />
           <Row
             title="Just save their details"

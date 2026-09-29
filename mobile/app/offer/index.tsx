@@ -204,6 +204,18 @@ export default function OfferStart() {
                 Check my status
               </Button>
             </Card>
+          ) : !me?.stripeConnected ? (
+            <Card>
+              <Micro>One more step</Micro>
+              <Text className="mt-1.5 text-[19px] font-bold text-ink">Finish your payment setup</Text>
+              <Text className="mt-1 text-[14px] leading-5 text-muted">
+                Customers pay you by Direct Debit through Stripe. Until your payment setup is
+                done, they can&apos;t join — so finish it before sending an offer.
+              </Text>
+              <Button className="mt-4" onPress={() => router.push("/onboarding")}>
+                Set up payments
+              </Button>
+            </Card>
           ) : (
             <Card>
               <Text className="mb-2 font-semibold text-sm text-ink">Send signup link</Text>
