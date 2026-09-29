@@ -291,7 +291,7 @@ export default function More() {
               setTradingName(v);
               setSavedSettings(false);
             }}
-            className="mt-1 rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-sm text-ink"
+            className="mt-1 rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-[14px] text-ink"
           />
           <Text className="mt-3 font-sans text-xs text-muted">Logo (optional)</Text>
           <Pressable

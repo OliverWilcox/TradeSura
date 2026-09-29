@@ -454,7 +454,7 @@ export default function PlanWizard() {
                 setDirty(true);
               }}
               maxLength={NAME_MAX}
-              className="rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-base text-ink"
+              className="rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-[16px] text-ink"
             />
             <Text className="mt-1 text-right font-mono text-[10px] text-faint">
               {name.length}/{NAME_MAX}

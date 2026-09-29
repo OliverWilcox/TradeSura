@@ -5,7 +5,10 @@ import { Micro } from "@/components/ui";
 
 export type AddressValue = { line1: string; town: string; postcode: string };
 
-const inputCls = "rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-sm text-ink";
+// Size-only text class (text-[14px], not text-sm) on single-line inputs:
+// text-sm also sets a line-height, which iOS draws as text sitting low in
+// the box. Same rule for every TextInput in the app.
+const inputCls = "rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-[14px] text-ink";
 
 type LookedUpAddress = { line1: string; line2?: string; town: string; postcode: string };
 

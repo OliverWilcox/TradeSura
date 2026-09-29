@@ -20,7 +20,7 @@ type Tier = { id: string; name: string; priceMonthlyPence: number; lines: string
 const SCRIPT =
   "“I put all my customers on a care plan now — £12 a month and your annual service is included. I’ll text you the link, have a look tonight.”";
 
-const inputCls = "rounded-[10px] border border-line bg-paper px-3 py-2 font-sans text-sm text-ink";
+const inputCls = "rounded-[10px] border border-line bg-paper px-3 py-2 font-sans text-[14px] text-ink";
 
 export default function OfferStart() {
   const { me } = useAuth();

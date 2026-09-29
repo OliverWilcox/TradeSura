@@ -7,7 +7,7 @@ import { AppHeader, Card, Micro, Button } from "@/components/ui";
 import { AddressLookupField, type AddressValue } from "@/components/address-lookup";
 import { MonthPicker } from "@/components/month-picker";
 
-const inputCls = "rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-sm text-ink";
+const inputCls = "rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-[14px] text-ink";
 
 // Build Guide v2 Part 9.3 — Add-customer sheet, route 3: "Just save their
 // details." Deliberately plan-free — no plan is offered or created here,
