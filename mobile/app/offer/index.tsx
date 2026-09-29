@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Linking,
 } from "react-native";
-import { router, useFocusEffect, useLocalSearchParams, Link } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -150,24 +150,35 @@ export default function OfferStart() {
           )}
 
           {tierCount === 0 ? (
+            // 29 Sept review — this used to be one line with an inline link
+            // nested in Text that didn't respond to taps. A real empty state
+            // with a real button, straight into the plan builder.
             <Card>
-              <Text className="font-sans text-sm text-ink">
-                You need a plan first ·{" "}
-                <Link href="/plans" className="font-semibold text-flame-deep">
-                  Build my plan →
-                </Link>
+              <Micro>Before your first offer</Micro>
+              <Text className="mt-1.5 text-[19px] font-bold text-ink">Build your plan first</Text>
+              <Text className="mt-1 text-[14px] leading-5 text-muted">
+                Customers pick from your plan when they open the link. We&apos;ve drafted Boiler
+                Care at £12/month — approve it or set your own price. Takes about a minute.
               </Text>
+              <Button className="mt-4" onPress={() => router.push("/plans")}>
+                Build my plan
+              </Button>
             </Card>
           ) : !me?.gasSafeVerifiedAt ? (
             // Build Guide v2 Part 6.5 LAW — the two-leg gate: sending an
             // offer needs a live plan AND the badge, not plan-only.
             <Card>
-              <Text className="font-sans text-sm text-ink">
-                You need your Gas Safe badge first ·{" "}
-                <Link href="/more" className="font-semibold text-flame-deep">
-                  Check your status →
-                </Link>
+              <Micro>Almost there</Micro>
+              <Text className="mt-1.5 text-[19px] font-bold text-ink">
+                Offers unlock with your Gas Safe badge
               </Text>
+              <Text className="mt-1 text-[14px] leading-5 text-muted">
+                We&apos;re checking your registration — usually within 24 hours, and we&apos;ll
+                text you when it&apos;s done. Your plan is ready to go the moment it is.
+              </Text>
+              <Button variant="ghost" className="mt-4" onPress={() => router.push("/more")}>
+                Check my status
+              </Button>
             </Card>
           ) : (
             <Card>

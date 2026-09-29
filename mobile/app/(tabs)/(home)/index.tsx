@@ -5,8 +5,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Button, GateSheet } from "@/components/ui";
-import { Icon } from "@/components/icon";
+import { Icon, type IconName } from "@/components/icon";
 import { RingProgress, payoutWeekProgress } from "@/components/ring-progress";
+import { RingMark } from "@/components/ring-mark";
 
 type DueItem = {
   customerId: string;
@@ -50,12 +51,45 @@ function StandingStrip({ standing }: { standing: Standing }) {
   const textCls =
     standing.tone === "red" ? "text-danger" : standing.tone === "amber" ? "text-warn" : "text-muted";
   return (
-    <Pressable onPress={() => router.push("/more")} className={`flex-row items-center gap-2 rounded-xl border px-3 py-2 ${toneCls}`}>
+    <Pressable onPress={() => router.push("/more")} className={`flex-row items-center gap-2.5 rounded-xl border px-3.5 py-2.5 ${toneCls}`}>
       {standing.tone === "quiet" && <Icon name="verified" size={14} color="#3dd68c" />}
-      {standing.tone === "amber" && <Icon name="pending" size={14} color="#f2b84b" />}
+      {standing.tone === "amber" && <Icon name="clock" size={16} color="#f2b84b" />}
       {standing.tone === "red" && <Icon name="warning" size={14} color="#ff6b6b" />}
-      <Text className={`flex-1 font-sans text-xs ${textCls}`} numberOfLines={2}>
+      <Text className={`flex-1 font-sans text-[13px] ${textCls}`} numberOfLines={2}>
         {standing.text}
+      </Text>
+    </Pressable>
+  );
+}
+
+// 29 Sept review — "Morning, Matt" style, not a bare "Hello".
+function greeting(firstName: string | null | undefined): string {
+  const h = new Date().getHours();
+  const part = h < 12 ? "Morning" : h < 18 ? "Afternoon" : "Evening";
+  return firstName ? `${part}, ${firstName}` : `Good ${part.toLowerCase()}`;
+}
+
+// Part 6.5 — outlined quick-action tile with a real icon. Gated tiles stay
+// visible, muted and tappable (the tap explains why).
+function QuickAction({
+  icon,
+  label,
+  onPress,
+  muted = false,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  muted?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className={`min-h-[52px] flex-1 flex-row items-center gap-3 rounded-xl border border-line-strong px-3.5 py-3 ${muted ? "opacity-40" : ""}`}
+    >
+      <Icon name={icon} size={18} />
+      <Text className="shrink text-[14px] text-ink" numberOfLines={2}>
+        {label}
       </Text>
     </Pressable>
   );
@@ -72,6 +106,7 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [plansGateOpen, setPlansGateOpen] = useState(false);
   const [shopGateOpen, setShopGateOpen] = useState(false);
+  const [offerGate, setOfferGate] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -100,6 +135,28 @@ export default function Home() {
   const awake = Boolean(me?.hasPlan);
   const verified = Boolean(me?.gasSafeVerifiedAt);
 
+  // Part 5 — the dashboard's "Finish setup — N of 4 done" card reads the
+  // same truth as the Getting Started hub's four steps.
+  const setupSteps = [
+    { done: Boolean(me?.stripeConnected), label: "payments" },
+    { done: awake, label: "your first plan" },
+    { done: (me?.customerCount ?? 0) > 0, label: "your customers" },
+    { done: Boolean(me?.packRequestedAt), label: "your member pack" },
+  ];
+  const setupDone = setupSteps.filter((x) => x.done).length;
+  const waiting = setupSteps.filter((x) => !x.done).map((x) => x.label);
+  const waitingLine =
+    waiting.length === 0
+      ? ""
+      : `${(waiting.length === 1 ? waiting[0] : `${waiting.slice(0, -1).join(", ")} and ${waiting.at(-1)}`).replace(/^./, (c) => c.toUpperCase())} ${waiting.length === 1 ? "is" : "are"} still waiting.`;
+
+  // Part 6.5 LAW — the two-leg gate: an offer needs a live plan AND the badge.
+  const offerBlockedBy = !awake
+    ? "Your first plan is step 2 of setup — Continue setup →"
+    : !verified
+      ? "Offers unlock with your Gas Safe badge — we'll text you when it's live."
+      : null;
+
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-paper">
@@ -111,7 +168,7 @@ export default function Home() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <Text className="text-[22px] font-extrabold tracking-tight text-ink">
-          {me?.firstName ? `Hello, ${me.firstName}` : "Hello"}
+          {greeting(me?.firstName)}
         </Text>
         <Text className="-mt-2 text-sm text-muted">
           {awake
@@ -135,49 +192,76 @@ export default function Home() {
                 and draws in the payout week's progress. */}
             <Card variant="hero">
               <View className="flex-row items-center gap-3">
-                <RingProgress size={44} progress={payoutWeekProgress()} dormant={!awake} />
                 <View className="flex-1">
                   <Micro>Your plan income</Micro>
-                  <Text className="mt-0.5 text-[32px] font-extrabold leading-none text-copper">
+                  <Text className="mt-1.5 text-[44px] font-extrabold leading-[48px] text-copper">
                     £{(data.totalPence / 100).toFixed(0)}
-                    <Text className="text-base font-bold text-muted"> /month</Text>
+                    <Text className="text-[18px] font-medium text-muted"> /month</Text>
+                  </Text>
+                  <Text className="mt-1 text-[14px] text-muted">
+                    {data.count === 0
+                      ? "Your first plan changes this"
+                      : `${data.count} plan${data.count === 1 ? "" : "s"} live · ${data.offersOut} offer${data.offersOut === 1 ? "" : "s"} out`}
+                  </Text>
+                </View>
+                {/* Part 6.3 — the ring lives on the right from day one:
+                    dormant = the whole mark at ~35% opacity, static; wakes
+                    with the first live plan and fills through the week. */}
+                <View className="items-center">
+                  {awake ? (
+                    <RingProgress size={72} strokeWidth={9} progress={payoutWeekProgress()} />
+                  ) : (
+                    <View style={{ opacity: 0.35 }}>
+                      <RingMark size={72} />
+                    </View>
+                  )}
+                  <Text className="mt-2 text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
+                    {awake && data.nextPayoutPence !== null ? "Next payout" : "Paid every"}
+                  </Text>
+                  <Text className="text-[14px] font-semibold text-ink">
+                    {awake && data.nextPayoutPence !== null ? (
+                      <Text className="text-copper">
+                        £{(data.nextPayoutPence / 100).toFixed(2)}
+                        {data.nextPayoutDate
+                          ? ` · ${new Date(data.nextPayoutDate).toLocaleDateString("en-GB", { weekday: "short" })}`
+                          : ""}
+                      </Text>
+                    ) : (
+                      "Friday"
+                    )}
                   </Text>
                 </View>
               </View>
-              <Text className="mt-2 text-[12.5px] text-muted">
-                {data.count === 0
-                  ? "Your first plan changes this"
-                  : `${data.count} plan${data.count === 1 ? "" : "s"} live · ${data.offersOut} offer${data.offersOut === 1 ? "" : "s"} out`}
-              </Text>
-              <View className="mt-2.5 flex-row items-center justify-between border-t border-line-strong pt-2.5">
-                <Text className="text-[12.5px] text-muted">
-                  {awake && data.nextPayoutPence !== null ? "Next payout" : "Paid every"}
-                </Text>
-                {awake && data.nextPayoutPence !== null ? (
-                  <Text className="font-mono font-bold text-copper">
-                    £{(data.nextPayoutPence / 100).toFixed(2)}
-                    {data.nextPayoutDate
-                      ? ` · ${new Date(data.nextPayoutDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}`
-                      : ""}
-                  </Text>
-                ) : (
-                  <Text className="font-mono font-bold text-muted">Friday</Text>
-                )}
-              </View>
             </Card>
 
-            {data.count === 0 && (
+            {/* Part 6.6 — the action card cycles: Finish setup → first
+                customer → next best action. Never two "first"s at once. */}
+            {setupDone < 4 ? (
               <Card>
                 <Micro>Get started</Micro>
-                <Text className="mt-1 text-[15px] font-bold text-ink">Send your first offer</Text>
-                <Text className="mt-1 text-[12.5px] text-muted">
+                <Text className="mt-1.5 text-[19px] font-bold text-ink">
+                  Finish setup — {setupDone} of 4 done
+                </Text>
+                <Text className="mt-1 text-[14px] text-muted">{waitingLine}</Text>
+                <Button className="mt-4" onPress={() => router.push("/onboarding")}>
+                  Continue setup
+                </Button>
+              </Card>
+            ) : data.count === 0 ? (
+              <Card>
+                <Micro>Get started</Micro>
+                <Text className="mt-1.5 text-[19px] font-bold text-ink">Send your first offer</Text>
+                <Text className="mt-1 text-[14px] text-muted">
                   One customer on a plan and this card becomes your income.
                 </Text>
-                <Button className="mt-3" onPress={() => router.push("/offer")}>
+                <Button
+                  className={`mt-4 ${offerBlockedBy ? "opacity-40" : ""}`}
+                  onPress={() => (offerBlockedBy ? setOfferGate(offerBlockedBy) : router.push("/offer"))}
+                >
                   Offer a plan
                 </Button>
               </Card>
-            )}
+            ) : null}
 
             {data.noPlan >= 5 && (
               <Card className="border-[rgba(242,184,75,.3)] bg-warn-tint">
@@ -264,32 +348,31 @@ export default function Home() {
                 Membership Shop soft-gate; Invite an engineer and How it
                 works are "never gated — full brightness always." */}
             <View className="flex-row gap-2.5">
-              <Button
-                variant="ghost"
-                className={`flex-1 ${awake ? "" : "opacity-40"}`}
+              <QuickAction
+                icon="document"
+                label="My plans"
+                muted={!awake}
                 onPress={() => (awake ? router.push("/plans") : setPlansGateOpen(true))}
-              >
-                My plans
-              </Button>
-              <Button variant="ghost" className="flex-1" onPress={() => router.push("/referral")}>
-                Invite an engineer
-              </Button>
+              />
+              <QuickAction
+                icon="invite"
+                label="Invite an engineer — earn £50"
+                onPress={() => router.push("/referral")}
+              />
             </View>
             <View className="flex-row gap-2.5">
-              <Button variant="ghost" className="flex-1" onPress={() => router.push("/how-it-works")}>
-                How it works
-              </Button>
-              <Button
-                variant="ghost"
-                className={`flex-1 ${verified ? "" : "opacity-40"}`}
+              <QuickAction
+                icon="howItWorks"
+                label="How it works"
+                onPress={() => router.push("/how-it-works")}
+              />
+              <QuickAction
+                icon="shop"
+                label="Membership Shop"
+                muted={!verified}
                 onPress={() => (verified ? router.push("/membership-shop") : setShopGateOpen(true))}
-              >
-                Membership Shop
-              </Button>
+              />
             </View>
-            <Button variant="ghost" onPress={() => router.push("/demo")}>
-              Show a customer
-            </Button>
           </>
         )}
       </ScrollView>
@@ -298,6 +381,13 @@ export default function Home() {
         onClose={() => setPlansGateOpen(false)}
         reason="Your first plan is step 2 of setup — Continue setup →"
         onCta={() => router.push("/onboarding")}
+      />
+      <GateSheet
+        visible={offerGate !== null}
+        onClose={() => setOfferGate(null)}
+        reason={offerGate ?? ""}
+        cta={awake ? "Check my status" : "Continue setup"}
+        onCta={() => router.push(awake ? "/more" : "/onboarding")}
       />
       <GateSheet
         visible={shopGateOpen}

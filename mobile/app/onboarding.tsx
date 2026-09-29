@@ -171,7 +171,7 @@ export default function Onboarding() {
           // exactly like Step 1, not only once Step 1 also happens to be
           // done. "Done" still means hasPlan, unchanged.
           state={stepState(hasPlan, !hasPlan)}
-          cta="Set up my plan"
+          cta="Build my plan"
           onPress={() => router.push("/plans")}
         />
 
@@ -184,7 +184,7 @@ export default function Onboarding() {
               : "Import your book — every contact is a potential £144/yr."
           }
           state={stepState(hasBook, paid && hasPlan && !hasBook)}
-          cta="Import my book"
+          cta="Import customers"
           onPress={() => router.push("/customers/import-contacts")}
         />
 
@@ -216,6 +216,9 @@ export default function Onboarding() {
               >
                 {packBusy ? "Saving…" : "Send my pack"}
               </Button>
+              <Text className="text-center font-sans text-xs text-muted">
+                Ships when your badge goes live.
+              </Text>
             </View>
           )}
         </StepCard>
