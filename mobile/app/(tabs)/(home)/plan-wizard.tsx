@@ -164,6 +164,10 @@ export default function PlanWizard() {
 
   async function checkName(candidate: string): Promise<boolean> {
     setError(null);
+    if (candidate.trim().length < 2) {
+      setError("Give your plan a name — at least 2 characters.");
+      return false;
+    }
     try {
       const check = await api<
         { ok: true } | { ok: false; explanation: string; suggestion: { title: string } }
@@ -458,7 +462,7 @@ export default function PlanWizard() {
                 setDirty(true);
               }}
               maxLength={NAME_MAX}
-              className="rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-[16px] text-ink"
+              className="min-h-[48px] rounded-[10px] border border-line bg-paper px-3.5 font-sans text-[16px] text-ink"
             />
             <Text className="mt-1 text-right font-mono text-[10px] text-faint">
               {name.length}/{NAME_MAX}
@@ -504,11 +508,11 @@ export default function PlanWizard() {
         {error && <Text className="px-1 font-sans text-sm text-danger">{error}</Text>}
 
         {isEdit ? (
-          <Button onPress={saveSingleStep} disabled={busy || (step === 3 && name.trim().length < 2)}>
+          <Button onPress={saveSingleStep} disabled={busy}>
             {busy ? "Saving…" : "Save changes"}
           </Button>
         ) : (
-          <Button onPress={goNext} disabled={busy || (step === 3 && name.trim().length < 2)}>
+          <Button onPress={goNext} disabled={busy}>
             {busy ? "Working…" : step < 4 ? "Next" : "Make this plan live"}
           </Button>
         )}

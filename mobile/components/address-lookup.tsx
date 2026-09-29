@@ -8,7 +8,7 @@ export type AddressValue = { line1: string; town: string; postcode: string };
 // Size-only text class (text-[14px], not text-sm) on single-line inputs:
 // text-sm also sets a line-height, which iOS draws as text sitting low in
 // the box. Same rule for every TextInput in the app.
-const inputCls = "rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-[14px] text-ink";
+const inputCls = "min-h-[48px] rounded-[10px] border border-line bg-paper px-3.5 font-sans text-[16px] text-ink";
 
 type LookedUpAddress = { line1: string; line2?: string; town: string; postcode: string };
 
@@ -29,7 +29,10 @@ export function AddressLookupField({
   const [searchError, setSearchError] = useState<string | null>(null);
 
   async function findAddress() {
-    if (value.postcode.trim().length < 4) return;
+    if (value.postcode.trim().length < 4) {
+      setSearchError("Enter the postcode first, then tap Find address.");
+      return;
+    }
     setSearching(true);
     setSearchError(null);
     setResults(null);
@@ -66,7 +69,7 @@ export function AddressLookupField({
         />
         <Pressable
           onPress={findAddress}
-          disabled={searching || value.postcode.trim().length < 4}
+          disabled={searching}
           className="items-center justify-center rounded-[10px] border border-line bg-panel px-3.5"
         >
           {searching ? (

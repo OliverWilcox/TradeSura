@@ -6,8 +6,17 @@ import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Button } from "@/components/ui";
 import { AddressLookupField, type AddressValue } from "@/components/address-lookup";
 import { MonthPicker } from "@/components/month-picker";
+import { checkRequired, checkUkMobile, checkUkPostcode } from "@/lib/validate";
 
-const inputCls = "rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-[14px] text-ink";
+// Thumb-sized (29 Sept review, systemic defect 4); size-only text class —
+// see components/address-lookup.tsx for why not text-sm.
+const inputCls = "min-h-[48px] rounded-[10px] border bg-paper px-3.5 font-sans text-[16px] text-ink";
+
+type Errors = Partial<Record<"firstName" | "lastName" | "phone" | "postcode", string | null>>;
+
+function FieldError({ children }: { children?: string | null }) {
+  return children ? <Text className="mt-1 font-sans text-[13px] text-danger">{children}</Text> : null;
+}
 
 // Build Guide v2 Part 9.3 — Add-customer sheet, route 3: "Just save their
 // details." Deliberately plan-free — no plan is offered or created here,
@@ -21,10 +30,18 @@ export default function AddCustomer() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<Errors>({});
 
-  const canSave = firstName.trim().length > 0 && lastName.trim().length > 0 && phone.trim().length >= 6;
-
+  // Never a silent grey button — tapping Save explains what's missing.
   async function save() {
+    const found: Errors = {
+      firstName: checkRequired(firstName, "first name"),
+      lastName: checkRequired(lastName, "last name"),
+      phone: checkUkMobile(phone),
+      postcode: address.postcode.trim() ? checkUkPostcode(address.postcode) : null,
+    };
+    setErrors(found);
+    if (Object.values(found).some(Boolean)) return;
     setBusy(true);
     setError(null);
     try {
@@ -88,32 +105,60 @@ export default function AddCustomer() {
           <Micro className="mb-1.5">Their details</Micro>
           <View className="gap-2">
             <View className="flex-row gap-2">
-              <TextInput
-                value={firstName}
-                onChangeText={setFirstName}
-                placeholder="First name"
-                className={`flex-1 ${inputCls}`}
-              />
-              <TextInput
-                value={lastName}
-                onChangeText={setLastName}
-                placeholder="Last name"
-                className={`flex-1 ${inputCls}`}
-              />
+              <View className="flex-1">
+                <TextInput
+                  value={firstName}
+                  onChangeText={(v) => {
+                    setFirstName(v);
+                    setErrors((e) => ({ ...e, firstName: null }));
+                  }}
+                  placeholder="First name"
+                  placeholderTextColor="#6e86a3"
+                  className={`${inputCls} ${errors.firstName ? "border-danger" : "border-line"}`}
+                />
+                <FieldError>{errors.firstName}</FieldError>
+              </View>
+              <View className="flex-1">
+                <TextInput
+                  value={lastName}
+                  onChangeText={(v) => {
+                    setLastName(v);
+                    setErrors((e) => ({ ...e, lastName: null }));
+                  }}
+                  placeholder="Last name"
+                  placeholderTextColor="#6e86a3"
+                  className={`${inputCls} ${errors.lastName ? "border-danger" : "border-line"}`}
+                />
+                <FieldError>{errors.lastName}</FieldError>
+              </View>
             </View>
-            <TextInput
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="Mobile (07…)"
-              keyboardType="phone-pad"
-              className={inputCls}
-            />
+            <View>
+              <TextInput
+                value={phone}
+                onChangeText={(v) => {
+                  setPhone(v);
+                  setErrors((e) => ({ ...e, phone: null }));
+                }}
+                placeholder="Mobile (07…)"
+                placeholderTextColor="#6e86a3"
+                keyboardType="phone-pad"
+                className={`${inputCls} ${errors.phone ? "border-danger" : "border-line"}`}
+              />
+              <FieldError>{errors.phone}</FieldError>
+            </View>
           </View>
         </Card>
 
         <Card>
           <Micro className="mb-1.5">Address (optional)</Micro>
-          <AddressLookupField value={address} onChange={setAddress} />
+          <AddressLookupField
+            value={address}
+            onChange={(v) => {
+              setAddress(v);
+              setErrors((e) => ({ ...e, postcode: null }));
+            }}
+          />
+          <FieldError>{errors.postcode}</FieldError>
         </Card>
 
         <Card>
@@ -125,7 +170,7 @@ export default function AddCustomer() {
         </Card>
 
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
-        <Button onPress={save} disabled={busy || !canSave}>
+        <Button onPress={save} disabled={busy}>
           {busy ? "Saving…" : "Save to my book"}
         </Button>
       </ScrollView>

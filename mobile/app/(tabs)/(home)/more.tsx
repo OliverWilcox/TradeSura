@@ -100,6 +100,10 @@ export default function More() {
 
   async function saveSettings() {
     if (!settings) return;
+    if (tradingName.trim().length < 2) {
+      setSettingsError("Enter your trading name — at least 2 characters.");
+      return;
+    }
     setSavingSettings(true);
     setSettingsError(null);
     try {
@@ -290,8 +294,9 @@ export default function More() {
             onChangeText={(v) => {
               setTradingName(v);
               setSavedSettings(false);
+              setSettingsError(null);
             }}
-            className="mt-1 rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-[14px] text-ink"
+            className="mt-1 min-h-[48px] rounded-[10px] border border-line bg-paper px-3.5 font-sans text-[16px] text-ink"
           />
           <Text className="mt-3 font-sans text-xs text-muted">Logo (optional)</Text>
           <Pressable
@@ -335,7 +340,7 @@ export default function More() {
             <Button
               variant="ghost"
               onPress={saveSettings}
-              disabled={savingSettings || tradingName.length < 2}
+              disabled={savingSettings}
               className="mt-3"
             >
               {savingSettings ? "Saving…" : "Save changes"}

@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Button } from "@/components/ui";
+import { checkEmail, checkRequired, checkUkMobile, checkUkPostcode } from "@/lib/validate";
 
 type Customer = { id: string; firstName: string; lastName: string; phone: string };
 type Tier = { id: string; name: string; priceMonthlyPence: number; lines: string[] };
@@ -20,7 +21,14 @@ type Tier = { id: string; name: string; priceMonthlyPence: number; lines: string
 const SCRIPT =
   "“I put all my customers on a care plan now — £12 a month and your annual service is included. I’ll text you the link, have a look tonight.”";
 
-const inputCls = "rounded-[10px] border border-line bg-paper px-3 py-2 font-sans text-[14px] text-ink";
+// Thumb-sized, size-only text class (see components/address-lookup.tsx).
+const inputCls = "min-h-[48px] rounded-[10px] border bg-paper px-3.5 font-sans text-[16px] text-ink";
+
+type FormErrors = Partial<Record<"firstName" | "lastName" | "phone" | "email" | "postcode" | "customer", string | null>>;
+
+function FieldError({ children }: { children?: string | null }) {
+  return children ? <Text className="mt-1 font-sans text-[13px] text-danger">{children}</Text> : null;
+}
 
 export default function OfferStart() {
   const { me } = useAuth();
@@ -46,6 +54,7 @@ export default function OfferStart() {
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
 
   const load = useCallback(async () => {
     try {
@@ -78,8 +87,26 @@ export default function OfferStart() {
     }, [load]),
   );
 
+  function setField(key: keyof typeof form, v: string) {
+    setForm((f) => ({ ...f, [key]: v }));
+    setErrors((e) => ({ ...e, [key]: null }));
+  }
+
   async function send(channel: "sms" | "whatsapp") {
     if (!tierId) return;
+    // Never a silent grey button — say what's missing (29 Sept review).
+    const found: FormErrors =
+      mode === "existing"
+        ? { customer: customerId ? null : "Pick a customer to send the offer to." }
+        : {
+            firstName: checkRequired(form.firstName, "customer's first name"),
+            lastName: checkRequired(form.lastName, "customer's last name"),
+            phone: checkUkMobile(form.phone),
+            email: form.email.trim() ? checkEmail(form.email) : null,
+            postcode: form.postcode.trim() ? checkUkPostcode(form.postcode) : null,
+          };
+    setErrors(found);
+    if (Object.values(found).some(Boolean)) return;
     setBusy(true);
     setError(null);
     try {
@@ -110,9 +137,6 @@ export default function OfferStart() {
   const linkPreview = me?.slug ? `tradesura.com/p/${me.slug}` : "your plan link";
   const selectedTier = tiers?.find((t) => t.id === tierId) ?? null;
 
-  const canSend =
-    Boolean(tierId) &&
-    (mode === "existing" ? Boolean(customerId) : Boolean(form.firstName && form.lastName && form.phone));
   const shown = customers ? (showAll ? customers : customers.slice(0, 8)) : [];
 
   return (
@@ -239,7 +263,10 @@ export default function OfferStart() {
                     {shown.map((c) => (
                       <Pressable
                         key={c.id}
-                        onPress={() => setCustomerId(c.id)}
+                        onPress={() => {
+                          setCustomerId(c.id);
+                          setErrors((e) => ({ ...e, customer: null }));
+                        }}
                         className="flex-row items-center justify-between gap-2 border-b border-line-soft py-2.5 last:border-b-0"
                       >
                         <Text className="font-sans text-sm text-ink">
@@ -262,48 +289,69 @@ export default function OfferStart() {
               ) : (
                 <View className="gap-2">
                   <View className="flex-row gap-2">
-                    <TextInput
-                      placeholder="First name"
-                      value={form.firstName}
-                      onChangeText={(v) => setForm({ ...form, firstName: v })}
-                      className={`flex-1 ${inputCls}`}
-                    />
-                    <TextInput
-                      placeholder="Last name"
-                      value={form.lastName}
-                      onChangeText={(v) => setForm({ ...form, lastName: v })}
-                      className={`flex-1 ${inputCls}`}
-                    />
+                    <View className="flex-1">
+                      <TextInput
+                        placeholder="First name"
+                        placeholderTextColor="#6e86a3"
+                        value={form.firstName}
+                        onChangeText={(v) => setField("firstName", v)}
+                        className={`${inputCls} ${errors.firstName ? "border-danger" : "border-line"}`}
+                      />
+                      <FieldError>{errors.firstName}</FieldError>
+                    </View>
+                    <View className="flex-1">
+                      <TextInput
+                        placeholder="Last name"
+                        placeholderTextColor="#6e86a3"
+                        value={form.lastName}
+                        onChangeText={(v) => setField("lastName", v)}
+                        className={`${inputCls} ${errors.lastName ? "border-danger" : "border-line"}`}
+                      />
+                      <FieldError>{errors.lastName}</FieldError>
+                    </View>
                   </View>
-                  <TextInput
-                    placeholder="Mobile (07…)"
-                    keyboardType="phone-pad"
-                    value={form.phone}
-                    onChangeText={(v) => setForm({ ...form, phone: v })}
-                    className={inputCls}
-                  />
-                  <TextInput
-                    placeholder="Email (for the plan document)"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    value={form.email}
-                    onChangeText={(v) => setForm({ ...form, email: v })}
-                    className={inputCls}
-                  />
+                  <View>
+                    <TextInput
+                      placeholder="Mobile (07…)"
+                      placeholderTextColor="#6e86a3"
+                      keyboardType="phone-pad"
+                      value={form.phone}
+                      onChangeText={(v) => setField("phone", v)}
+                      className={`${inputCls} ${errors.phone ? "border-danger" : "border-line"}`}
+                    />
+                    <FieldError>{errors.phone}</FieldError>
+                  </View>
+                  <View>
+                    <TextInput
+                      placeholder="Email (for the plan document)"
+                      placeholderTextColor="#6e86a3"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      value={form.email}
+                      onChangeText={(v) => setField("email", v)}
+                      className={`${inputCls} ${errors.email ? "border-danger" : "border-line"}`}
+                    />
+                    <FieldError>{errors.email}</FieldError>
+                  </View>
                   <View className="flex-row gap-2">
                     <TextInput
                       placeholder="Address line 1"
+                      placeholderTextColor="#6e86a3"
                       value={form.addressLine1}
-                      onChangeText={(v) => setForm({ ...form, addressLine1: v })}
-                      className={`flex-1 ${inputCls}`}
+                      onChangeText={(v) => setField("addressLine1", v)}
+                      className={`flex-1 ${inputCls} border-line`}
                     />
                     <TextInput
                       placeholder="Postcode"
+                      placeholderTextColor="#6e86a3"
+                      autoCapitalize="characters"
                       value={form.postcode}
-                      onChangeText={(v) => setForm({ ...form, postcode: v })}
-                      className={`w-28 ${inputCls}`}
+                      onChangeText={(v) => setField("postcode", v)}
+                      className={`w-28 ${inputCls} ${errors.postcode ? "border-danger" : "border-line"}`}
                     />
                   </View>
+                  <FieldError>{errors.postcode}</FieldError>
                   <Pressable onPress={() => router.push("/plans")} className="pt-1">
                     <Text className="font-semibold text-xs text-flame-deep">Manage my plans →</Text>
                   </Pressable>
@@ -327,18 +375,19 @@ export default function OfferStart() {
                 </Text>
               </View>
 
+              <FieldError>{errors.customer}</FieldError>
               {error && <Text className="mt-2 font-sans text-sm text-danger">{error}</Text>}
               <View className="mt-3 flex-row gap-2">
                 <Button
                   onPress={() => send("sms")}
-                  disabled={busy || !canSend}
+                  disabled={busy}
                   className="flex-1"
                 >
                   {busy ? "Sending…" : "Send by text"}
                 </Button>
                 <Button
                   onPress={() => send("whatsapp")}
-                  disabled={busy || !canSend}
+                  disabled={busy}
                   className="flex-1"
                 >
                   WhatsApp
