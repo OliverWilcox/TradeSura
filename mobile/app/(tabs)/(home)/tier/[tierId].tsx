@@ -3,6 +3,7 @@ import { View, Text, Pressable, ActivityIndicator, Alert } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Pill, RowLine, Chevron, Button } from "@/components/ui";
 
 // Build Guide v2 Part 7.4 — "Edit plan": three rows, each opening its wizard
@@ -23,6 +24,7 @@ const STATUS_PILL: Record<TierDetail["status"], { tone: "ok" | "off"; label: (n:
 };
 
 export default function EditPlan() {
+  const { refreshMe } = useAuth();
   const { tierId } = useLocalSearchParams<{ tierId: string }>();
   const [tier, setTier] = useState<TierDetail | null>(null);
   const [activePlanCount, setActivePlanCount] = useState(0);
@@ -62,7 +64,7 @@ export default function EditPlan() {
     setError(null);
     try {
       await api(`/api/tiers/${tierId}/status`, { method: "POST", body: JSON.stringify({ action }) });
-      await load();
+      await Promise.all([load(), refreshMe()]);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't update this plan.");
     } finally {

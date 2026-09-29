@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { View, Text, TextInput, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
@@ -65,6 +65,14 @@ export default function Onboarding() {
   const [packAddress, setPackAddress] = useState("");
   const [packBusy, setPackBusy] = useState(false);
   const [packError, setPackError] = useState<string | null>(null);
+
+  // Steps are derived from the profile — re-read it whenever the hub comes
+  // back into view (e.g. returning from the plan wizard or an import).
+  useFocusEffect(
+    useCallback(() => {
+      refreshMe();
+    }, [refreshMe]),
+  );
 
   const paid = Boolean(me?.stripeConnected);
   const hasPlan = Boolean(me?.hasPlan);

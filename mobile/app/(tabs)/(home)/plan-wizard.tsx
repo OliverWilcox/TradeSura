@@ -6,6 +6,7 @@ import * as Haptics from "expo-haptics";
 import { api, ApiError } from "@/lib/api";
 import { Card, Micro, Pill, Button } from "@/components/ui";
 import { Icon } from "@/components/icon";
+import { useAuth } from "@/lib/auth-context";
 import { CustomerPlanCard } from "@/components/plan-card";
 
 // Build Guide v2 Part 8 — "One builder, every door." This one component runs
@@ -68,6 +69,7 @@ function suggestNames(selectedTitles: string[]): string[] {
 type Step = 1 | 2 | 3 | 4;
 
 export default function PlanWizard() {
+  const { refreshMe } = useAuth();
   const { tierId, editStep } = useLocalSearchParams<{
     tierId?: string;
     editStep?: string;
@@ -290,6 +292,8 @@ export default function PlanWizard() {
         slug = created.slug;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      // First live plan wakes the Add-customer hero and the offer gate.
+      refreshMe();
       setLiveUrl(slug ? `tradesura.com/p/${slug}` : "your customer page");
     } catch (e) {
       const body = e instanceof ApiError ? (e.body as { explanation?: string; suggestion?: { title: string } } | undefined) : undefined;

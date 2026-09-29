@@ -99,7 +99,7 @@ function QuickAction({
 // strip → money card → action card → Today → quick actions. Nothing may
 // appear above the money card except the header, greeting and the strip.
 export default function Home() {
-  const { me } = useAuth();
+  const { me, refreshMe } = useAuth();
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -120,15 +120,19 @@ export default function Home() {
     }
   }, []);
 
+  // The profile (`me`) drives the setup card, gates and greeting. It's
+  // loaded once at sign-in, so re-read it on every visit — otherwise a plan
+  // published or a badge granted since then still reads as missing.
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load]),
+      refreshMe();
+    }, [load, refreshMe]),
   );
 
   async function onRefresh() {
     setRefreshing(true);
-    await load();
+    await Promise.all([load(), refreshMe()]);
     setRefreshing(false);
   }
 

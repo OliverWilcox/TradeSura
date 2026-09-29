@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { AppState } from "react-native";
 import {
   api,
   clearStripeSkipped,
@@ -85,6 +86,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (token) refreshMe();
     else setMe(null);
+  }, [token, refreshMe]);
+
+  // Coming back to the app is when outside changes land (badge approved,
+  // Stripe onboarding finished in the browser) — re-read the profile.
+  useEffect(() => {
+    if (!token) return;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") refreshMe();
+    });
+    return () => sub.remove();
   }, [token, refreshMe]);
 
   async function signIn(newToken: string) {
