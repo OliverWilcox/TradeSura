@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, Share, Linking, Image } from "react-native";
+import { View, Text, ScrollView, Share, Linking } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, Button } from "@/components/ui";
+import { Skeleton, Bone, TextBone, LoadingImage } from "@/components/skeleton";
 
 type Invitee = {
   name: string;
@@ -34,6 +35,29 @@ const STAGE_INDEX: Record<Invitee["stage"], number> = {
   plan_live: 2,
   paid: 3,
 };
+
+// The bounty hero, the income card and QR (as ring-spinner panels, since
+// they're images), then the referrals list.
+function ReferralSkeleton() {
+  return (
+    <Skeleton label="Loading your invite" className="gap-3.5">
+      <Card variant="hero" className="items-center py-5">
+        <Bone width={90} height={36} radius={8} />
+        <TextBone width={210} size={14} style={{ marginTop: 4 }} />
+        <TextBone width={240} size={12} style={{ marginTop: 2 }} />
+      </Card>
+      <Card className="items-center border-line-strong py-4">
+        <Bone width={260} height={137} radius={10} />
+        <TextBone width={170} size={11} style={{ marginTop: 8 }} />
+      </Card>
+      <Card className="items-center py-4">
+        <Bone width={140} height={140} radius={8} />
+        <TextBone width={220} size={11} style={{ marginTop: 8 }} />
+        <TextBone width={200} size={12} style={{ marginTop: 6 }} />
+      </Card>
+    </Skeleton>
+  );
+}
 
 export default function Referral() {
   const [data, setData] = useState<Data | null>(null);
@@ -98,6 +122,8 @@ export default function Referral() {
       <ScrollView className="flex-1" contentContainerClassName="gap-3.5 px-4 pb-8 pt-4">
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
+        {!data && !error && <ReferralSkeleton />}
+
         {data && (
           <>
             {/* E10 — the £50 hero card, the screen's money moment. */}
@@ -114,11 +140,14 @@ export default function Referral() {
             {/* Part 14 — "Share my income card... soft-gated ('Unlocks with
                 your first payout') until there's a real card to share." */}
             <Card className="items-center border-line-strong py-4">
-              <Image
-                source={{ uri: data.cardUrl }}
-                style={{ width: 260, height: 137, borderRadius: 10 }}
+              <LoadingImage
+                uri={data.cardUrl}
+                width={260}
+                height={137}
+                radius={10}
                 resizeMode="cover"
                 blurRadius={data.hasPayout ? 0 : 8}
+                accessibilityLabel="Your income card"
               />
               <Text className="mt-2 font-sans text-[11px] text-faint">
                 {data.hasPayout
@@ -138,10 +167,12 @@ export default function Referral() {
             </Card>
 
             <Card className="items-center py-4">
-              <Image
-                source={{ uri: data.qrDataUrl }}
-                style={{ width: 140, height: 140 }}
+              <LoadingImage
+                uri={data.qrDataUrl}
+                width={140}
+                height={140}
                 resizeMode="contain"
+                accessibilityLabel="QR code for your invite link"
               />
               <Text className="mt-2 font-sans text-[11px] text-faint">
                 Or let them scan or copy your invite link.

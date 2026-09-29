@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
-import { View, Text, Pressable, Image, Modal } from "react-native";
+import { View, Text, Pressable, Modal } from "react-native";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/lib/auth-context";
 import { Icon } from "@/components/icon";
 import { RingMark } from "@/components/ring-mark";
+import { LoadingImage } from "@/components/skeleton";
 
 // Build Guide v2 Part 2.2 — the brand mark, never redrawn as a plain
 // circle. Rebrand, 22 Sept — sharp-cut ring replaces the old soft
@@ -126,7 +127,7 @@ export function Avatar({ size = 32 }: { size?: number }) {
         style={{ width: size, height: size }}
       >
         {me?.logoUrl ? (
-          <Image source={{ uri: me.logoUrl }} style={{ width: size, height: size }} />
+          <LoadingImage uri={me.logoUrl} width={size} height={size} />
         ) : (
           <Text className="font-bold text-ink" style={{ fontSize: Math.round(size * 0.36) }}>
             {initials(me)}

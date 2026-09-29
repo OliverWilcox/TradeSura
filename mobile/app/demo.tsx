@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { View, Text, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, Pressable } from "react-native";
 import { router } from "expo-router";
 import { WebView } from "react-native-webview";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Button } from "@/components/ui";
 import { Icon } from "@/components/icon";
+import { RingSpinner } from "@/components/skeleton";
 
 // E5 — demo mode. In-app, full screen, with a slim hand-over ribbon and ✕ to
 // exit — never the system browser, so the engineer's account stays hidden
@@ -39,7 +40,7 @@ export default function Demo() {
         </SafeAreaView>
         {loading && (
           <View className="absolute inset-0 items-center justify-center bg-bg">
-            <ActivityIndicator color="#5FA3F0" />
+            <RingSpinner size={44} label="Loading your plan page" />
           </View>
         )}
         <WebView source={{ uri: url }} onLoadEnd={() => setLoading(false)} className="flex-1" />

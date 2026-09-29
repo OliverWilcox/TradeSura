@@ -4,6 +4,7 @@ import { useFocusEffect, useLocalSearchParams, router } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
+import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 import { AppHeader, Card, Pill, Button } from "@/components/ui";
 
 type Customer = {
@@ -59,6 +60,34 @@ function pill(c: Customer) {
   if (c.status === "LAPSED") return <Pill tone="off">LAPSED</Pill>;
   if (c.neverOffered) return <Pill tone="off">NOT OFFERED</Pill>;
   return <Pill tone="info">OFFERED</Pill>;
+}
+
+// Segment pills plus a card of rows — name, status line, pill — until the
+// book arrives (otherwise the empty-state copy flashes up first).
+function CustomersSkeleton() {
+  return (
+    <Skeleton label="Loading your customers" className="gap-3.5">
+      <View className="flex-row flex-wrap gap-1.5">
+        {[52, 76, 96, 112].map((w) => (
+          <Bone key={w} width={w} height={31} radius={16} />
+        ))}
+      </View>
+      <Card>
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <View
+            key={i}
+            className={`flex-row items-center justify-between gap-2 py-2.5 ${i < 5 ? "border-b border-line-soft" : ""}`}
+          >
+            <View className="flex-1">
+              <TextBone width={[130, 110, 150, 120, 100, 140][i]} size={14} />
+              <TextBone width={[170, 150, 190, 140, 160, 180][i]} size={11} />
+            </View>
+            <Bone width={72} height={22} radius={11} />
+          </View>
+        ))}
+      </Card>
+    </Skeleton>
+  );
 }
 
 export default function Customers() {
@@ -198,7 +227,9 @@ export default function Customers() {
           </View>
         )}
 
-        {shown.length > 0 ? (
+        {customers === null ? (
+          error ? null : <CustomersSkeleton />
+        ) : shown.length > 0 ? (
           <Card>
             {shown.map((c) => (
               <View

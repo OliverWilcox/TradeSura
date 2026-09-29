@@ -4,6 +4,7 @@ import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, Button } from "@/components/ui";
+import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 
 type DueItem = {
   customerId: string;
@@ -135,6 +136,36 @@ function JobRow({
 }
 
 // Screen 07 — service calendar & reminders (lite).
+// Intro, the (real, empty) week strip, then next and past jobs as rows.
+function JobsSkeleton() {
+  return (
+    <Skeleton label="Loading your reminders" className="gap-3.5">
+      <View>
+        <TextBone width="95%" size={14} />
+        <TextBone width="60%" size={14} />
+      </View>
+      <WeekStrip jobDates={new Set()} />
+      {[3, 2].map((rows, card) => (
+        <Card key={card}>
+          <TextBone width={80} size={14} style={{ marginBottom: 4 }} />
+          {Array.from({ length: rows }, (_, i) => (
+            <View
+              key={i}
+              className={`flex-row items-center justify-between gap-2 py-2.5 ${i < rows - 1 ? "border-b border-line-soft" : ""}`}
+            >
+              <View className="flex-1">
+                <TextBone width={[130, 110, 150][i]} size={14} />
+                <TextBone width={[180, 160, 200][i]} size={11} />
+              </View>
+              <Bone width={64} height={22} radius={11} />
+            </View>
+          ))}
+        </Card>
+      ))}
+    </Skeleton>
+  );
+}
+
 export default function Jobs() {
   const [data, setData] = useState<JobsData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -201,6 +232,8 @@ export default function Jobs() {
       >
         <Text className="text-[28px] font-extrabold tracking-tight text-ink">Reminders</Text>
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
+
+        {!data && !error && <JobsSkeleton />}
 
         {data && (
           <>

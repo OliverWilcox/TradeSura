@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api, apiText, ApiError, getHasSeenFirstPayout, setHasSeenFirstPayout } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, RowLine, Button } from "@/components/ui";
 import { RingProgress, payoutWeekProgress } from "@/components/ring-progress";
+import { Skeleton, Bone, TextBone, RowBone } from "@/components/skeleton";
 
 type FailedPlan = { id: string; customerName: string; priceMonthlyPence: number };
 type StripeSummary = {
@@ -39,6 +40,36 @@ function shortDate(iso: string) {
 
 // E11 — Payouts & collections. Real Stripe balance + payout history once the
 // account is live; the plan maths until then.
+// Hero (ring + payout figure), the month breakdown and the recovery card.
+function PayoutsSkeleton() {
+  return (
+    <Skeleton label="Loading your payouts" className="gap-3.5">
+      <Card variant="hero">
+        <View className="flex-row items-center gap-3">
+          <Bone width={44} height={44} radius={22} />
+          <View className="flex-1">
+            <TextBone width={150} size={11} />
+            <View className="mt-0.5 h-9 justify-center">
+              <Bone width={130} height={28} radius={6} />
+            </View>
+          </View>
+        </View>
+        <TextBone width="85%" size={12} style={{ marginTop: 8 }} />
+      </Card>
+      <Card>
+        <TextBone width={170} size={11} style={{ marginBottom: 6 }} />
+        <RowBone left={180} />
+        <RowBone left={150} right={50} />
+        <RowBone left={100} right={70} last />
+      </Card>
+      <Card>
+        <TextBone width={190} size={14} style={{ marginBottom: 4 }} />
+        <TextBone width="75%" size={12} style={{ marginVertical: 4 }} />
+      </Card>
+    </Skeleton>
+  );
+}
+
 export default function Payouts() {
   const [data, setData] = useState<PayoutsData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -132,6 +163,8 @@ export default function Payouts() {
             </Card>
           </Pressable>
         )}
+
+        {!data && !error && <PayoutsSkeleton />}
 
         {data && (
           <>

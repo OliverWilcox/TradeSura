@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Button, GateSheet } from "@/components/ui";
 import { AddCustomerSheet } from "@/components/add-customer-sheet";
+import { CenteredSpinner } from "@/components/skeleton";
 import { Icon, type IconName } from "@/components/icon";
 
 // Build Guide v2 Part 3 — the whole map: Home · Customers · Add customer
@@ -187,7 +188,15 @@ export default function TabsLayout() {
   // device) or Start now (organic/claim/referral).
   if (!token) return <Redirect href="/welcome" />;
 
-  if (meLoading && !me) return <View className="flex-1 bg-night" />;
+  // Straight after sign-in the launch overlay has already gone, so the
+  // profile fetch gets the ring rather than a blank navy screen.
+  if (meLoading && !me) {
+    return (
+      <View className="flex-1 bg-night">
+        <CenteredSpinner label="Loading your account" />
+      </View>
+    );
+  }
 
   if (meError && !me) {
     return (

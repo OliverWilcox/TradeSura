@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { View, Text, TextInput, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
+import { View, Text, TextInput, ScrollView, Pressable, Alert } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -8,6 +8,7 @@ import { Card, Micro, Pill, Button } from "@/components/ui";
 import { Icon } from "@/components/icon";
 import { useAuth } from "@/lib/auth-context";
 import { CustomerPlanCard } from "@/components/plan-card";
+import { CenteredSpinner } from "@/components/skeleton";
 
 // Build Guide v2 Part 8 — "One builder, every door." This one component runs
 // two modes:
@@ -317,8 +318,8 @@ export default function PlanWizard() {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-panel">
-        <ActivityIndicator color="#5FA3F0" />
+      <View className="flex-1 bg-panel">
+        <CenteredSpinner label="Loading plan builder" />
       </View>
     );
   }

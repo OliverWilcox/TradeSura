@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, Alert, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, Alert } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, RowLine, Tick, Button } from "@/components/ui";
+import { Skeleton, Bone, TextBone, RowBone } from "@/components/skeleton";
 
 type Detail = {
   id: string;
@@ -125,8 +126,35 @@ export default function CustomerDetail() {
   }
   if (!c) {
     return (
-      <View className="flex-1 items-center justify-center bg-panel">
-        <ActivityIndicator color="#5FA3F0" />
+      <View className="flex-1 bg-panel">
+        <SafeAreaView edges={["top"]} className="bg-iron">
+          <AppHeader title="Customer" />
+        </SafeAreaView>
+        <Skeleton label="Loading customer" className="gap-3.5 px-4 pt-4">
+          <View className="flex-row items-start justify-between gap-2">
+            <View>
+              <TextBone width={170} size={20} />
+              <TextBone width={90} size={12} />
+            </View>
+            <Bone width={72} height={22} radius={11} />
+          </View>
+          <Card>
+            <TextBone width={140} size={11} style={{ marginBottom: 4 }} />
+            <View className="flex-row items-center justify-between">
+              <TextBone width={120} size={16} />
+              <TextBone width={70} size={16} />
+            </View>
+            <View className="mt-2 gap-1">
+              <TextBone width="80%" size={12} />
+              <TextBone width="65%" size={12} />
+            </View>
+          </Card>
+          <Card>
+            <TextBone width={60} size={11} style={{ marginBottom: 4 }} />
+            <RowBone left={90} right={80} />
+            <RowBone left={70} right={80} last />
+          </Card>
+        </Skeleton>
       </View>
     );
   }

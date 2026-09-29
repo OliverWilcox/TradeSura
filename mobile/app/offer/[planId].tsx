@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, ScrollView, Image, ActivityIndicator, Linking } from "react-native";
+import { View, Text, ScrollView, Linking } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Button, Tick } from "@/components/ui";
+import { Skeleton, Bone, TextBone, LoadingImage } from "@/components/skeleton";
 
 type LinkInfo = { link: string; qrDataUrl: string };
 
@@ -108,7 +109,11 @@ export default function OfferLive() {
           {infoError ? (
             <Text className="font-sans text-sm text-danger">{infoError}</Text>
           ) : !info ? (
-            <ActivityIndicator color="#5FA3F0" />
+            <Skeleton label="Loading the signup link">
+              <TextBone width="90%" size={12} />
+              <Bone height={48} radius={12} style={{ marginTop: 12 }} />
+              <Bone height={48} radius={12} style={{ marginTop: 8 }} />
+            </Skeleton>
           ) : (
             <>
               <Text selectable className="font-mono text-xs text-muted">
@@ -133,7 +138,12 @@ export default function OfferLive() {
               </Button>
               {showQr && (
                 <View className="items-center py-3">
-                  <Image source={{ uri: info.qrDataUrl }} style={{ width: 280, height: 280 }} />
+                  <LoadingImage
+                    uri={info.qrDataUrl}
+                    width={280}
+                    height={280}
+                    accessibilityLabel="QR code for the signup link"
+                  />
                 </View>
               )}
             </>

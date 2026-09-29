@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, RefreshControl, Pressable } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, Tick, Button } from "@/components/ui";
+import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 
 type Tier = {
   id: string;
@@ -32,6 +33,35 @@ const STATUS_PILL: Record<Tier["status"], { tone: "ok" | "off"; label: (n: numbe
   STOPPED: { tone: "off", label: (n) => `Stopped · ${n} still on this plan` },
   DRAFT: { tone: "off", label: () => "Draft" },
 };
+
+// Intro line, create button and two plan cards, laid out like the real ones.
+function PlansSkeleton() {
+  return (
+    <Skeleton label="Loading your plans" className="gap-3.5 px-4 pt-4">
+      <TextBone width="75%" size={14} />
+      <Bone height={48} radius={12} />
+      {[0, 1].map((i) => (
+        <Card key={i}>
+          <View className="flex-row items-center justify-between">
+            <TextBone width={120} size={16} />
+            <TextBone width={70} size={16} />
+          </View>
+          <TextBone width="65%" size={11} style={{ marginTop: 2 }} />
+          <View className="mt-2.5 gap-1">
+            <TextBone width="80%" size={12} />
+            <TextBone width="70%" size={12} />
+            <TextBone width="55%" size={12} />
+          </View>
+          <Bone width={110} height={22} radius={11} style={{ marginTop: 10 }} />
+          <View className="mt-3 flex-row gap-2">
+            <Bone height={48} radius={12} style={{ flex: 1 }} />
+            <Bone height={48} radius={12} style={{ flex: 1 }} />
+          </View>
+        </Card>
+      ))}
+    </Skeleton>
+  );
+}
 
 // Build Guide v2 Part 7.3/7.4 — "My plans": the hub page. LAW: zero plans of
 // any status means every door (including this one) opens the wizard
@@ -98,13 +128,13 @@ export default function PlansHub() {
         <SafeAreaView edges={["top"]} className="bg-iron">
           <AppHeader title="My plans" />
         </SafeAreaView>
-        <View className="flex-1 items-center justify-center">
-          {error ? (
+        {error ? (
+          <View className="flex-1 items-center justify-center">
             <Text className="px-6 text-center font-sans text-sm text-danger">{error}</Text>
-          ) : (
-            <ActivityIndicator color="#5FA3F0" />
-          )}
-        </View>
+          </View>
+        ) : (
+          <PlansSkeleton />
+        )}
       </View>
     );
   }

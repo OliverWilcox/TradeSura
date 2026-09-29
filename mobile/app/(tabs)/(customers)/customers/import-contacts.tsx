@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { View, Text, FlatList, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, FlatList, Pressable } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Contacts from "expo-contacts";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Button } from "@/components/ui";
+import { CenteredSpinner } from "@/components/skeleton";
 
 type PickedContact = { id: string; name: string; phone: string; email?: string };
 
@@ -81,8 +82,8 @@ export default function ImportContacts() {
 
   if (status === "loading") {
     return (
-      <View className="flex-1 items-center justify-center bg-panel">
-        <ActivityIndicator color="#5FA3F0" />
+      <View className="flex-1 bg-panel">
+        <CenteredSpinner label="Reading your contacts" />
       </View>
     );
   }

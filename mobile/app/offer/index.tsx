@@ -5,7 +5,6 @@ import {
   ScrollView,
   TextInput,
   Pressable,
-  ActivityIndicator,
   Linking,
 } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -13,7 +12,34 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Button } from "@/components/ui";
+import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 import { checkEmail, checkRequired, checkUkMobile, checkUkPostcode } from "@/lib/validate";
+
+// The script card, then the send card: plan pills, book/new toggle and a
+// few customer rows.
+function OfferSkeleton() {
+  return (
+    <Skeleton label="Loading your customers and plans" className="gap-3.5 px-4 pt-4">
+      <Bone height={50} radius={16} />
+      <Card>
+        <TextBone width={120} size={14} style={{ marginBottom: 8 }} />
+        <View className="mb-3 flex-row gap-2">
+          <Bone width={104} height={28} radius={14} />
+          <Bone width={96} height={28} radius={14} />
+        </View>
+        {[150, 180, 130, 165].map((w, i) => (
+          <View
+            key={w}
+            className={`flex-row items-center justify-between py-2.5 ${i < 3 ? "border-b border-line-soft" : ""}`}
+          >
+            <TextBone width={w} size={14} />
+            <Bone width={14} height={14} radius={7} />
+          </View>
+        ))}
+      </Card>
+    </Skeleton>
+  );
+}
 
 type Customer = { id: string; firstName: string; lastName: string; phone: string };
 type Tier = { id: string; name: string; priceMonthlyPence: number; lines: string[] };
@@ -153,9 +179,7 @@ export default function OfferStart() {
           </Button>
         </View>
       ) : customers === null || tierCount === null ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#5FA3F0" />
-        </View>
+        <OfferSkeleton />
       ) : (
         <ScrollView className="flex-1" contentContainerClassName="gap-3.5 px-4 pb-8 pt-4">
           {tierCount > 0 && (

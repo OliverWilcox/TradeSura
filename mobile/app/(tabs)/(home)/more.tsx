@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, ScrollView, RefreshControl, Pressable, Linking, Image } from "react-native";
+import { View, Text, TextInput, ScrollView, RefreshControl, Pressable, Linking } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as ImagePicker from "expo-image-picker";
@@ -8,6 +8,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
 import { AppHeader, Avatar, Card, Pill, RowLine, Button, Chevron } from "@/components/ui";
+import { Skeleton, TextBone, RowBone, LoadingImage } from "@/components/skeleton";
 
 type MoreData = {
   totalPence: number;
@@ -256,6 +257,12 @@ export default function More() {
             <StatusLine status={settings.standing} />
           ) : (
             <View className="gap-2">
+              {!settings && !error && (
+                <Skeleton label="Loading your status" className="gap-2">
+                  <TextBone width="70%" size={14} />
+                  <TextBone width="60%" size={14} />
+                </Skeleton>
+              )}
               {settings && <StatusLine status={settings.gasSafe} />}
               {settings &&
                 (settings.payments.tone === "quiet" ? (
@@ -274,6 +281,12 @@ export default function More() {
 
         <Card>
           <Text className="mb-1 font-semibold text-sm text-ink">Your business</Text>
+          {!settings && !error && (
+            <Skeleton label="Loading your business details" className="mb-1 mt-1">
+              <RowBone left={60} right={110} />
+              <RowBone left={100} right={90} />
+            </Skeleton>
+          )}
           {settings && (settings.phone || settings.businessType) && (
             <View className="mb-1 mt-1">
               {settings.phone && (
@@ -347,9 +360,12 @@ export default function More() {
             style={({ pressed }) => (pressed ? { opacity: 0.5 } : undefined)}
           >
             {settings?.logoUrl ? (
-              <Image
-                source={{ uri: settings.logoUrl }}
-                className="h-12 w-12 rounded-lg bg-paper-2"
+              <LoadingImage
+                uri={settings.logoUrl}
+                width={48}
+                height={48}
+                radius={8}
+                accessibilityLabel="Your logo"
               />
             ) : (
               <View className="h-12 w-12 items-center justify-center rounded-lg border border-dashed border-line bg-paper-2">

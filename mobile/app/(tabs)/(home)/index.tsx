@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, ActivityIndicator, Pressable } from "react-native";
+import { View, Text, ScrollView, RefreshControl, Pressable } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
@@ -8,6 +8,7 @@ import { AppHeader, Card, Micro, Button, GateSheet } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icon";
 import { RingProgress, payoutWeekProgress } from "@/components/ring-progress";
 import { RingMark } from "@/components/ring-mark";
+import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 
 type DueItem = {
   customerId: string;
@@ -92,6 +93,50 @@ function QuickAction({
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+// Stands in for strip → money card → action card → Today → tiles, box for
+// box, so the real dashboard lands without anything shifting.
+function DashboardSkeleton() {
+  return (
+    <Skeleton label="Loading your dashboard" className="gap-3.5">
+      <Bone height={42} radius={12} />
+      <Card variant="hero">
+        <View className="flex-row items-center gap-3">
+          <View className="flex-1">
+            <TextBone width={110} size={11} />
+            <View className="mt-1.5 h-12 justify-center">
+              <Bone width={150} height={38} radius={8} />
+            </View>
+            <TextBone width="80%" size={14} style={{ marginTop: 4 }} />
+          </View>
+          <View className="items-center">
+            <Bone width={72} height={72} radius={36} />
+            <TextBone width={70} size={11} style={{ marginTop: 8 }} />
+            <TextBone width={56} size={14} />
+          </View>
+        </View>
+      </Card>
+      <Card>
+        <TextBone width={80} size={11} />
+        <TextBone width="70%" size={19} style={{ marginTop: 6 }} />
+        <TextBone width="90%" size={14} style={{ marginTop: 4 }} />
+        <Bone height={48} radius={12} style={{ marginTop: 16 }} />
+      </Card>
+      <Card>
+        <TextBone width={50} size={11} style={{ marginBottom: 4 }} />
+        <TextBone width="85%" size={13} style={{ marginVertical: 6 }} />
+      </Card>
+      <View className="flex-row gap-2.5">
+        <Bone height={52} radius={12} style={{ flex: 1 }} />
+        <Bone height={52} radius={12} style={{ flex: 1 }} />
+      </View>
+      <View className="flex-row gap-2.5">
+        <Bone height={52} radius={12} style={{ flex: 1 }} />
+        <Bone height={52} radius={12} style={{ flex: 1 }} />
+      </View>
+    </Skeleton>
   );
 }
 
@@ -184,11 +229,7 @@ export default function Home() {
 
         {data && <StandingStrip standing={data.standing} />}
 
-        {loading && !data && !error && (
-          <View className="items-center py-10">
-            <ActivityIndicator color="#5FA3F0" />
-          </View>
-        )}
+        {loading && !data && !error && <DashboardSkeleton />}
 
         {error && <Text className="text-sm text-danger">{error}</Text>}
         {data && (

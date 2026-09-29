@@ -1,10 +1,11 @@
 import { useCallback, useState } from "react";
-import { View, Text, Pressable, ActivityIndicator, Alert } from "react-native";
+import { View, Text, Pressable, Alert } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Pill, RowLine, Chevron, Button } from "@/components/ui";
+import { Skeleton, Bone, RowBone } from "@/components/skeleton";
 
 // Build Guide v2 Part 7.4 — "Edit plan": three rows, each opening its wizard
 // step pre-filled, plus the stop/start toggle. This screen is a menu into
@@ -126,9 +127,14 @@ export default function EditPlan() {
         <SafeAreaView edges={["top"]} className="bg-iron">
           <AppHeader title="Edit plan" />
         </SafeAreaView>
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#5FA3F0" />
-        </View>
+        <Skeleton label="Loading plan" className="gap-2.5 px-4 pt-4">
+          <Bone width={110} height={22} radius={11} />
+          <Card>
+            <RowBone left={120} right={10} />
+            <RowBone left={50} right={70} />
+            <RowBone left={50} right={10} last />
+          </Card>
+        </Skeleton>
       </View>
     );
   }

@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Pill } from "@/components/ui";
 import { Icon } from "@/components/icon";
+import { Skeleton, ListRowBone } from "@/components/skeleton";
 
 type Tag = { label: string; tone: "danger" | "warn" | "info" | "off"; rank: number };
 type Ticket = {
@@ -70,6 +71,16 @@ export default function Messages() {
               script and told to call 0800 111 999 before anything else.
             </Text>
           </View>
+        )}
+
+        {!tickets && !error && (
+          <Skeleton label="Loading your messages">
+            <Card>
+              <ListRowBone title={120} subtitle="90%" pill={86} />
+              <ListRowBone title={100} subtitle="80%" pill={86} />
+              <ListRowBone title={140} subtitle="70%" pill={86} last />
+            </Card>
+          </Skeleton>
         )}
 
         {tickets && tickets.length === 0 && (
