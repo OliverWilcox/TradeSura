@@ -59,6 +59,8 @@ export default function More() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [tradingName, setTradingName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [savedSettings, setSavedSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -78,6 +80,8 @@ export default function More() {
       setData(m);
       setSettings(s);
       setTradingName(s.tradingName);
+      setFirstName(s.firstName ?? "");
+      setLastName(s.lastName ?? "");
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't load this page.");
@@ -96,10 +100,18 @@ export default function More() {
     setRefreshing(false);
   }
 
-  const dirty = settings ? tradingName !== settings.tradingName : false;
+  const dirty = settings
+    ? tradingName !== settings.tradingName ||
+      firstName !== (settings.firstName ?? "") ||
+      lastName !== (settings.lastName ?? "")
+    : false;
 
   async function saveSettings() {
     if (!settings) return;
+    if (!firstName.trim() || !lastName.trim()) {
+      setSettingsError("Enter your first and last name.");
+      return;
+    }
     if (tradingName.trim().length < 2) {
       setSettingsError("Enter your trading name — at least 2 characters.");
       return;
@@ -109,9 +121,14 @@ export default function More() {
     try {
       await api("/api/settings", {
         method: "PATCH",
-        body: JSON.stringify({ tradingName, logoUrl: settings.logoUrl }),
+        body: JSON.stringify({
+          tradingName,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          logoUrl: settings.logoUrl,
+        }),
       });
-      setSettings({ ...settings, tradingName });
+      setSettings({ ...settings, tradingName, firstName: firstName.trim(), lastName: lastName.trim() });
       setSavedSettings(true);
       await refreshMe();
     } catch (e) {
@@ -257,14 +274,8 @@ export default function More() {
 
         <Card>
           <Text className="mb-1 font-semibold text-sm text-ink">Your business</Text>
-          {settings && (settings.firstName || settings.phone || settings.businessType) && (
+          {settings && (settings.phone || settings.businessType) && (
             <View className="mb-1 mt-1">
-              {(settings.firstName || settings.lastName) && (
-                <RowLine
-                  left="Name"
-                  right={`${settings.firstName ?? ""} ${settings.lastName ?? ""}`.trim()}
-                />
-              )}
               {settings.phone && (
                 <RowLine
                   left="Mobile"
@@ -288,7 +299,37 @@ export default function More() {
               {settings.postcode && <RowLine left="Business postcode" right={settings.postcode} />}
             </View>
           )}
-          <Text className="mt-2 font-sans text-xs text-muted">Trading name</Text>
+          {/* Editable so accounts from older signup builds, which saved no
+              name, can add one — it drives the greeting and avatar initials. */}
+          <View className="mt-2 flex-row gap-2">
+            <View className="flex-1">
+              <Text className="font-sans text-xs text-muted">First name</Text>
+              <TextInput
+                value={firstName}
+                onChangeText={(v) => {
+                  setFirstName(v);
+                  setSavedSettings(false);
+                  setSettingsError(null);
+                }}
+                autoComplete="given-name"
+                className="mt-1 min-h-[48px] rounded-[10px] border border-line bg-paper px-3.5 font-sans text-[16px] text-ink"
+              />
+            </View>
+            <View className="flex-1">
+              <Text className="font-sans text-xs text-muted">Last name</Text>
+              <TextInput
+                value={lastName}
+                onChangeText={(v) => {
+                  setLastName(v);
+                  setSavedSettings(false);
+                  setSettingsError(null);
+                }}
+                autoComplete="family-name"
+                className="mt-1 min-h-[48px] rounded-[10px] border border-line bg-paper px-3.5 font-sans text-[16px] text-ink"
+              />
+            </View>
+          </View>
+          <Text className="mt-3 font-sans text-xs text-muted">Trading name</Text>
           <TextInput
             value={tradingName}
             onChangeText={(v) => {

@@ -7,6 +7,11 @@ import { standingCopy, gasSafeStatus, paymentsStatus } from "@/lib/verification-
 
 const Body = z.object({
   tradingName: z.string().min(2).max(80),
+  // Optional so older clients that only send the trading name keep working.
+  // Accounts from older signup builds have no name at all — this is how the
+  // engineer fills it in (greeting, avatar initials).
+  firstName: z.string().trim().min(1).max(60).optional(),
+  lastName: z.string().trim().min(1).max(60).optional(),
   logoUrl: z.string().url().max(400).optional().or(z.literal("")),
 });
 
@@ -45,7 +50,13 @@ export async function PATCH(req: Request) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Check the form and try again." }, { status: 400 });
+    const field = String(parsed.error.issues[0]?.path[0] ?? "");
+    const messages: Record<string, string> = {
+      firstName: "Enter your first name.",
+      lastName: "Enter your last name.",
+      tradingName: "Enter your trading name — at least 2 characters.",
+    };
+    return NextResponse.json({ error: messages[field] ?? "Check the form and try again." }, { status: 400 });
   }
 
   const slug = await uniqueSlug(parsed.data.tradingName, engineerId);
@@ -53,6 +64,8 @@ export async function PATCH(req: Request) {
     where: { id: engineerId },
     data: {
       tradingName: parsed.data.tradingName,
+      ...(parsed.data.firstName ? { firstName: parsed.data.firstName } : {}),
+      ...(parsed.data.lastName ? { lastName: parsed.data.lastName } : {}),
       logoUrl: parsed.data.logoUrl || null,
       slug,
     },
