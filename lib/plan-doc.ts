@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { EMERGENCY_LINE } from "@/lib/compliance/interlock";
 import { resolvePlanTier } from "@/lib/plan-tier";
+import { appUrl } from "@/lib/app-url";
 
 export function poundsFromPence(pence: number): string {
   return `£${(pence / 100).toFixed(2)}`;
@@ -28,7 +29,7 @@ export async function planDocumentEmailHtml(planId: string) {
   const { plan, tier, clauses } = await getPlanDocument(planId);
   const brand = plan.engineer.tradingName?.trim() || "Your engineer";
   const price = poundsFromPence(plan.priceMonthlyPence ?? 0);
-  const portalUrl = `${process.env.APP_URL}/portal/${plan.portalToken}`;
+  const portalUrl = `${appUrl()}/portal/${plan.portalToken}`;
   const coolingOffEnds = plan.coolingOffEndsAt?.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "long",

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { brandName } from "@/lib/engineer";
 import { REFERRAL_BOUNTY_PENCE, referralStage } from "@/lib/referral";
+import { appUrl } from "@/lib/app-url";
 
 // E10 — the engineer's referral hub: their invite link, the flat bounty
 // terms, and each invitee's stage on the Part 14 ladder (Signed up →
@@ -35,7 +36,7 @@ export async function GET() {
     }),
   );
 
-  const link = `${process.env.APP_URL}/r/${engineer.slug}`;
+  const link = `${appUrl()}/r/${engineer.slug}`;
   const qrDataUrl = await QRCode.toDataURL(link, { width: 280, margin: 1 });
 
   // Part 14 — "Share my income card... soft-gated ('Unlocks with your first
@@ -49,7 +50,7 @@ export async function GET() {
   return NextResponse.json({
     link,
     qrDataUrl,
-    cardUrl: `${process.env.APP_URL}/api/referral/card?slug=${engineer.slug}`,
+    cardUrl: `${appUrl()}/api/referral/card?slug=${engineer.slug}`,
     bountyPence: REFERRAL_BOUNTY_PENCE,
     hasPayout,
     paidCount: rows.filter((r) => r.bountyPaid).length,

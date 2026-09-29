@@ -7,6 +7,7 @@ import { track } from "@/lib/track";
 import { sendSms } from "@/lib/sms";
 import { normaliseUkPhone } from "@/lib/phone";
 import { newPlanRef, newToken } from "@/lib/plans";
+import { appUrl } from "@/lib/app-url";
 
 const Body = z.object({
   customerId: z.string().optional(),
@@ -126,7 +127,7 @@ export async function POST(req: Request) {
     },
   });
 
-  const link = `${process.env.APP_URL}/p/${engineer.slug}/signup/${plan.signupToken}`;
+  const link = `${appUrl()}/p/${engineer.slug}/signup/${plan.signupToken}`;
   const brand = brandName(engineer);
   const benefits = tier.clauses
     .sort((a, b2) => a.clause.sortOrder - b2.clause.sortOrder)

@@ -5,6 +5,7 @@ import { brandName } from "@/lib/engineer";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { sendSms } from "@/lib/sms";
+import { appUrl } from "@/lib/app-url";
 
 const Body = z.object({ customerId: z.string().min(1) });
 
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
 
   const engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
   const brand = brandName(engineer);
-  const link = `${process.env.APP_URL}/p/${engineer.slug}?src=reminder`;
+  const link = `${appUrl()}/p/${engineer.slug}?src=reminder`;
 
   const res = await sendSms({
     engineerId,

@@ -6,6 +6,7 @@ import { sendEmail } from "@/lib/email";
 import { planDocumentEmailHtml } from "@/lib/plan-doc";
 import { activeMonthlyPence } from "@/lib/plans";
 import { checkReferralBounty } from "@/lib/referral";
+import { appUrl } from "@/lib/app-url";
 
 // Idempotent: safe to call again if Stripe retries the webhook, or if the
 // confirmed-page poll and the webhook both land.
@@ -48,7 +49,7 @@ export async function activatePlan(
     select: { tradingName: true, slug: true },
   });
   const brand = brandName(engineer);
-  const portalUrl = `${process.env.APP_URL}/portal/${plan.portalToken}`;
+  const portalUrl = `${appUrl()}/portal/${plan.portalToken}`;
 
   // C3 — welcome message (SMS; email is the plan document below).
   await sendSms({

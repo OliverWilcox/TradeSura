@@ -4,6 +4,7 @@ import { brandName } from "@/lib/engineer";
 import { getEngineerId } from "@/lib/auth";
 import { sendSms } from "@/lib/sms";
 import { track } from "@/lib/track";
+import { appUrl } from "@/lib/app-url";
 
 // Build Guide v2 Part 10 LAW — "There is no engineer-side cancel button.
 // Cancellation lives only behind the customer's manage link — so every
@@ -31,7 +32,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   const engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
   const brand = brandName(engineer);
-  const portalUrl = `${process.env.APP_URL}/portal/${plan.portalToken}`;
+  const portalUrl = `${appUrl()}/portal/${plan.portalToken}`;
   await sendSms({
     engineerId,
     to: customer.phone,
