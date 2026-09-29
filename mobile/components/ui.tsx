@@ -4,13 +4,17 @@ import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/lib/auth-context";
 import { Icon } from "@/components/icon";
+import { RingMark } from "@/components/ring-mark";
 
-// Build Guide v2 Part 2.2 — the supplied brand assets, never redrawn. The
-// lockup (ring + wordmark) is the in-app masthead; the ring on its own is
-// the avatar mark and (Part 6.3) the payout progress indicator.
-export const LOCKUP = require("../assets/brand/lockup.png");
-export const RING = require("../assets/brand/ring.png");
-const LOCKUP_RATIO = 676 / 94;
+// Build Guide v2 Part 2.2 — the brand mark, never redrawn as a plain
+// circle. Rebrand, 22 Sept — sharp-cut ring replaces the old soft
+// rounded-pill ring, on direct instruction. First shipped as a raster PNG
+// (JPEG export, background removed) but that looked visibly
+// pixellated/jagged at real display sizes — hard-threshold alpha keying
+// has no edge antialiasing. Lockup and the ring mark are now real vector
+// components (RingMark, components/ring-mark.tsx) instead of flat images:
+// crisp at any size, and the wordmark is live Text rather than baked into
+// a raster, so it can never end up off-ratio or blurry from scaling either.
 
 // RN throws "Text strings must be rendered within a <Text> component" the
 // moment JSX text is a *sibling* of an interpolation (e.g. `Text {n} more`
@@ -72,13 +76,25 @@ export function AppHeader({ title, right }: { title?: string; right?: ReactNode 
 }
 
 export function Lockup({ height = 26 }: { height?: number }) {
+  // Ring + live "Trade"/"Sura" text, sized off one prop the same way the
+  // old flat image was — callers (AppHeader, sign-in, sign-up, welcome)
+  // don't need to change. Proportions (text cap-height vs. ring diameter,
+  // the gap between them) matched by eye against the original lockup
+  // composition rather than measured, since there's no longer a fixed
+  // image aspect ratio to derive them from.
+  const fontSize = Math.round(height * 0.72);
   return (
-    <Image
-      source={LOCKUP}
+    <View
+      className="flex-row items-center"
+      style={{ gap: Math.round(height * 0.14) }}
       accessibilityLabel="TradeSura"
-      style={{ height, width: Math.round(height * LOCKUP_RATIO) }}
-      resizeMode="contain"
-    />
+    >
+      <RingMark size={height} />
+      <Text style={{ fontSize, lineHeight: fontSize * 1.05 }} className="font-extrabold">
+        <Text className="text-white">Trade</Text>
+        <Text style={{ color: "#5FA3F0" }}>Sura</Text>
+      </Text>
+    </View>
   );
 }
 

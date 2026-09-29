@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { EMERGENCY_LINE } from "@/lib/compliance/interlock";
+import { RingMark } from "@/components/ring-mark";
 
 // Customer surface: white-label pages wearing the engineer's brand.
 // Emergency line sits permanently in the footer (spec Screen 10).
@@ -16,11 +17,10 @@ export function CustomerShell({
     <div className="flex-1 flex flex-col max-w-md w-full mx-auto min-h-screen bg-panel">
       <header className="bg-paper px-4 pt-4 pb-2.5 border-b border-line-soft">
         <div className="flex items-center gap-2">
-          {/* Build Guide v2 Part 15.1 — "Header: ring + trading name." The
-              supplied brand asset, never redrawn (Part 2.2). */}
-          {/* eslint-disable-next-line @next/next/no-img-element -- small
-              static brand asset, not worth Next/Image's optimisation path */}
-          <img src="/brand/ring.png" alt="" width={22} height={22} />
+          {/* Build Guide v2 Part 15.1 — "Header: ring + trading name." Real
+              vector (RingMark), not a raster image — see that component's
+              comment for why the earlier PNG export was replaced. */}
+          <RingMark size={22} />
           <div className="font-disp text-xl font-bold uppercase tracking-wide">
             {tradingName} <span className="text-flame">Care Plans</span>
           </div>

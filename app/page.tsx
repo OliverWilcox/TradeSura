@@ -1,10 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import CursorGlow from "@/components/cursor-glow";
+import { RingMark } from "@/components/ring-mark";
 
 // Same language law as the mobile app's welcome screen (app/assets/TradeSura_Welcome_Screen_W0.html
 // §1): never "insurance", "cover", "protection", "warranty", "doorstep" in customer-facing copy.
@@ -106,14 +106,17 @@ export default function HomePage() {
         {/* Hero */}
         <section className="relative flex min-h-[92vh] flex-col items-center justify-center overflow-hidden px-6 py-24 text-center">
           <div className="relative flex flex-col items-center gap-6">
-            <Image
-              src="/brand/lockup.png"
-              alt="TradeSura"
-              width={340}
-              height={72}
-              priority
-              className="hero-fade h-auto w-[240px] sm:w-[320px]"
-            />
+            {/* Real vector mark + live text, not the old raster lockup —
+                that image was distorted here anyway (a fixed 340x72 box
+                that didn't match the source's true aspect ratio). See
+                components/ring-mark.tsx. */}
+            <div className="hero-fade flex items-center gap-3">
+              <RingMark size={48} />
+              <span className="text-4xl font-extrabold sm:text-6xl">
+                <span className="text-white">Trade</span>
+                <span className="text-[#5FA3F0]">Sura</span>
+              </span>
+            </div>
             <p className="hero-fade text-lg font-semibold text-flame sm:text-xl">Your trade. On plan.</p>
             <h1 className="hero-fade max-w-2xl text-3xl font-bold leading-tight sm:text-5xl">
               Your customers, paying you <span className="text-ok">every month.</span>
