@@ -1,12 +1,13 @@
 import { Redirect, Tabs, router } from "expo-router";
 import { useCallback, useEffect, useState, type ComponentProps } from "react";
-import { View, ActivityIndicator, Text, Pressable, AppState } from "react-native";
+import { View, Text, Pressable, AppState } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Button, GateSheet } from "@/components/ui";
 import { AddCustomerSheet } from "@/components/add-customer-sheet";
 import { Icon, type IconName } from "@/components/icon";
+import { RingLoader } from "@/components/ring-loader";
 
 // Build Guide v2 Part 3 — the whole map: Home · Customers · Add customer
 // (the labelled hero) · Reminders · Payouts. No Plans tab, no More tab — those
@@ -180,19 +181,13 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
 export default function TabsLayout() {
   const { token, loading, me, meLoading, meError, refreshMe, signOut } = useAuth();
 
-  if (loading) return null;
+  if (loading) return <RingLoader />;
   // W0 — signed-out users land on the welcome screen, not straight on
   // sign-in; it decides for itself whether to promote Sign in (returning
   // device) or Start now (organic/claim/referral).
   if (!token) return <Redirect href="/welcome" />;
 
-  if (meLoading && !me) {
-    return (
-      <View className="flex-1 items-center justify-center bg-bg">
-        <ActivityIndicator color="#5FA3F0" />
-      </View>
-    );
-  }
+  if (meLoading && !me) return <RingLoader />;
 
   if (meError && !me) {
     return (

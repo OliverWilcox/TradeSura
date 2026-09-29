@@ -8,11 +8,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0B1A2E"
-    },
     "experiments": {
       "typedRoutes": true
     },
@@ -60,6 +55,15 @@
         {
           "cameraPermission": "TradeSura uses your camera to photograph your Gas Safe ID card for verification.",
           "photosPermission": "TradeSura uses your photos to upload your logo and Gas Safe ID card."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 88,
+          "resizeMode": "contain",
+          "backgroundColor": "#0B1A2E"
         }
       ]
     ],
