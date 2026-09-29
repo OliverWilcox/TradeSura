@@ -18,6 +18,9 @@ export function AuthBackdrop() {
         source={BG}
         style={{ position: "absolute", left: 0, width, height: h, top: height - h }}
       />
+      {/* Extra navy scrim so the headline and copy read cleanly over the
+          photo. Tune the alpha here rather than regenerating the asset. */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(11,26,46,0.35)" }]} />
     </View>
   );
 }
