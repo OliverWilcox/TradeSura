@@ -33,7 +33,7 @@ bot=img.crop((0,ih-min(ih,H-(iy+ih)),iw,ih)).transpose(Image.FLIP_TOP_BOTTOM).fi
 canvas.paste(bot,(ix,iy+ih))
 canvas.paste(img,(ix,iy))
 # navy overlay, alpha profile over render-fraction
-stops=[(0,.6),(.07,.42),(.2,.2),(.36,.2),(.48,.32),(.56,.5),(.6,.66),(.64,.82),(.70,.93),(.78,.98),(1,1)]
+stops=[(0,.4),(.07,.26),(.2,.08),(.36,.1),(.48,.28),(.56,.5),(.6,.66),(.64,.82),(.70,.93),(.78,.98),(1,1)]
 navy=np.array([11,26,46],float)
 a=np.zeros(H)
 for y in range(H):

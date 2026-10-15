@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import {
+  belongsToAnotherPlatform,
   createAccountOnboardingLink,
   ensureRecipientConfiguration,
   getOrCreateConnectAccount,
@@ -26,7 +27,28 @@ export async function GET() {
     );
   }
 
-  const engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
+  let engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
+  if (engineer.stripeAccountId) {
+    try {
+      // Merchant-only accounts from before the recipient fix pick it up here,
+      // so the link below collects whatever transfers still needs.
+      await ensureRecipientConfiguration(engineer.stripeAccountId);
+    } catch (err) {
+      if (!belongsToAnotherPlatform(err)) throw err;
+      // Saved under an earlier test platform (the key has since changed), so
+      // this key can't see it. Nothing can be charged through it — start
+      // payment setup again on a fresh account.
+      engineer = await prisma.engineer.update({
+        where: { id: engineerId },
+        data: {
+          stripeAccountId: null,
+          stripeDetailsSubmitted: false,
+          stripeChargesEnabled: false,
+          stripePayoutsEnabled: false,
+        },
+      });
+    }
+  }
   const accountId = await getOrCreateConnectAccount(engineer);
   if (accountId !== engineer.stripeAccountId) {
     await prisma.engineer.update({
@@ -34,10 +56,6 @@ export async function GET() {
       data: { stripeAccountId: accountId },
     });
     await track("stripe_account_created", { type: "ENGINEER", id: engineerId }, { accountId });
-  } else {
-    // Merchant-only accounts from before the recipient fix pick it up here,
-    // so the link below collects whatever transfers still needs.
-    await ensureRecipientConfiguration(accountId);
   }
 
   // Stripe's Account Links API only accepts http(s) return/refresh URLs, not

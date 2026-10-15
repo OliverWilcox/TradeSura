@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { CLAUSE_TEMPLATES, TIER_PRESETS, suggestedPricePence, withRequiredClauses } from "@/lib/clauses";
+import {
+  CLAUSE_TEMPLATES,
+  DEFAULT_ON_CLAUSE_CODES,
+  TIER_PRESETS,
+  TIER_PRICE_MIN_PENCE,
+  serviceRuleError,
+  suggestedPricePence,
+  withRequiredClauses,
+} from "@/lib/clauses";
 import { checkWording } from "@/lib/compliance/blocklist";
 
 describe("plan service library", () => {
@@ -56,6 +64,30 @@ describe("plan service library", () => {
     it("de-duplicates when the caller already included a CORE code", () => {
       const result = withRequiredClauses(["ANNUAL_SERVICE", "ANNUAL_SERVICE"]);
       expect(result.filter((c) => c === "ANNUAL_SERVICE")).toHaveLength(1);
+    });
+  });
+
+  // Build Review 2, rulings 1 and 2.
+  describe("engineer-set plans", () => {
+    it("has a £10 floor", () => {
+      expect(TIER_PRICE_MIN_PENCE).toBe(1000);
+    });
+
+    it("pre-ticks the annual service without making it required", () => {
+      expect(DEFAULT_ON_CLAUSE_CODES).toContain("ANNUAL_SERVICE");
+      expect(withRequiredClauses([])).not.toContain("ANNUAL_SERVICE");
+    });
+
+    it("allows a priority-only plan once another option is ticked", () => {
+      expect(serviceRuleError(withRequiredClauses(["NO_CALLOUT_FEE"]))).toBeNull();
+    });
+
+    it("rejects a plan with no service and nothing beyond the required lines", () => {
+      expect(serviceRuleError(withRequiredClauses([]))).toMatch(/at least one other option/);
+    });
+
+    it("never blocks a plan that includes the service", () => {
+      expect(serviceRuleError(withRequiredClauses(["ANNUAL_SERVICE"]))).toBeNull();
     });
   });
 });

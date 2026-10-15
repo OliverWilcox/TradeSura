@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
+import { setOverdueBadge, unregisterPush } from "@/lib/push";
 import {
   api,
   clearStripeSkipped,
@@ -12,6 +13,12 @@ import {
 } from "./api";
 
 export type Me = {
+  // Build Review 2, section 8 — staff get a cut-down app inside their
+  // owner's business; money and settings fields are absent for them.
+  role: "owner" | "staff";
+  businessName?: string;
+  signUpsThisWeek?: number;
+  gasSafeRejectedAt?: string | null;
   id: string;
   email: string;
   firstName: string | null;
@@ -26,6 +33,7 @@ export type Me = {
   slug: string;
   gasSafeVerifiedAt: string | null;
   gasSafeReviewRequestedAt: string | null;
+  hasGasSafeCard?: boolean;
   gasSafeNo: string | null;
   gasSafeName: string | null;
   gasSafeCompany: string | null;
@@ -105,6 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    await unregisterPush();
+    setOverdueBadge(0);
     await clearToken();
     await clearStripeSkipped();
     setTokenState(null);

@@ -12,6 +12,10 @@ const Body = z.object({
     "welcome_start_tapped",
     "welcome_signin_tapped",
     "welcome_dismissed",
+    // Build Review 2, section 10 — the sign-up funnel before an account
+    // exists. meta.funnelId joins one person's steps; engineer_signed_up
+    // (auth/request) closes it.
+    "signup_step_reached",
   ]),
   meta: z.record(z.string(), z.unknown()).optional(),
 });

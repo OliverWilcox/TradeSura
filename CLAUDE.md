@@ -41,6 +41,20 @@ Bacs), Planlock takes a 20% app fee. Full product spec: @docs/design-spec.html
   scope — Messages carries the engineer's only visibility into the
   gas-emergency interlock firing, which makes it more than a nicety. Campaigns,
   cancel/save flow, and referrals remain out of scope, still stubbed.
+  [DECISION 2026-10-10, human — TradeSura Build Review 2 (Matt)] Rulings:
+  plan price is engineer-set, £10 minimum, no maximum; annual service is
+  ticked by default but optional (then ≥1 other option); existing customers'
+  price changes only via an annual price review (once a year, 30 days' notice
+  by text + email with old/new price, start date and free cancel link; % cap
+  is a setting, `PRICE_REVIEW_CAP_PERCENT`); referrals are an affiliate model
+  (25% of TradeSura's fee for the referred engineer's first 12 months, then
+  10% for life, one level) replacing the £50 bounty; engineers can end a
+  customer's plan from the customer page with a reason. Team accounts
+  (owner + staff) are in scope: staff are Engineer rows with `ownerId`, the
+  owner uploads each staff Gas Safe card (its own queue check; no offers
+  until approved), staff see no money or settings. "Messages & tickets" is
+  hidden from Account for October; interlock triggers surface on Home.
+  In-app account deletion is required (App Store 5.1.1).
 - When the spec and this file conflict, this file wins. When unsure between two
   approaches, present both briefly and ask — do not decide architecture alone.
 

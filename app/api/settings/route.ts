@@ -5,6 +5,8 @@ import { getEngineerId } from "@/lib/auth";
 import { uniqueSlug } from "@/lib/slug";
 import { standingCopy, gasSafeStatus, paymentsStatus } from "@/lib/verification-state";
 
+import { smsAvailable } from "@/lib/contact-verification";
+
 const Body = z.object({
   tradingName: z.string().min(2).max(80),
   // Optional so older clients that only send the trading name keep working.
@@ -30,6 +32,8 @@ export async function GET() {
     firstName: engineer.firstName,
     lastName: engineer.lastName,
     phone: engineer.phone,
+    smsSignInEnabled: engineer.smsSignInEnabled,
+    smsAvailable: smsAvailable(),
     phoneVerifiedAt: engineer.phoneVerifiedAt,
     businessType: engineer.businessType,
     companyNumber: engineer.companyNumber,

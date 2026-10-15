@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { brandName } from "@/lib/engineer";
-import { activeMonthlyPence } from "@/lib/plans";
-import { appFeePence } from "@/lib/clauses";
+import { activeMonthlyPence, collectionsSince, payoutWeekStart } from "@/lib/plans";
 import { dueServices } from "@/lib/reminders";
 import { getPayoutSummary, stripeConfigured } from "@/lib/stripe";
-import { REFERRAL_REQUIRED_PLANS } from "@/lib/referral";
+import { referralRatePercent } from "@/lib/referral";
+import { recentEmergencyCount } from "@/lib/emergencies";
 import { standingCopy } from "@/lib/verification-state";
 import { track } from "@/lib/track";
 
@@ -88,17 +88,16 @@ export async function GET() {
     .slice(0, 3)
     .map((d) => ({ ...d, dueDate: d.dueDate.toISOString() }));
 
-  // Referral progress — Part 14 RULED: the £50 pays on the invitee's first
-  // plan going live, so anyone still in this unpaid list simply hasn't gone
-  // live yet. Today list: "Gary signed up with your invite — you'll get £50
-  // when their first plan goes live."
+  // Referral progress (Build Review 2, ruling 4): the newest invitee who isn't
+  // earning for them yet. "Gary signed up with your invite — you'll earn 25%
+  // of our fee on every plan they sell."
   const invitees = await prisma.engineer.findMany({
-    where: { referrerId: engineerId, referralBountyPaidAt: null },
+    where: { referrerId: engineerId, referredEarnings: { none: {} } },
     orderBy: { createdAt: "desc" },
     take: 1,
   });
   const referral = invitees[0]
-    ? { name: brandName(invitees[0]), required: REFERRAL_REQUIRED_PLANS }
+    ? { name: brandName(invitees[0]), ratePercent: referralRatePercent(invitees[0].createdAt) }
     : null;
 
   let nextPayoutPence: number | null = null;
@@ -114,12 +113,18 @@ export async function GET() {
       // Non-fatal — the dashboard still renders without a live payout figure.
     }
   }
-  // Fallback: the expected 80% of active-plan collections.
+  // Fallback before Stripe reports a payout — Part 6.3 LAW: "this week's
+  // confirmed collections × 80%. Never the monthly figure × 80%."
   if (nextPayoutPence === null && totalPence > 0) {
-    nextPayoutPence = totalPence - appFeePence(totalPence);
+    nextPayoutPence = (await collectionsSince(engineerId, payoutWeekStart())).toBankPence;
   }
 
+  // Messages is hidden from Account for October (Build Review 2), so Home is
+  // where the engineer sees that the gas-emergency interlock fired.
+  const emergencies = await recentEmergencyCount(engineerId);
+
   return NextResponse.json({
+    emergencies,
     totalPence,
     count,
     offersOut,

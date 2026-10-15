@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
-import { TIER_PRESETS, TIER_PRICE_MIN_PENCE, TIER_PRICE_MAX_PENCE, withRequiredClauses } from "@/lib/clauses";
+import {
+  TIER_PRESETS,
+  TIER_PRICE_MIN_PENCE,
+  TIER_PRICE_MAX_PENCE,
+  serviceRuleError,
+  withRequiredClauses,
+} from "@/lib/clauses";
 
 // Build Guide v2 Part 7 — "My plans" hub. Every plan the engineer has ever
 // started, any status: the hub (not this endpoint) decides whether a draft,
@@ -73,13 +79,15 @@ export async function POST(req: Request) {
   if (Number.isInteger(body.priceMonthlyPence)) priceMonthlyPence = body.priceMonthlyPence;
   if (Array.isArray(body.clauseCodes)) clauseCodes = body.clauseCodes;
 
-  priceMonthlyPence = Math.min(
-    TIER_PRICE_MAX_PENCE,
-    Math.max(TIER_PRICE_MIN_PENCE, priceMonthlyPence),
-  );
+  if (priceMonthlyPence < TIER_PRICE_MIN_PENCE) {
+    return NextResponse.json({ error: "The minimum plan price is £10 a month." }, { status: 400 });
+  }
+  priceMonthlyPence = Math.min(TIER_PRICE_MAX_PENCE, priceMonthlyPence);
   // Part 7.1 LAW — required options are pre-ticked and unremovable. Enforced
   // here too, not just in the picker, so a malformed request can't drop one.
   const finalCodes = withRequiredClauses(clauseCodes).filter((c) => byCode.has(c));
+  const ruleError = serviceRuleError(finalCodes);
+  if (ruleError) return NextResponse.json({ error: ruleError }, { status: 400 });
 
   const existing = await prisma.planTier.count({ where: { engineerId } });
   const tier = await prisma.planTier.create({

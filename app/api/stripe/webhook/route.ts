@@ -3,8 +3,10 @@ import type Stripe from "stripe";
 import { prisma } from "@/lib/db";
 import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
+import { recordReferralEarning } from "@/lib/referral";
 import { activatePlan } from "@/lib/activate";
 import { sendSms, notifyEngineer } from "@/lib/sms";
+import { sendPushNotification } from "@/lib/push";
 import {
   constructWebhookEvent,
   getConnectAccountStatus,
@@ -161,6 +163,12 @@ async function handleEvent(event: Stripe.Event) {
         invoiceId: invoice.id,
         amountPence: invoice.amount_paid,
       });
+      // Ruling 4 — the referrer's share of our fee on this collection.
+      await recordReferralEarning({
+        invoiceId: invoice.id,
+        engineerId: plan.engineerId,
+        amountPaidPence: invoice.amount_paid,
+      });
       return;
     }
 
@@ -197,6 +205,12 @@ async function handleEvent(event: Stripe.Event) {
           plan.engineerId,
           `⚠ ${plan.customer.firstName} ${plan.customer.lastName}'s payment failed — Stripe is retrying automatically. No action needed yet.`,
         );
+        await sendPushNotification(
+          plan.engineerId,
+          "Payment failed",
+          `${plan.customer.firstName} ${plan.customer.lastName}'s payment didn't go through — Stripe is retrying automatically.`,
+          { url: `/customer/${plan.customerId}` },
+        );
       }
       return;
     }
@@ -224,6 +238,26 @@ async function handleEvent(event: Stripe.Event) {
           reason: "subscription_deleted",
         });
       }
+      return;
+    }
+
+    // Part 11 — "Get told when payouts land". A Connect event: needs
+    // payout.paid ticked on the Connected-accounts webhook endpoint.
+    case "payout.paid": {
+      const accountId = event.account;
+      if (!accountId) return;
+      const engineer = await prisma.engineer.findFirst({
+        where: { stripeAccountId: accountId },
+        select: { id: true },
+      });
+      if (!engineer) return;
+      const payout = event.data.object as Stripe.Payout;
+      await sendPushNotification(
+        engineer.id,
+        "Payout landed",
+        `£${(payout.amount / 100).toFixed(2)} should now be in your bank.`,
+        { url: "/payouts" },
+      );
       return;
     }
 

@@ -153,7 +153,8 @@ export default function EditPlan() {
           <Card className="border-warn-tint bg-warn-tint">
             <Text className="font-sans text-xs text-warn">
               Changes apply to new customers — your {activePlanCount} current customer
-              {activePlanCount === 1 ? "" : "s"} keep what they signed up for.
+              {activePlanCount === 1 ? "" : "s"} keep what they signed up for. To change what they
+              pay, use the annual price review below.
             </Text>
           </Card>
         )}
@@ -179,6 +180,16 @@ export default function EditPlan() {
             <RowLine left="Name" right={<Chevron />} />
           </Pressable>
         </Card>
+
+        {/* Build Review 2, ruling 3 — the only way to change what existing
+            customers pay: once a year, with 30 days' notice. */}
+        {activePlanCount > 0 && (
+          <Card>
+            <Pressable onPress={() => router.push({ pathname: "/price-review", params: { tierId } })}>
+              <RowLine left="Annual price review" right={<Chevron />} />
+            </Pressable>
+          </Card>
+        )}
 
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 

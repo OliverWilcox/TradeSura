@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { brandName } from "@/lib/engineer";
 import type { MessageClass } from "@/lib/generated/prisma/enums";
 import { isSuppressed } from "@/lib/suppression";
+import { sendPushNotification } from "@/lib/push";
 
 // Alphanumeric sender IDs (used below for every engineer-branded send) are
 // one-way on real networks — Twilio's own STOP-keyword filtering doesn't
@@ -60,7 +61,9 @@ async function deliver(
 
   if (!accountSid || !authToken || !fromNumber) {
     // Dev driver. Real provider keys are a human task.
-    console.log(`[SMS] from="${senderName}" to=${to}\n      ${body}`);
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[SMS] from="${senderName}" to=${to}\n      ${body}`);
+    }
     return false;
   }
 
@@ -95,6 +98,9 @@ export async function sendVerificationCode(to: string, code: string): Promise<{ 
     `Your TradeSura verification code is ${code}. It expires in 10 minutes.`,
     { fromLongCode: true },
   );
+  if (!delivered && process.env.NODE_ENV !== "development") {
+    throw new Error("Verification text could not be delivered.");
+  }
   return delivered ? {} : { devCode: code };
 }
 
@@ -178,6 +184,10 @@ export async function flushSmsQueue() {
       where: { id: sms.id },
       data: { status: "SENT", sentAt: new Date() },
     });
+    // Part 11 — "services come due": the engineer hears once per plan, when
+    // the first (30-day) reminder goes out, not on every follow-up.
+    const svc = sms.cancelKey?.match(/^svc:(.+):30$/);
+    if (svc) await pushServiceDue(svc[1]);
   }
   return due.length;
 }
@@ -188,4 +198,19 @@ export async function cancelScheduledSms(cancelKeyPrefix: string) {
     where: { cancelKey: { startsWith: cancelKeyPrefix }, status: "QUEUED" },
     data: { status: "CANCELLED" },
   });
+}
+
+async function pushServiceDue(planId: string) {
+  const plan = await prisma.plan.findUnique({
+    where: { id: planId },
+    select: { engineerId: true, customerId: true, customer: { select: { firstName: true, lastName: true } } },
+  });
+  if (!plan) return;
+  const name = `${plan.customer.firstName} ${plan.customer.lastName}`;
+  await sendPushNotification(
+    plan.engineerId,
+    "Service coming due",
+    `${name}'s annual service is due in 30 days — we've texted them to book it in.`,
+    { url: `/customer/${plan.customerId}` },
+  );
 }

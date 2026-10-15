@@ -1,9 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View, Text, ScrollView, RefreshControl, Pressable } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, getPushPrompted, setPushPrompted } from "@/lib/api";
+import { pushPermission, registerForPush } from "@/lib/push";
 import { useAuth } from "@/lib/auth-context";
+import { StaffHome } from "@/components/staff-home";
 import { AppHeader, Card, Micro, Button, GateSheet } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icon";
 import { RingProgress, payoutWeekProgress } from "@/components/ring-progress";
@@ -33,7 +35,8 @@ type Dashboard = {
   upcoming: DueItem[];
   nextPayoutPence: number | null;
   nextPayoutDate: string | null;
-  referral: { name: string; required: number } | null;
+  referral: { name: string; ratePercent: number } | null;
+  emergencies: number;
   offersWaiting: { customerFirstName: string; planId: string } | null;
   standing: Standing;
 };
@@ -143,7 +146,13 @@ function DashboardSkeleton() {
 // Screen 02 — the money mirror. Part 6.1 LAW: header → greeting → standing
 // strip → money card → action card → Today → quick actions. Nothing may
 // appear above the money card except the header, greeting and the strip.
+// Build Review 2, section 8 — staff get their own cut-down Home (no £).
 export default function Home() {
+  const { me } = useAuth();
+  return me?.role === "staff" ? <StaffHome /> : <OwnerHome />;
+}
+
+function OwnerHome() {
   const { me, refreshMe } = useAuth();
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -152,6 +161,7 @@ export default function Home() {
   const [plansGateOpen, setPlansGateOpen] = useState(false);
   const [shopGateOpen, setShopGateOpen] = useState(false);
   const [offerGate, setOfferGate] = useState<string | null>(null);
+  const [pushAskOpen, setPushAskOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -184,6 +194,25 @@ export default function Home() {
   const awake = Boolean(me?.hasPlan);
   const verified = Boolean(me?.gasSafeVerifiedAt);
 
+  // Part 11 — push permission is asked after the first plan goes live, behind
+  // our own pre-prompt so the one-shot OS dialog only follows a yes. Already
+  // granted: re-register quietly, since Expo tokens can rotate.
+  useEffect(() => {
+    if (!awake) return;
+    let cancelled = false;
+    (async () => {
+      const status = await pushPermission();
+      if (cancelled) return;
+      if (status === "granted") registerForPush(false);
+      else if (status === "undetermined" && !(await getPushPrompted()) && !cancelled) {
+        setPushAskOpen(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [awake]);
+
   // Part 5 — the dashboard's "Finish setup — N of 4 done" card reads the
   // same truth as the Getting Started hub's four steps.
   const setupSteps = [
@@ -201,9 +230,9 @@ export default function Home() {
 
   // Part 6.5 LAW — the two-leg gate: an offer needs a live plan AND the badge.
   const offerBlockedBy = !awake
-    ? "Your first plan is step 2 of setup — Continue setup →"
+    ? "Your first plan is step 2 of setup."
     : !verified
-      ? "Offers unlock with your Gas Safe badge — we'll text you when it's live."
+      ? "Offers unlock with your Gas Safe badge — we'll let you know when it's live."
       : !me?.stripeConnected
         ? "Finish your payment setup first — customers can't pay you until it's done."
         : null;
@@ -228,6 +257,19 @@ export default function Home() {
         </Text>
 
         {data && <StandingStrip standing={data.standing} />}
+        {/* Signed up with "I'll add my ID photo later" (30 Sept build notes). */}
+        {me && me.hasGasSafeCard === false && !verified && (
+          <Pressable
+            onPress={() => router.push("/add-id")}
+            className="flex-row items-center gap-2.5 rounded-xl border border-warn-tint bg-warn-tint px-3.5 py-3"
+          >
+            <Icon name="camera" size={16} color="#f2b84b" />
+            <Text className="flex-1 text-[13.5px] font-semibold text-warn">
+              Add your Gas Safe ID to go live
+            </Text>
+            <Icon name="chevron" size={13} color="#f2b84b" weight="semibold" />
+          </Pressable>
+        )}
 
         {loading && !data && !error && <DashboardSkeleton />}
 
@@ -246,9 +288,13 @@ export default function Home() {
                     <Text className="text-[18px] font-medium text-muted"> /month</Text>
                   </Text>
                   <Text className="mt-1 text-[14px] text-muted">
-                    {data.count === 0
+                    {/* Inactive copy only until a plan is live (Part 6.2) — a
+                        live plan with no signups yet already counts as active. */}
+                    {!awake
                       ? "Your first plan changes this"
-                      : `${data.count} plan${data.count === 1 ? "" : "s"} live · ${data.offersOut} offer${data.offersOut === 1 ? "" : "s"} out`}
+                      : data.count === 0 && data.offersOut === 0
+                        ? "Your plan is live — offer it at your next job"
+                        : `${data.count} plan${data.count === 1 ? "" : "s"} live · ${data.offersOut} offer${data.offersOut === 1 ? "" : "s"} out`}
                   </Text>
                 </View>
                 {/* Part 6.3 — the ring lives on the right from day one:
@@ -370,6 +416,15 @@ export default function Home() {
                   </Text>
                 </Pressable>
               )}
+              {data.emergencies > 0 && (
+                <Pressable className="flex-row gap-2 py-1.5" onPress={() => router.push("/messages")}>
+                  <Icon name="warning" size={18} color="#FF6B6B" />
+                  <Text className="flex-1 text-[13px] font-semibold text-danger">
+                    Gas emergency warning shown to {data.emergencies === 1 ? "a customer" : `${data.emergencies} customers`}{" "}
+                    this week — open messages
+                  </Text>
+                </Pressable>
+              )}
               {data.referral && (
                 <Pressable
                   className="flex-row gap-2 py-1.5"
@@ -378,12 +433,12 @@ export default function Home() {
                   <Icon name="referral" size={18} color="#9fb6d0" />
                   <Text className="flex-1 text-[13px] text-ink">
                     {data.referral.name} signed up with your invite —{" "}
-                    <Text className="font-bold">you&apos;ll get £50</Text> when their first plan
-                    goes live
+                    <Text className="font-bold">you&apos;ll earn {data.referral.ratePercent}% of our fee</Text> on
+                    every plan they sell
                   </Text>
                 </Pressable>
               )}
-              {data.upcoming.length === 0 && data.failedRecently === 0 && !data.referral && (
+              {data.upcoming.length === 0 && data.failedRecently === 0 && !data.referral && data.emergencies === 0 && (
                 <Text className="py-1 text-xs text-muted">
                   Nothing needs you today — no active plans or messages.
                 </Text>
@@ -403,7 +458,7 @@ export default function Home() {
               />
               <QuickAction
                 icon="invite"
-                label="Invite an engineer — earn £50"
+                label="Invite an engineer — earn 25% of our fee"
                 onPress={() => router.push("/referral")}
               />
             </View>
@@ -426,7 +481,7 @@ export default function Home() {
       <GateSheet
         visible={plansGateOpen}
         onClose={() => setPlansGateOpen(false)}
-        reason="Your first plan is step 2 of setup — Continue setup →"
+        reason="Your first plan is step 2 of setup."
         onCta={() => router.push("/onboarding")}
       />
       <GateSheet
@@ -442,6 +497,16 @@ export default function Home() {
         reason="The shop unlocks with your badge — your free pack ships when it goes live."
         cta="Check my status"
         onCta={() => router.push("/more")}
+      />
+      <GateSheet
+        visible={pushAskOpen}
+        onClose={() => {
+          setPushAskOpen(false);
+          setPushPrompted();
+        }}
+        reason="Get told when payouts land and services come due"
+        cta="Turn on notifications"
+        onCta={() => registerForPush(true)}
       />
     </View>
   );

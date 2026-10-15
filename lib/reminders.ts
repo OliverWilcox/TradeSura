@@ -26,9 +26,12 @@ export type DueService = {
 
 // Active plans drive renewals; no-plan customers with a known last service are
 // sell opportunities — both belong on the due list (spec Screens 05 + 07).
-export async function dueServices(engineerId: string): Promise<DueService[]> {
+// `addedById` narrows to one staff engineer's own customers (Build Review 2,
+// section 8 — staff see only their own customers' services due).
+export async function dueServices(engineerId: string, opts: { addedById?: string } = {}): Promise<DueService[]> {
+  const own = opts.addedById ? { addedById: opts.addedById } : {};
   const plans = await prisma.plan.findMany({
-    where: { engineerId, status: "ACTIVE", activatedAt: { not: null } },
+    where: { engineerId, status: "ACTIVE", activatedAt: { not: null }, ...(opts.addedById ? { customer: own } : {}) },
     include: {
       customer: true,
       tier: { include: { clauses: { include: { clause: true } } } },
@@ -51,6 +54,7 @@ export async function dueServices(engineerId: string): Promise<DueService[]> {
   const noPlanCustomers = await prisma.customer.findMany({
     where: {
       engineerId,
+      ...own,
       plans: { none: { status: "ACTIVE" } },
       properties: { some: { appliances: { some: { lastServicedAt: { not: null } } } } },
     },

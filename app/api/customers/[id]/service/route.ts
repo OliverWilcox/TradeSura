@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getEngineerId } from "@/lib/auth";
+import { getActor } from "@/lib/auth";
 import { track } from "@/lib/track";
 
 const Body = z.object({
@@ -13,8 +13,11 @@ const Body = z.object({
 // property/appliance if the customer has none) so the reminder engine
 // reschedules next year's service off this date.
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const engineerId = await getEngineerId();
-  if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const actor = await getActor();
+  if (!actor) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const engineerId = actor.businessId;
+  // Section 8 — staff only act on customers they added.
+  const ownOnly = actor.role === "staff" ? { addedById: actor.actorId } : {};
 
   const { id } = await ctx.params;
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
@@ -22,7 +25,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const servicedOn = parsed.data.servicedOn ? new Date(parsed.data.servicedOn) : new Date();
 
   const customer = await prisma.customer.findFirst({
-    where: { id, engineerId },
+    where: { id, engineerId, ...ownOnly },
     include: { properties: { include: { appliances: true } } },
   });
   if (!customer) return NextResponse.json({ error: "Not found." }, { status: 404 });

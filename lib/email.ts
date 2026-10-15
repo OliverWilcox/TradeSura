@@ -18,6 +18,12 @@ function getResend(): Resend | null {
   return _resend;
 }
 
+// False means sendEmail only logs (dev driver) — used to decide whether a
+// sign-in code may be handed back to the client for testing.
+export function emailConfigured(): boolean {
+  return Boolean(process.env.RESEND_API_KEY);
+}
+
 export async function sendEmail(opts: { to: string; subject: string; html: string }) {
   const resend = getResend();
   if (!resend) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, Text, FlatList, Pressable } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Contacts from "expo-contacts";
 import { api, ApiError } from "@/lib/api";
@@ -17,7 +17,10 @@ export default function ImportContacts() {
   const [status, setStatus] = useState<"loading" | "denied" | "ready" | "importing">("loading");
   const [contacts, setContacts] = useState<PickedContact[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [confirmed, setConfirmed] = useState(false);
+  // Ticked already when arriving from Customers, where the same box gates
+  // the button; still shown here so it can be unticked.
+  const { consent } = useLocalSearchParams<{ consent?: string }>();
+  const [confirmed, setConfirmed] = useState(consent === "1");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
 

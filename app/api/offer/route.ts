@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { offerBlockedReason } from "@/lib/verification-state";
 import { brandName } from "@/lib/engineer";
-import { getEngineerId } from "@/lib/auth";
+import { getActor } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { sendSms } from "@/lib/sms";
 import { normaliseUkPhone } from "@/lib/phone";
@@ -29,12 +30,14 @@ const Body = z.object({
 
 // Mobile counterpart to the customer-picker query in app/offer/page.tsx.
 export async function GET() {
-  const engineerId = await getEngineerId();
-  if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const actor = await getActor();
+  if (!actor) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const engineerId = actor.businessId;
+  const isStaff = actor.role === "staff";
 
   const [customers, tiers, offersSent] = await Promise.all([
     prisma.customer.findMany({
-      where: { engineerId },
+      where: { engineerId, ...(isStaff ? { addedById: actor.actorId } : {}) },
       orderBy: { createdAt: "desc" },
       take: 100,
       select: { id: true, firstName: true, lastName: true, phone: true },
@@ -44,7 +47,7 @@ export async function GET() {
       orderBy: { sortOrder: "asc" },
       include: { clauses: { include: { clause: true } } },
     }),
-    prisma.plan.count({ where: { engineerId } }),
+    prisma.plan.count({ where: { engineerId, ...(isStaff ? { soldById: actor.actorId } : {}) } }),
   ]);
 
   return NextResponse.json({
@@ -61,8 +64,26 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const engineerId = await getEngineerId();
-  if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const actor = await getActor();
+  if (!actor) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const engineerId = actor.businessId;
+  // Section 8 — staff sell for the business and are tagged on the plan.
+  const staffId = actor.role === "staff" ? actor.actorId : null;
+
+  const [gateBusiness, gateActor] = await Promise.all([
+    prisma.engineer.findUnique({
+      where: { id: engineerId },
+      select: { gasSafeVerifiedAt: true, pausedAt: true, bannedAt: true },
+    }),
+    prisma.engineer.findUnique({ where: { id: actor.actorId }, select: { gasSafeVerifiedAt: true } }),
+  ]);
+  // The business's standing (paused/banned) plus the person's own badge: a
+  // staff engineer can't send offers until their card is approved.
+  const blockedReason =
+    gateBusiness && gateActor
+      ? offerBlockedReason({ ...gateBusiness, gasSafeVerifiedAt: gateActor.gasSafeVerifiedAt })
+      : "Not signed in.";
+  if (blockedReason) return NextResponse.json({ error: blockedReason }, { status: 403 });
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -78,7 +99,9 @@ export async function POST(req: Request) {
 
   let customer;
   if (b.customerId) {
-    customer = await prisma.customer.findFirst({ where: { id: b.customerId, engineerId } });
+    customer = await prisma.customer.findFirst({
+      where: { id: b.customerId, engineerId, ...(staffId ? { addedById: staffId } : {}) },
+    });
     if (!customer) return NextResponse.json({ error: "Customer not found." }, { status: 404 });
   } else {
     if (!b.firstName || !b.lastName || !b.phone) {
@@ -88,11 +111,21 @@ export async function POST(req: Request) {
     if (!phone) {
       return NextResponse.json({ error: "That doesn't look like a UK mobile number." }, { status: 400 });
     }
+    if (staffId) {
+      const existing = await prisma.customer.findUnique({ where: { engineerId_phone: { engineerId, phone } } });
+      if (existing && existing.addedById !== staffId) {
+        return NextResponse.json(
+          { error: "That customer is already in the business's book — ask the owner to offer them a plan." },
+          { status: 409 },
+        );
+      }
+    }
     customer = await prisma.customer.upsert({
       where: { engineerId_phone: { engineerId, phone } },
       update: { email: b.email || undefined },
       create: {
         engineerId,
+        addedById: staffId,
         firstName: b.firstName,
         lastName: b.lastName,
         phone,
@@ -113,6 +146,7 @@ export async function POST(req: Request) {
   }
 
   const engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
+  const seller = staffId ? await prisma.engineer.findUniqueOrThrow({ where: { id: staffId } }) : engineer;
   // tierId here is a suggestion, not a commitment — /api/signup/[token]/choose
   // overwrites it (and freezes the real agreedTier snapshot) the moment the
   // customer actually picks, same plan or otherwise.
@@ -120,6 +154,7 @@ export async function POST(req: Request) {
     data: {
       ref: await newPlanRef(),
       engineerId,
+      soldById: staffId,
       customerId: customer.id,
       tierId: tier.id,
       signupToken: newToken(),
@@ -139,7 +174,7 @@ export async function POST(req: Request) {
   // variables filled: "Hi {first name} — {engineer first name} from
   // {trading name}. My {plan name} plan is £{X} a month: {benefits, lower
   // case, comma-run}. Sign up here — takes a minute: {personal link}"
-  const messageBody = `Hi ${customer.firstName} — ${engineer.firstName ?? brand} from ${brand}. My ${tier.name} plan is £${pricePounds} a month: ${benefits}. Sign up here — takes a minute: ${link}`;
+  const messageBody = `Hi ${customer.firstName} — ${seller.firstName ?? brand} from ${brand}. My ${tier.name} plan is £${pricePounds} a month: ${benefits}. Sign up here — takes a minute: ${link}`;
 
   // Signup link is customer-requested at the end of the job → transactional.
   // On the WhatsApp path the engineer shares it himself, so skip our text.
@@ -181,6 +216,7 @@ export async function POST(req: Request) {
   });
   await track("offer_sent", { type: "ENGINEER", id: engineerId }, {
     planId: plan.id,
+    soldById: staffId,
     customerId: customer.id,
     channel: b.channel,
   });

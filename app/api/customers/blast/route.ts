@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { offerBlockedReason } from "@/lib/verification-state";
 import { brandName } from "@/lib/engineer";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
@@ -54,6 +55,13 @@ const Body = z.object({ confirmOwn: z.literal(true) });
 export async function POST(req: Request) {
   const engineerId = await getEngineerId();
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+
+  const gateEngineer = await prisma.engineer.findUnique({
+    where: { id: engineerId },
+    select: { gasSafeVerifiedAt: true, pausedAt: true, bannedAt: true },
+  });
+  const blockedReason = gateEngineer ? offerBlockedReason(gateEngineer) : "Not signed in.";
+  if (blockedReason) return NextResponse.json({ error: blockedReason }, { status: 403 });
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

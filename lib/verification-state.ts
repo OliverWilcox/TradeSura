@@ -73,7 +73,7 @@ export function gasSafeStatus(
       text: "We couldn't verify your Gas Safe number — check it and try again →",
     };
   }
-  return { tone: "amber", text: "Gas Safe check in progress — we'll text you within 24 hours." };
+  return { tone: "amber", text: "Gas Safe check in progress — we'll let you know within 24 hours." };
 }
 
 export function paymentsStatus(
@@ -109,7 +109,7 @@ export function standingCopy(
         text: "We couldn't verify your Gas Safe number — check it and try again →",
       };
     case "CHECK_PENDING":
-      return { state, tone: "amber", text: "Gas Safe check in progress — we'll text you within 24 hours." };
+      return { state, tone: "amber", text: "Gas Safe check in progress — we'll let you know within 24 hours." };
     case "ACTIVE":
       return { state, tone: "quiet", text: "Gas Safe verified — account active." };
     default: {
@@ -124,4 +124,20 @@ export function standingCopy(
       throw new Error(`Unhandled StandingState: ${_exhaustive}`);
     }
   }
+}
+
+// Build Guide v2 Part 6.5 LAW — the two-leg gate: anything customer-facing
+// needs a live plan AND the badge. The app greys these routes out; this is
+// the server's own check so an old build or a direct call can't skip it.
+// Returns the refusal message, or null when the engineer may send.
+export function offerBlockedReason(e: {
+  gasSafeVerifiedAt: Date | null;
+  pausedAt: Date | null;
+  bannedAt: Date | null;
+}): string | null {
+  if (e.bannedAt || e.pausedAt) return "Your account is paused — check Account for what to do.";
+  if (!e.gasSafeVerifiedAt) {
+    return "Offers unlock once your Gas Safe check is done — usually within 24 hours.";
+  }
+  return null;
 }

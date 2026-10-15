@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { View, Text, Pressable, Modal } from "react-native";
+import { useEffect, useState, type ReactNode } from "react";
+import { View, Text, Pressable, Modal, Animated } from "react-native";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/lib/auth-context";
@@ -368,5 +368,39 @@ export function Button({
         children
       )}
     </Pressable>
+  );
+}
+
+// Build Guide v2 Part 17.1 — the moment between tapping "Set up payments"
+// and Stripe's page appearing: "Opening Stripe" + animated blue dots.
+export function OpeningStripe() {
+  const [dots] = useState(() => [0, 1, 2].map(() => new Animated.Value(0.3)));
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.stagger(
+        160,
+        dots.map((d) =>
+          Animated.sequence([
+            Animated.timing(d, { toValue: 1, duration: 300, useNativeDriver: true }),
+            Animated.timing(d, { toValue: 0.3, duration: 300, useNativeDriver: true }),
+          ]),
+        ),
+      ),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [dots]);
+  return (
+    <View className="mt-2 flex-row items-center justify-center gap-2" accessibilityLabel="Opening Stripe">
+      <Text className="font-sans text-sm text-muted">Opening Stripe</Text>
+      <View className="flex-row gap-1">
+        {dots.map((d, i) => (
+          <Animated.View
+            key={i}
+            style={{ opacity: d, width: 6, height: 6, borderRadius: 3, backgroundColor: "#5FA3F0" }}
+          />
+        ))}
+      </View>
+    </View>
   );
 }

@@ -97,6 +97,15 @@ export function isMissingDestination(err: unknown): boolean {
   );
 }
 
+// A saved connected account this key can't see: it was created under another
+// platform (an earlier test sandbox). Stripe answers with a permission error.
+export function belongsToAnotherPlatform(err: unknown): boolean {
+  return (
+    err instanceof Stripe.errors.StripePermissionError ||
+    (err instanceof Stripe.errors.StripeError && err.code === "resource_missing")
+  );
+}
+
 // Creates the connected account on first call, returns the existing id after.
 export async function getOrCreateConnectAccount(engineer: {
   id: string;
@@ -301,6 +310,27 @@ export async function cancelStripeSubscription(subscriptionId: string) {
   return stripe.subscriptions.cancel(subscriptionId);
 }
 
+// Ruling 3 — move an existing subscription to a new monthly price from its
+// next invoice. No proration: the notice period already ran, and the
+// customer pays the new amount from the next collection.
+export async function updateSubscriptionPrice(subscriptionId: string, newPricePence: number) {
+  const stripe = getStripe();
+  const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  const item = sub.items.data[0];
+  if (!item) throw new Error(`Subscription ${subscriptionId} has no items`);
+  const productId = typeof item.price.product === "string" ? item.price.product : item.price.product.id;
+  const price = await stripe.prices.create({
+    currency: "gbp",
+    unit_amount: newPricePence,
+    recurring: { interval: "month" },
+    product: productId,
+  });
+  return stripe.subscriptions.update(subscriptionId, {
+    items: [{ id: item.id, price: price.id }],
+    proration_behavior: "none",
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Payouts (E11) — read the connected account's real Stripe balance + payouts
 // ---------------------------------------------------------------------------
@@ -356,16 +386,26 @@ export async function getPayoutSummary(accountId: string): Promise<PayoutSummary
   };
 }
 
-// Platform-funded transfer to a connected account (E10 referral bounty).
-export async function payReferralBounty(accountId: string, amountPence: number, ref: string) {
+// Platform-funded transfer to a connected account — the referrer's share of
+// TradeSura's fee on one invoice (Build Review 2, ruling 4). Keyed on the
+// invoice so a replayed webhook can't pay twice.
+export async function payReferralCommission(
+  accountId: string,
+  amountPence: number,
+  ref: string,
+  invoiceId: string,
+) {
   const stripe = getStripe();
-  return stripe.transfers.create({
-    amount: amountPence,
-    currency: "gbp",
-    destination: accountId,
-    description: `TradeSura referral bounty (${ref})`,
-    metadata: { kind: "referral_bounty", ref },
-  });
+  return stripe.transfers.create(
+    {
+      amount: amountPence,
+      currency: "gbp",
+      destination: accountId,
+      description: `TradeSura referral commission (${ref})`,
+      metadata: { kind: "referral_commission", ref, invoiceId },
+    },
+    { idempotencyKey: `referral-commission-${invoiceId}` },
+  );
 }
 
 // ---------------------------------------------------------------------------

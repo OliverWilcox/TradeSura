@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { View, Text, ScrollView, RefreshControl, Pressable } from "react-native";
-import { useFocusEffect, router } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, Tick, Button } from "@/components/ui";
@@ -68,6 +68,7 @@ function PlansSkeleton() {
 // directly — there is no empty hub screen. Once a first plan exists (draft
 // or live), this is the room every door lands on, forever after.
 export default function PlansHub() {
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const [tiers, setTiers] = useState<Tier[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -78,7 +79,7 @@ export default function PlansHub() {
     try {
       const data = await api<Tier[]>("/api/tiers");
       if (data.length === 0) {
-        router.replace("/plan-wizard");
+        router.replace(from ? { pathname: "/plan-wizard", params: { from } } : "/plan-wizard");
         return;
       }
       setTiers(data);
@@ -86,7 +87,7 @@ export default function PlansHub() {
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't load your plans.");
     }
-  }, []);
+  }, [from]);
 
   useFocusEffect(
     useCallback(() => {

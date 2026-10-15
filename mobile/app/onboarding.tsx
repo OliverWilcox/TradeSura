@@ -6,7 +6,7 @@ import { router, useFocusEffect } from "expo-router";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
-import { AppHeader, Card, Micro, Button, Tick } from "@/components/ui";
+import { AppHeader, Card, Micro, Button, Tick, OpeningStripe } from "@/components/ui";
 
 // E2 — post-signup onboarding wizard. Four steps, sequenced for activation:
 // get paid → first plan → import book → founding pack. Only step 1 gates the
@@ -147,14 +147,14 @@ export default function Onboarding() {
           title="Get paid"
           body={
             paid
-              ? "Payouts ready — you'll be paid every week."
+              ? "Payouts ready — you'll be paid every Friday."
               : "Stripe handles your details — TradeSura never sees your bank login."
           }
           state={stepState(paid, !paid)}
           cta={me?.stripeDetailsSubmitted ? "Finish payment setup" : "Set up payments"}
           onPress={connectStripe}
         >
-          {busy && <Text className="mt-2 font-sans text-xs text-muted">Opening…</Text>}
+          {busy && <OpeningStripe />}
           {/* Build Guide v2 review 17 Sept, B3 — "catch it gracefully with a
               retry prompt rather than a bare failure." getConnectLinkWithRetry
               already retries once silently before this ever shows; if it
@@ -184,7 +184,7 @@ export default function Onboarding() {
           // done. "Done" still means hasPlan, unchanged.
           state={stepState(hasPlan, !hasPlan)}
           cta="Build my plan"
-          onPress={() => router.push("/plans")}
+          onPress={() => router.push({ pathname: "/plans", params: { from: "setup" } })}
         />
 
         <StepCard
@@ -192,8 +192,8 @@ export default function Onboarding() {
           title="Your customers"
           body={
             hasBook
-              ? `${me?.customerCount} customer${me?.customerCount === 1 ? "" : "s"} imported — each one is a potential £144/yr.`
-              : "Import your book — every contact is a potential £144/yr."
+              ? `${me?.customerCount} customer${me?.customerCount === 1 ? "" : "s"} imported — each one is a potential £115/yr to you.`
+              : "Import your book — every contact is a potential £115/yr to you."
           }
           state={stepState(hasBook, paid && hasPlan && !hasBook)}
           cta="Import customers"
@@ -202,10 +202,12 @@ export default function Onboarding() {
 
         <StepCard
           n={4}
-          title="Your founding pack"
+          title="Your member pack"
           body={
             packDone
-              ? "On its way — free QR cards and a van sticker."
+              ? me?.gasSafeVerifiedAt
+                ? "On its way — free QR cards and a van sticker."
+                : "Address saved — your pack posts as soon as your badge goes live."
               : "Free cards & van sticker with your personal QR code — hand one over at every job."
           }
           state={stepState(packDone, paid && hasPlan && hasBook && !packDone)}
@@ -255,7 +257,7 @@ export default function Onboarding() {
           {paid ? "Go to my dashboard" : "Skip setup for now"}
         </Button>
         <Text className="pt-1 text-center font-mono text-[10px] text-faint">
-          Paid out to your bank every week · Powered by Stripe
+          Paid out to your bank every Friday · Powered by Stripe
         </Text>
       </ScrollView>
     </View>

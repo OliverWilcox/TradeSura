@@ -31,11 +31,13 @@ export function PublicSignup({
   tiers,
   engineerName,
   channel = "web",
+  soldById,
 }: {
   slug: string;
   tiers: Tier[];
   engineerName: string;
   channel?: string;
+  soldById?: string;
 }) {
   const [selectedId, setSelectedId] = useState(
     tiers.find((t) => t.isRecommended)?.id ?? tiers[0]?.id,
@@ -69,12 +71,13 @@ export function PublicSignup({
         phone: phone.trim(),
         email: email.trim(),
         channel,
+        soldById,
       }),
     });
     const data = await res.json();
     setBusy(false);
     if (!res.ok) {
-      setError(data.error ?? "Something went wrong — try again.");
+      setError(data.error ?? "That didn't go through. Please try again — if it keeps happening, contact your engineer.");
       return;
     }
     setStarted(data);

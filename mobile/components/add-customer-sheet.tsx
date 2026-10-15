@@ -56,6 +56,13 @@ export function AddCustomerSheet({
 
   function needsPayments() {
     onClose();
+    if (me?.role === "staff") {
+      Alert.alert(
+        "Payments aren't set up yet",
+        "Customers can't join until the business owner finishes payment setup — ask them to do it from their app.",
+      );
+      return;
+    }
     Alert.alert(
       "Finish your payment setup first",
       "Customers pay you by Direct Debit through Stripe — until your payment setup is done, they can't join a plan.",
@@ -112,9 +119,11 @@ export function AddCustomerSheet({
             onPress={() => go("/add-customer")}
           />
 
-          <Pressable onPress={() => go("/plans")} className="items-center pt-3">
-            <Text className="font-semibold text-xs text-flame-deep">Manage plans</Text>
-          </Pressable>
+          {me?.role !== "staff" && (
+            <Pressable onPress={() => go("/plans")} className="items-center pt-3">
+              <Text className="font-semibold text-xs text-flame-deep">Manage plans</Text>
+            </Pressable>
+          )}
         </Pressable>
       </Pressable>
     </Modal>

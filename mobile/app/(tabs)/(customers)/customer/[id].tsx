@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, Alert } from "react-native";
+import { View, Text, ScrollView, Alert, Pressable } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
@@ -20,13 +20,14 @@ type Detail = {
   plan: {
     id: string;
     tierName: string;
-    priceMonthlyPence: number;
+    priceMonthlyPence: number | null;
     benefitLines: string[];
     status: string;
     mandateStatus: string | null;
     activatedAt: string | null;
   } | null;
   canTextManageLink: boolean;
+  viewerIsStaff?: boolean;
   timeline: { at: string; icon: string; text: string }[];
 };
 
@@ -38,6 +39,15 @@ const SOURCE_LABEL: Record<string, string> = {
   contacts: "phone contacts",
 };
 
+// Build Review 2, ruling 5 — engineers can end a plan, with a reason.
+const END_REASONS = [
+  "Customer asked me to",
+  "Moving house",
+  "Boiler replaced or removed",
+  "Payments keep failing",
+  "Other",
+];
+
 function d(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
@@ -48,6 +58,9 @@ export default function CustomerDetail() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [texted, setTexted] = useState(false);
+  const [ending, setEnding] = useState(false);
+  const [endReason, setEndReason] = useState<string | null>(null);
+  const [endError, setEndError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -78,9 +91,8 @@ export default function CustomerDetail() {
     }
   }
 
-  // Part 10 LAW — "There is no engineer-side cancel button. Cancellation
-  // lives only behind the customer's manage link... The engineer's tool is
-  // 'Text the manage link'." This never touches the plan itself.
+  // Part 10 — "Text the manage link" so the customer can manage or cancel
+  // themselves. This never touches the plan itself; ending it is endPlan.
   async function textManageLink() {
     setBusy(true);
     setTexted(false);
@@ -89,6 +101,27 @@ export default function CustomerDetail() {
       setTexted(true);
     } catch (e) {
       Alert.alert("Couldn't send", e instanceof ApiError ? e.message : "Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Inline confirm rather than Alert: two deliberate taps (reason, then
+  // confirm), and it works the same on web.
+  async function endPlan() {
+    if (!endReason) return;
+    setBusy(true);
+    setEndError(null);
+    try {
+      await api(`/api/customers/${id}/end-plan`, {
+        method: "POST",
+        body: JSON.stringify({ reason: endReason }),
+      });
+      setEnding(false);
+      setEndReason(null);
+      await load();
+    } catch (e) {
+      setEndError(e instanceof ApiError ? e.message : "Couldn't end the plan — try again.");
     } finally {
       setBusy(false);
     }
@@ -183,10 +216,12 @@ export default function CustomerDetail() {
             <Micro className="mb-1">Their plan — as signed</Micro>
             <View className="flex-row items-baseline justify-between">
               <Text className="font-bold text-base text-ink">{c.plan.tierName}</Text>
-              <Text className="font-mono font-extrabold text-ok">
-                £{(c.plan.priceMonthlyPence / 100).toFixed(0)}
-                <Text className="text-xs font-bold text-muted">/month</Text>
-              </Text>
+              {c.plan.priceMonthlyPence !== null && (
+                <Text className="font-mono font-extrabold text-ok">
+                  £{(c.plan.priceMonthlyPence / 100).toFixed(0)}
+                  <Text className="text-xs font-bold text-muted">/month</Text>
+                </Text>
+              )}
             </View>
             {c.plan.status === "PAUSED" && (
               <Text className="mt-0.5 font-sans text-xs text-warn">Direct Debit paused</Text>
@@ -266,7 +301,52 @@ export default function CustomerDetail() {
           <Text className="text-center font-semibold text-xs text-ok">Sent.</Text>
         )}
 
-        {!c.plan && (
+        {c.plan && !ending && !c.viewerIsStaff && (
+          <Button variant="dangerghost" onPress={() => setEnding(true)} disabled={busy}>
+            End this plan
+          </Button>
+        )}
+        {c.plan && ending && (
+          <Card>
+            <Micro className="mb-1.5">Why are you ending it?</Micro>
+            <View className="flex-row flex-wrap gap-1.5">
+              {END_REASONS.map((r) => (
+                <Pressable
+                  key={r}
+                  onPress={() => setEndReason(r)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: endReason === r }}
+                  className={`rounded-full border px-3 py-1.5 ${endReason === r ? "border-flame bg-flame-tint" : "border-line bg-panel"}`}
+                >
+                  <Text className={`font-sans text-xs ${endReason === r ? "text-flame" : "text-ink"}`}>{r}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text className="mt-2.5 font-sans text-xs text-muted">
+              Their Direct Debit stops straight away and they get an email to confirm. This can&apos;t be
+              undone — they&apos;d need to sign up again.
+            </Text>
+            {endError && <Text className="mt-2 font-sans text-xs text-danger">{endError}</Text>}
+            <View className="mt-3 gap-2">
+              <Button variant="dangerghost" onPress={endPlan} disabled={busy || !endReason}>
+                {busy ? "Ending…" : "End plan and stop payments"}
+              </Button>
+              <Button
+                variant="ghost"
+                onPress={() => {
+                  setEnding(false);
+                  setEndReason(null);
+                  setEndError(null);
+                }}
+                disabled={busy}
+              >
+                Keep the plan
+              </Button>
+            </View>
+          </Card>
+        )}
+
+        {!c.plan && !c.viewerIsStaff && (
           <Button variant="dangerghost" onPress={confirmRemove} disabled={busy}>
             Remove customer
           </Button>

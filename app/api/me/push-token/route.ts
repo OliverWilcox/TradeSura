@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getEngineerId } from "@/lib/auth";
+import { getActor } from "@/lib/auth";
 import { isExpoPushToken } from "@/lib/push";
 
 const Body = z.object({ token: z.string().min(1).max(200) });
@@ -14,7 +14,8 @@ const Body = z.object({ token: z.string().min(1).max(200) });
 // per-engineer setting here works (one trading name, one logo, ...) and
 // keeps this a single nullable column rather than a table.
 export async function POST(req: Request) {
-  const engineerId = await getEngineerId();
+  // The token belongs to the person on this device — owner or staff.
+  const engineerId = (await getActor())?.actorId ?? null;
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
@@ -37,7 +38,8 @@ export async function POST(req: Request) {
 // this one signs out of it — mirrors clearStripeSkipped's sign-out cleanup
 // in mobile/lib/auth-context.tsx.
 export async function DELETE() {
-  const engineerId = await getEngineerId();
+  // The token belongs to the person on this device — owner or staff.
+  const engineerId = (await getActor())?.actorId ?? null;
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   await prisma.engineer.update({

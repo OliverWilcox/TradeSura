@@ -44,8 +44,13 @@ function OfferSkeleton() {
 type Customer = { id: string; firstName: string; lastName: string; phone: string };
 type Tier = { id: string; name: string; priceMonthlyPence: number; lines: string[] };
 
-const SCRIPT =
-  "“I put all my customers on a care plan now — £12 a month and your annual service is included. I’ll text you the link, have a look tonight.”";
+// Built from the selected plan: its own price, and the service line only when
+// the plan includes it (Build Review 2, ruling 2 — service is optional).
+function offerScript(tier: Tier | null): string {
+  const price = tier ? `£${(tier.priceMonthlyPence / 100).toFixed(2).replace(/\.00$/, "")} a month` : "a small monthly fee";
+  const service = !tier || tier.lines.some((l) => /annual boiler service/i.test(l));
+  return `“I put all my customers on a care plan now — ${price}${service ? " and your annual service is included" : " and you’re first in my diary"}. I’ll text you the link, have a look tonight.”`;
+}
 
 // Thumb-sized, size-only text class (see components/address-lookup.tsx).
 const inputCls = "min-h-[48px] rounded-[10px] border bg-paper px-3.5 font-sans text-[16px] text-ink";
@@ -192,7 +197,7 @@ export default function OfferStart() {
                 <Text className="font-sans text-xs text-warn">{scriptOpen ? "Hide" : "Show"}</Text>
               </Pressable>
               {scriptOpen && (
-                <Text className="mt-1.5 font-sans text-[13px] text-ink">{SCRIPT}</Text>
+                <Text className="mt-1.5 font-sans text-[13px] text-ink">{offerScript(selectedTier)}</Text>
               )}
             </Card>
           )}
@@ -222,7 +227,7 @@ export default function OfferStart() {
               </Text>
               <Text className="mt-1 text-[14px] leading-5 text-muted">
                 We&apos;re checking your registration — usually within 24 hours, and we&apos;ll
-                text you when it&apos;s done. Your plan is ready to go the moment it is.
+                let you know when it&apos;s done. Your plan is ready to go the moment it is.
               </Text>
               <Button variant="ghost" className="mt-4" onPress={() => router.push("/more")}>
                 Check my status
@@ -232,13 +237,22 @@ export default function OfferStart() {
             <Card>
               <Micro>One more step</Micro>
               <Text className="mt-1.5 text-[19px] font-bold text-ink">Finish your payment setup</Text>
-              <Text className="mt-1 text-[14px] leading-5 text-muted">
-                Customers pay you by Direct Debit through Stripe. Until your payment setup is
-                done, they can&apos;t join — so finish it before sending an offer.
-              </Text>
-              <Button className="mt-4" onPress={() => router.push("/onboarding")}>
-                Set up payments
-              </Button>
+              {me?.role === "staff" ? (
+                <Text className="mt-1 text-[14px] leading-5 text-muted">
+                  Customers can&apos;t join until the business owner finishes payment setup — ask them to
+                  do it from their app.
+                </Text>
+              ) : (
+                <>
+                  <Text className="mt-1 text-[14px] leading-5 text-muted">
+                    Customers pay you by Direct Debit through Stripe. Until your payment setup is
+                    done, they can&apos;t join — so finish it before sending an offer.
+                  </Text>
+                  <Button className="mt-4" onPress={() => router.push("/onboarding")}>
+                    Set up payments
+                  </Button>
+                </>
+              )}
             </Card>
           ) : (
             <Card>

@@ -14,10 +14,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tradesura.engineerx",
-      "buildNumber": "17",
+      "buildNumber": "22",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "com.tradesura.engineer",
@@ -42,6 +43,13 @@
       "expo-status-bar",
       "expo-secure-store",
       "expo-web-browser",
+      "expo-apple-authentication",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "TradeSura uses Face ID to keep your account locked when you're not using it."
+        }
+      ],
       "expo-font",
       [
         "expo-contacts",
@@ -51,9 +59,15 @@
       ],
       "expo-sharing",
       [
+        "expo-notifications",
+        {
+          "color": "#0B1A2E"
+        }
+      ],
+      [
         "expo-image-picker",
         {
-          "cameraPermission": "TradeSura uses your camera to photograph your Gas Safe ID card for verification.",
+          "cameraPermission": "To photograph your Gas Safe ID card for verification.",
           "photosPermission": "TradeSura uses your photos to upload your logo and Gas Safe ID card."
         }
       ],

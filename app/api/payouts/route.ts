@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
-import { activeMonthlyPence } from "@/lib/plans";
+import { activeMonthlyPence, collectionsSince, payoutWeekStart } from "@/lib/plans";
 import { appFeePence } from "@/lib/clauses";
 import { getPayoutSummary, stripeConfigured, type PayoutSummary } from "@/lib/stripe";
 import { standingCopy, paymentsStatus } from "@/lib/verification-state";
@@ -23,14 +23,9 @@ export async function GET() {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const [confirmed, failedEvents, referralBonuses] = await Promise.all([
-    prisma.event.count({
-      where: {
-        name: "payment_confirmed",
-        ts: { gte: monthStart },
-        meta: { path: ["engineerId"], equals: engineerId },
-      },
-    }),
+  const [month, week, failedEvents, referralBonuses] = await Promise.all([
+    collectionsSince(engineerId, monthStart),
+    collectionsSince(engineerId, payoutWeekStart()),
     prisma.event.findMany({
       where: {
         name: "payment_failed",
@@ -39,21 +34,14 @@ export async function GET() {
       },
       orderBy: { ts: "desc" },
     }),
-    prisma.event.findMany({
-      where: {
-        name: "referral_activated",
-        ts: { gte: monthStart },
-        meta: { path: ["referrerId"], equals: engineerId },
-      },
+    prisma.referralEarning.aggregate({
+      where: { referrerId: engineerId, createdAt: { gte: monthStart } },
+      _sum: { amountPence: true },
     }),
   ]);
 
-  const referralBonusPence = referralBonuses.reduce(
-    (sum, e) => sum + ((e.meta as { bountyPence?: number } | null)?.bountyPence ?? 5000),
-    0,
-  );
-  // ~32p per Bacs collection (1% + 20p capped £4), estimated on confirmed count.
-  const processingPence = confirmed * 32;
+  // Ruling 4 — this month's affiliate commission from referred engineers.
+  const referralBonusPence = referralBonuses._sum.amountPence ?? 0;
 
   const failedPlanIds = [
     ...new Set(
@@ -82,9 +70,13 @@ export async function GET() {
     totalPence,
     count,
     fee,
-    confirmed,
+    // Part 12 transparency card: this month's cleared collections, each
+    // with the exact deduction Stripe took — reconciles to the penny.
+    month,
+    // Part 6.3 — NEXT PAYOUT before Stripe reports one: this payout week's
+    // cleared collections × 80% less processing, never the monthly total.
+    week,
     referralBonusPence,
-    processingPence,
     bankLast4: stripe?.bankLast4 ?? null,
     stripe,
     stripeError,

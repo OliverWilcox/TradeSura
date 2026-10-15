@@ -4,11 +4,12 @@ import { useFocusEffect, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as ImagePicker from "expo-image-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { api, ApiError } from "@/lib/api";
+import { api, apiUrl, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
-import { AppHeader, Avatar, Card, Pill, RowLine, Button, Chevron } from "@/components/ui";
+import { AppHeader, Avatar, Card, Pill, RowLine, Button, Chevron, OpeningStripe } from "@/components/ui";
 import { Skeleton, TextBone, RowBone, LoadingImage } from "@/components/skeleton";
+import { StaffAccount } from "@/components/staff-account";
 
 type MoreData = {
   totalPence: number;
@@ -52,7 +53,14 @@ const BUSINESS_TYPE_LABELS: Record<string, string> = {
 // More hub — settings, Stripe status, payouts summary, sign out.
 // The full Payouts & Collections screen (Screen 12) is P1 and stays web-only;
 // this is just the summary CLAUDE.md scoped into the hub.
+// Build Review 2, section 8 — staff get a cut-down Account: no business
+// settings, payments, Team or Refer.
 export default function More() {
+  const { me } = useAuth();
+  return me?.role === "staff" ? <StaffAccount /> : <OwnerAccount />;
+}
+
+function OwnerAccount() {
   const { me, refreshMe, signOut } = useAuth();
   const [data, setData] = useState<MoreData | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -269,9 +277,11 @@ export default function More() {
                   <StatusLine status={settings.payments} />
                 ) : (
                   <Pressable onPress={connectStripe} disabled={stripeBusy}>
-                    <Text className="font-sans text-sm text-warn">
-                      {stripeBusy ? "Opening…" : settings.payments.text}
-                    </Text>
+                    {stripeBusy ? (
+                      <OpeningStripe />
+                    ) : (
+                      <Text className="font-sans text-sm text-warn">{settings.payments.text}</Text>
+                    )}
                   </Pressable>
                 ))}
               {stripeError && <Text className="font-sans text-xs text-danger">{stripeError}</Text>}
@@ -426,22 +436,21 @@ export default function More() {
         )}
 
         {/* Build Guide v2 Part 13 — four rows, each with a chevron: My
-            plans / Invite an engineer · £50 / WhatsApp support / Terms &
+            plans / Invite an engineer / WhatsApp support / Terms &
             privacy. Cut: "Payouts & collections" (duplicates the tab), "How
             to sell more plans" (moves into How it works — one home),
-            "Trades & TradePacks" (hidden for October). "Messages & tickets"
-            is the exception Part 13 allows for: it's the engineer's only
-            visibility into the gas-emergency interlock firing (see
-            messages.tsx) — load-bearing, so it stays. */}
+            "Trades & TradePacks" and "Messages & tickets" (both hidden for
+            October, Build Review 2). The gas-emergency interlock is still
+            surfaced: Home's Today list links to messages when it fires. */}
         <Card>
           <Pressable onPress={() => router.push("/plans")}>
             <RowLine left="My plans" right={<Chevron />} />
           </Pressable>
-          <Pressable onPress={() => router.push("/messages")}>
-            <RowLine left="Messages & tickets" right={<Chevron />} />
+          <Pressable onPress={() => router.push("/team")}>
+            <RowLine left="Team" right={<Chevron />} />
           </Pressable>
           <Pressable onPress={() => router.push("/referral")}>
-            <RowLine left="Invite an engineer · £50" right={<Chevron />} />
+            <RowLine left="Invite an engineer · earn 25% of our fee" right={<Chevron />} />
           </Pressable>
           <Pressable
             onPress={() =>
@@ -453,7 +462,7 @@ export default function More() {
             <RowLine left="WhatsApp support" right={<Chevron />} />
           </Pressable>
           <Pressable
-            onPress={() => router.push({ pathname: "/coming-soon", params: { title: "Terms & privacy" } })}
+            onPress={() => WebBrowser.openBrowserAsync(apiUrl("/terms")).catch(() => {})}
           >
             <RowLine left="Terms & privacy" right={<Chevron />} />
           </Pressable>
@@ -463,6 +472,10 @@ export default function More() {
         <Button variant="ghost" onPress={signOut}>
           Sign out
         </Button>
+        {/* Section 10 — App Store 5.1.1 needs in-app deletion. */}
+        <Pressable onPress={() => router.push("/delete-account")} className="items-center py-2">
+          <Text className="font-sans text-xs text-muted">Delete my account</Text>
+        </Pressable>
       </ScrollView>
     </View>
   );

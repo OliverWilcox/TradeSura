@@ -1,10 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, TextInput, ScrollView, Pressable, Alert } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { api, ApiError } from "@/lib/api";
-import { Card, Micro, Pill, Button } from "@/components/ui";
+import { Card, Micro, Button } from "@/components/ui";
 import { Icon } from "@/components/icon";
 import { useAuth } from "@/lib/auth-context";
 import { CustomerPlanCard } from "@/components/plan-card";
@@ -41,9 +41,14 @@ const CATEGORY_ORDER = [
   "Discounts",
   "Landlord pack",
 ] as const;
-const PRICE_MIN_PENCE = 800;
-const PRICE_MAX_PENCE = 2500;
+// Build Review 2, ruling 1 — £10 minimum, no business maximum (the max is a
+// typo guard, mirrored from ../../../lib/clauses.ts).
+const PRICE_MIN_PENCE = 1000;
+const PRICE_MAX_PENCE = 100000;
 const PRICE_STEP_PENCE = 100; // Part 7.1/8: £1 steps.
+// Ruling 2 — pre-ticked in a new plan but removable. Mirrors lib/clauses.ts.
+const DEFAULT_ON_CODES = ["ANNUAL_SERVICE"];
+const SUGGESTED_BASE_PENCE = 700;
 const FEE_RATE = 0.2;
 const NAME_MAX = 28;
 
@@ -71,10 +76,14 @@ type Step = 1 | 2 | 3 | 4;
 
 export default function PlanWizard() {
   const { refreshMe } = useAuth();
-  const { tierId, editStep } = useLocalSearchParams<{
+  const { tierId, editStep, from } = useLocalSearchParams<{
     tierId?: string;
     editStep?: string;
+    from?: string;
   }>();
+  // Part 5/8 — "Setup's Build my plan opens this same flow with a 'Back to
+  // setup' bar. One builder, every door."
+  const fromSetup = from === "setup";
   const isEdit = Boolean(tierId && editStep);
   const singleStep = (Number(editStep) as Step) || 1;
 
@@ -98,6 +107,16 @@ export default function PlanWizard() {
   const [busy, setBusy] = useState(false);
   const [liveUrl, setLiveUrl] = useState<string | null>(null);
 
+  // Part 8 Step 3 — the blocklist runs live as they type, and Next stays
+  // disabled while it's firing (Part 16), rather than only on tap.
+  useEffect(() => {
+    if (step !== 3 || name.trim().length < 2) return;
+    const t = setTimeout(() => {
+      checkName(name);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [name, step]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
@@ -111,12 +130,17 @@ export default function PlanWizard() {
         setTemplates(data.templates);
         setName(data.tier.name);
         setPricePence(data.tier.priceMonthlyPence);
-        setSelected(new Set(data.tier.clauseIds));
+        // The tier stores clause ids; the picker works in codes. Without this
+        // mapping every edit saved an empty selection and stripped the plan.
+        const ids = new Set(data.tier.clauseIds);
+        setSelected(new Set(data.templates.filter((t) => ids.has(t.id)).map((t) => t.code)));
         setActivePlanCount(data.activePlanCount);
       } else {
         const data = await api<Template[]>("/api/tiers/templates");
         setTemplates(data);
-        setSelected(new Set(data.filter((t) => t.kind === "CORE").map((t) => t.code)));
+        setSelected(
+          new Set(data.filter((t) => t.kind === "CORE" || DEFAULT_ON_CODES.includes(t.code)).map((t) => t.code)),
+        );
       }
     } catch (e) {
       setLoadError(e instanceof ApiError ? e.message : "Couldn't load the plan builder.");
@@ -142,8 +166,20 @@ export default function PlanWizard() {
 
   function stepPrice(delta: number) {
     setPricePence((p) => Math.min(PRICE_MAX_PENCE, Math.max(PRICE_MIN_PENCE, p + delta)));
+    setPriceText(null);
     setDirty(true);
   }
+
+  // Typed price, kept as text while editing so "1" on the way to "18" isn't
+  // snapped up to the minimum mid-keystroke.
+  const [priceText, setPriceText] = useState<string | null>(null);
+  function typePrice(v: string) {
+    const digits = v.replace(/[^\d]/g, "").slice(0, 4);
+    setPriceText(digits);
+    if (digits) setPricePence(Math.min(PRICE_MAX_PENCE, Number(digits) * 100));
+    setDirty(true);
+  }
+  const priceTooLow = priceText !== null ? !priceText || Number(priceText) * 100 < PRICE_MIN_PENCE : pricePence < PRICE_MIN_PENCE;
 
   const grouped = useMemo(() => {
     const cats = [...new Set(templates.map((t) => t.category))].sort(
@@ -159,6 +195,23 @@ export default function PlanWizard() {
     [templates, selected],
   );
   const nameSuggestions = useMemo(() => suggestNames(selectedTitles), [selectedTitles]);
+
+  // "+£/mo" amounts build a suggestion only — the engineer can set any price
+  // from £10 up (ruling 1).
+  const suggestedPence = Math.max(
+    PRICE_MIN_PENCE,
+    SUGGESTED_BASE_PENCE +
+      templates.filter((t) => selected.has(t.code)).reduce((a, t) => a + (t.upliftPence ?? 0), 0),
+  );
+
+  // Ruling 2 — no annual service means at least one other option beyond the
+  // required priority line. Mirrors serviceRuleError in lib/clauses.ts.
+  const serviceRuleError =
+    templates.length > 0 &&
+    !selected.has("ANNUAL_SERVICE") &&
+    !templates.some((t) => t.kind !== "CORE" && selected.has(t.code))
+      ? "Without the annual service, tick at least one other option so the plan still includes something."
+      : null;
 
   const fee = Math.round(pricePence * FEE_RATE);
   const keepLine = `You keep £${((pricePence - fee) / 100).toFixed(2)} a month per customer.`;
@@ -234,6 +287,8 @@ export default function PlanWizard() {
 
   async function saveSingleStep() {
     if (!currentId) return;
+    if (step === 1 && serviceRuleError) return;
+    if (step === 2 && priceTooLow) return;
     if (step === 3) {
       const ok = await checkName(name);
       if (!ok) return;
@@ -261,6 +316,8 @@ export default function PlanWizard() {
   }
 
   async function goNext() {
+    if (step === 1 && serviceRuleError) return;
+    if (step === 2 && priceTooLow) return;
     if (step === 3) {
       const ok = await checkName(name);
       if (!ok) return;
@@ -368,6 +425,16 @@ export default function PlanWizard() {
           </Text>
         </View>
       </SafeAreaView>
+      {fromSetup && !isEdit && (
+        <Pressable
+          onPress={() => router.navigate("/onboarding")}
+          className="flex-row items-center gap-1.5 border-b border-line bg-panel px-4 py-2.5"
+          accessibilityRole="button"
+        >
+          <Icon name="back" size={14} color="#5FA3F0" weight="semibold" />
+          <Text className="text-[14px] font-semibold text-flame">Back to setup</Text>
+        </Pressable>
+      )}
 
       <ScrollView className="flex-1" contentContainerClassName="gap-2.5 px-4 pb-8 pt-4">
         {!isEdit && (
@@ -399,14 +466,16 @@ export default function PlanWizard() {
                       key={t.code}
                       onPress={() => toggle(t.code, t.kind)}
                       disabled={locked}
-                      className="flex-row items-center justify-between gap-2 border-b border-line-soft py-2.5 last:border-b-0"
+                      className="flex-row items-start justify-between gap-2 border-b border-line-soft py-2.5 last:border-b-0"
                     >
-                      <View className="shrink flex-row flex-wrap items-center gap-1.5">
-                        <Icon name="check" size={14} color={on ? "#f3f7fb" : "#334866"} weight="bold" />
-                        <Text className={`font-sans text-sm ${on ? "text-ink" : "text-faint"}`}>{t.title}</Text>
-                        {t.highlight && <Pill tone="info">KEEPS THEM</Pill>}
+                      {/* Tick stays inline; long titles wrap beside it, not under it. */}
+                      <View className="flex-1 flex-row items-start gap-1.5">
+                        <View className="pt-[3px]">
+                          <Icon name="check" size={14} color={on ? "#f3f7fb" : "#334866"} weight="bold" />
+                        </View>
+                        <Text className={`flex-1 font-sans text-sm ${on ? "text-ink" : "text-faint"}`}>{t.title}</Text>
                       </View>
-                      <Text className="font-mono text-[11px] text-muted">{upliftLabel(t)}</Text>
+                      <Text className="max-w-[40%] pt-0.5 text-right font-mono text-[11px] text-muted">{upliftLabel(t)}</Text>
                     </Pressable>
                   );
                 })}
@@ -415,6 +484,9 @@ export default function PlanWizard() {
             <Micro className="text-center">
               {selected.size} selected — plans read best with 3 to 6.
             </Micro>
+            {serviceRuleError && (
+              <Text className="px-1 text-center font-sans text-xs text-warn">{serviceRuleError}</Text>
+            )}
           </>
         )}
 
@@ -429,9 +501,18 @@ export default function PlanWizard() {
               >
                 <Text className="text-2xl font-bold text-flame-deep">−</Text>
               </Pressable>
-              <Text className="font-mono text-3xl font-semibold text-ink">
-                £{(pricePence / 100).toFixed(0)}
-              </Text>
+              <View className="flex-row items-center">
+                <Text className="font-mono text-3xl font-semibold text-ink">£</Text>
+                <TextInput
+                  value={priceText ?? (pricePence / 100).toFixed(0)}
+                  onChangeText={typePrice}
+                  onBlur={() => setPriceText(null)}
+                  keyboardType="number-pad"
+                  accessibilityLabel="Monthly price in pounds"
+                  maxLength={4}
+                  className="w-[84px] p-0 text-center font-mono text-3xl font-semibold text-ink"
+                />
+              </View>
               <Pressable
                 onPress={() => stepPrice(PRICE_STEP_PENCE)}
                 className="h-11 w-11 items-center justify-center rounded-xl border-[1.5px] border-flame"
@@ -440,8 +521,28 @@ export default function PlanWizard() {
               </Pressable>
             </View>
             <Text className="text-center font-sans text-xs text-muted">
-              Your plan, your price — most sit between £10 and £15.
+              Your plan, your price — from £10 a month, no upper limit.
             </Text>
+            {priceTooLow && (
+              <Text className="mt-1 text-center font-sans text-xs text-warn">
+                The minimum plan price is £10 a month.
+              </Text>
+            )}
+            {suggestedPence !== pricePence && (
+              <Pressable
+                onPress={() => {
+                  setPricePence(suggestedPence);
+                  setPriceText(null);
+                  setDirty(true);
+                }}
+                className="mt-2 self-center rounded-full border border-line bg-panel px-3 py-1.5"
+                accessibilityRole="button"
+              >
+                <Text className="font-sans text-xs text-flame">
+                  Suggested from your options: £{(suggestedPence / 100).toFixed(0)}/mo — use this
+                </Text>
+              </Pressable>
+            )}
             <View className="mt-3 border-t border-line-strong pt-3">
               <Text className="text-center font-mono text-sm font-semibold text-ok">{keepLine}</Text>
               <Text className="mt-1 text-center font-sans text-[11px] text-faint">
@@ -509,11 +610,17 @@ export default function PlanWizard() {
         {error && <Text className="px-1 font-sans text-sm text-danger">{error}</Text>}
 
         {isEdit ? (
-          <Button onPress={saveSingleStep} disabled={busy}>
+          <Button
+            onPress={saveSingleStep}
+            disabled={busy || (step === 3 && Boolean(blocked)) || (step === 1 && Boolean(serviceRuleError)) || (step === 2 && priceTooLow)}
+          >
             {busy ? "Saving…" : "Save changes"}
           </Button>
         ) : (
-          <Button onPress={goNext} disabled={busy}>
+          <Button
+            onPress={goNext}
+            disabled={busy || (step === 3 && Boolean(blocked)) || (step === 1 && Boolean(serviceRuleError)) || (step === 2 && priceTooLow)}
+          >
             {busy ? "Working…" : step < 4 ? "Next" : "Make this plan live"}
           </Button>
         )}

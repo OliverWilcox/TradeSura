@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { checkEmergency } from "@/lib/compliance/interlock";
 import { sendEmail } from "@/lib/email";
+import { sendPushNotification } from "@/lib/push";
 
 const Body = z.object({
   message: z.string().min(5).max(2000),
@@ -32,6 +33,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       matched: check.matched,
       surface: "portal_report",
     });
+    // The engineer's only other window onto this is the Messages banner —
+    // a safety event is worth interrupting him for.
+    await sendPushNotification(
+      plan.engineerId,
+      "Gas safety alert",
+      `${plan.customer.firstName} ${plan.customer.lastName} reported a possible gas emergency and was told to call 0800 111 999.`,
+      { url: "/messages" },
+    );
     return NextResponse.json({ emergency: true }, { status: 409 });
   }
 
@@ -45,13 +54,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     emergencyAcknowledged: check.emergency ? parsed.data.acknowledged : undefined,
   });
 
+  // The report is already logged above; a mail failure mustn't fail it.
   await sendEmail({
     to: plan.engineer.email,
     subject: `Problem report — ${plan.customer.firstName} ${plan.customer.lastName} (${plan.ref})`,
     html: `<p><b>${plan.customer.firstName} ${plan.customer.lastName}</b> (${plan.customer.phone}) reports:</p>
 <blockquote>${parsed.data.message.replace(/</g, "&lt;")}</blockquote>
 ${check.emergency ? `<p><b>⚠ Emergency wording detected (${check.matched}) — the customer was shown the 0800 111 999 script and acknowledged it.</b></p>` : ""}`,
-  });
+  }).catch((err) => console.error("[report] engineer email failed:", err));
 
   return NextResponse.json({ ok: true });
 }

@@ -4,6 +4,7 @@ import { useFocusEffect, useLocalSearchParams, router } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 import { AppHeader, Card, Pill, Button } from "@/components/ui";
 
@@ -96,7 +97,7 @@ export default function Customers() {
   const { tierId: planFilter, planName } = useLocalSearchParams<{ tierId?: string; planName?: string }>();
   const [customers, setCustomers] = useState<Customer[] | null>(null);
   const [counts, setCounts] = useState<Counts | null>(null);
-  const [segment, setSegment] = useState<Segment>("noplan");
+  const [segment, setSegment] = useState<Segment>("all");
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -104,12 +105,20 @@ export default function Customers() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importConsent, setImportConsent] = useState(false);
+  const [salesByEngineer, setSalesByEngineer] = useState<{ name: string; plans: number }[] | null>(null);
+  const { me } = useAuth();
+  const isStaff = me?.role === "staff";
 
   const load = useCallback(async () => {
     try {
-      const data = await api<{ customers: Customer[]; counts: Counts }>("/api/customers");
+      const data = await api<{
+        customers: Customer[];
+        counts: Counts;
+        salesByEngineer?: { name: string; plans: number }[];
+      }>("/api/customers");
       setCustomers(data.customers);
       setCounts(data.counts);
+      setSalesByEngineer(data.salesByEngineer ?? null);
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't load your customers.");
@@ -283,10 +292,26 @@ export default function Customers() {
 
         {/* Part 10 — "doctrine naming, same verb as route 2" (the offer
             sheet's "Text them the offer"). */}
-        {counts && counts.notOnPlan > 0 && segment === "noplan" && (
+        {!isStaff && counts && counts.notOnPlan > 0 && segment === "noplan" && (
           <Button onPress={() => router.push("/customers/blast")}>
             {`Text the offer to ${counts.notOnPlan} customer${counts.notOnPlan === 1 ? "" : "s"}`}
           </Button>
+        )}
+
+        {/* Section 8 — sales by engineer, for paying staff bonuses. Counts of
+            live plans each person signed up; never shown to staff. */}
+        {!isStaff && salesByEngineer && salesByEngineer.length > 0 && (
+          <Card>
+            <Text className="mb-1 font-semibold text-sm text-ink">Sales by engineer</Text>
+            {salesByEngineer.map((r) => (
+              <View key={r.name} className="flex-row justify-between border-b border-line-soft py-2 last:border-b-0">
+                <Text className="font-sans text-sm text-ink">{r.name}</Text>
+                <Text className="font-mono text-sm text-ink">
+                  {r.plans} plan{r.plans === 1 ? "" : "s"}
+                </Text>
+              </View>
+            ))}
+          </Card>
         )}
 
         {/* Part 10 — "Import can't be the only way in." */}
@@ -294,39 +319,47 @@ export default function Customers() {
           <Text className="font-semibold text-sm text-flame-deep">Add a customer by hand</Text>
         </Pressable>
 
-        <Card>
-          <Text className="mb-1 font-semibold text-sm text-ink">Import your book</Text>
-          <Text className="mb-2.5 font-sans text-xs text-muted">
-            CSV, or pick from your phone&apos;s contacts. We de-dupe by phone number
-            automatically.
-          </Text>
-          <Pressable
-            onPress={() => setImportConsent((v) => !v)}
-            className="mb-2.5 flex-row items-start gap-2.5"
-          >
-            <View
-              className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${importConsent ? "border-flame bg-flame" : "border-line"}`}
-            >
-              {importConsent && <Text className="text-[11px] text-white">✓</Text>}
-            </View>
-            <Text className="flex-1 font-sans text-[13px] text-muted">
-              These are my own customers — people I&apos;ve done work for or who&apos;ve asked me
-              to.
-            </Text>
-          </Pressable>
-          <Button variant="ghost" onPress={pickCsv} disabled={importing || !importConsent}>
-            {importing ? "Importing…" : "Import CSV"}
-          </Button>
-          <Button
-            variant="ghost"
-            className="mt-2"
-            onPress={() => router.push("/customers/import-contacts")}
-          >
-            Import from contacts
-          </Button>
-          {importResult && <Text className="mt-2 font-sans text-xs text-ink">{importResult}</Text>}
-          {importError && <Text className="mt-2 font-sans text-xs text-danger">{importError}</Text>}
-        </Card>
+        {/* Section 8 — importing the book is an owner action. */}
+        {!isStaff && (
+          <>
+            <Card>
+              <Text className="mb-1 font-semibold text-sm text-ink">Import your book</Text>
+              <Text className="mb-2.5 font-sans text-xs text-muted">
+                CSV, or pick from your phone&apos;s contacts. We de-dupe by phone number
+                automatically.
+              </Text>
+              <Pressable
+                onPress={() => setImportConsent((v) => !v)}
+                className="mb-2.5 flex-row items-start gap-2.5"
+              >
+                <View
+                  className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${importConsent ? "border-flame bg-flame" : "border-line"}`}
+                >
+                  {importConsent && <Text className="text-[11px] text-white">✓</Text>}
+                </View>
+                <Text className="flex-1 font-sans text-[13px] text-muted">
+                  These are my own customers — people I&apos;ve done work for or who&apos;ve asked me
+                  to.
+                </Text>
+              </Pressable>
+              <Button variant="ghost" onPress={pickCsv} disabled={importing || !importConsent}>
+                {importing ? "Importing…" : "Import CSV"}
+              </Button>
+              {/* Both routes need the box ticked — it's our PECR basis for
+                  contacting them (Build Review 2). */}
+              <Button
+                variant="ghost"
+                className="mt-2"
+                onPress={() => router.push({ pathname: "/customers/import-contacts", params: { consent: "1" } })}
+                disabled={importing || !importConsent}
+              >
+                Import from contacts
+              </Button>
+              {importResult && <Text className="mt-2 font-sans text-xs text-ink">{importResult}</Text>}
+              {importError && <Text className="mt-2 font-sans text-xs text-danger">{importError}</Text>}
+            </Card>
+          </>
+        )}
       </ScrollView>
     </View>
   );

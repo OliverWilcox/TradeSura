@@ -26,20 +26,25 @@ export function checkEmail(v: string): string | null {
     : "That email doesn't look right — check for typos.";
 }
 
+// 1–7 digits — older registrations can be as short as 2, so there's no
+// fixed-length rule; the manual check against the ID photo confirms it.
 export function checkGasSafeNo(v: string): string | null {
   const d = v.replace(/\s/g, "");
   if (!d) return "Enter your Gas Safe registration number.";
-  return /^\d{6,7}$/.test(d) ? null : "Gas Safe numbers are 6 or 7 digits.";
+  if (/\D/.test(d)) return "Use digits only — no letters.";
+  return d.length <= 7 ? null : "Gas Safe numbers are at most 7 digits.";
 }
 
+// 6 or 7 digits get their leading zeros back (1234567 → 01234567).
 export function normaliseCompanyNumber(v: string): string {
-  return v.replace(/\s/g, "").toUpperCase();
+  const n = v.replace(/\s/g, "").toUpperCase();
+  return /^\d{6,7}$/.test(n) ? n.padStart(8, "0") : n;
 }
 
 export function checkCompanyNumber(v: string): string | null {
   const n = normaliseCompanyNumber(v);
   if (!n) return "Enter your company number — it's required for a limited company.";
-  return /^(\d{8}|[A-Z]{2}\d{6})$/.test(n)
+  return /^(\d{8}|(SC|NI|OC|SO|NC)\d{6})$/.test(n)
     ? null
     : "Company numbers are 8 characters, like 12345678 or SC123456.";
 }

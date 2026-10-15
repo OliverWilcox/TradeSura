@@ -3,12 +3,18 @@ import QRCode from "qrcode";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { brandName } from "@/lib/engineer";
-import { REFERRAL_BOUNTY_PENCE, referralStage } from "@/lib/referral";
+import {
+  REFERRAL_FIRST_YEAR_MONTHS,
+  REFERRAL_FIRST_YEAR_PERCENT,
+  REFERRAL_LIFETIME_PERCENT,
+  referralRatePercent,
+  referralStage,
+} from "@/lib/referral";
 import { appUrl } from "@/lib/app-url";
 
-// E10 — the engineer's referral hub: their invite link, the flat bounty
-// terms, and each invitee's stage on the Part 14 ladder (Signed up →
-// Verified → Plan live → £50 paid).
+// The engineer's referral hub: their invite link, the affiliate terms
+// (Build Review 2, ruling 4), and per referred engineer their stage, current
+// rate and what they've earned so far.
 export async function GET() {
   const engineerId = await getEngineerId();
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
@@ -19,19 +25,25 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
+  const earnings = await prisma.referralEarning.groupBy({
+    by: ["inviteeId"],
+    where: { referrerId: engineerId },
+    _sum: { amountPence: true },
+  });
+  const earnedBy = new Map(earnings.map((e) => [e.inviteeId, e._sum.amountPence ?? 0]));
+
   const rows = await Promise.all(
     invitees.map(async (e) => {
       const activePlans = await prisma.plan.count({
         where: { engineerId: e.id, status: "ACTIVE" },
       });
+      const earnedPence = earnedBy.get(e.id) ?? 0;
       return {
         name: brandName(e),
-        stage: referralStage({
-          verified: Boolean(e.gasSafeVerifiedAt),
-          activePlans,
-          bountyPaid: Boolean(e.referralBountyPaidAt),
-        }),
-        bountyPaid: Boolean(e.referralBountyPaidAt),
+        stage: referralStage({ verified: Boolean(e.gasSafeVerifiedAt), activePlans, earnedPence }),
+        activePlans,
+        earnedPence,
+        ratePercent: referralRatePercent(e.createdAt),
       };
     }),
   );
@@ -51,9 +63,11 @@ export async function GET() {
     link,
     qrDataUrl,
     cardUrl: `${appUrl()}/api/referral/card?slug=${engineer.slug}`,
-    bountyPence: REFERRAL_BOUNTY_PENCE,
+    firstYearPercent: REFERRAL_FIRST_YEAR_PERCENT,
+    lifetimePercent: REFERRAL_LIFETIME_PERCENT,
+    firstYearMonths: REFERRAL_FIRST_YEAR_MONTHS,
+    totalEarnedPence: rows.reduce((sum, r) => sum + r.earnedPence, 0),
     hasPayout,
-    paidCount: rows.filter((r) => r.bountyPaid).length,
     invitees: rows,
   });
 }

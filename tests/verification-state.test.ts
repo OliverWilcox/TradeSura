@@ -102,10 +102,10 @@ describe("standingCopy", () => {
     );
   });
 
-  it("uses the Part 18 verbatim pending string", () => {
+  it("uses the pending string (Build Review 2: no texts until SMS is live)", () => {
     expect(
       standingCopy({ ...BASE, gasSafeNo: "1", gasSafeReviewRequestedAt: new Date() }).text,
-    ).toBe("Gas Safe check in progress — we'll text you within 24 hours.");
+    ).toBe("Gas Safe check in progress — we'll let you know within 24 hours.");
   });
 });
 

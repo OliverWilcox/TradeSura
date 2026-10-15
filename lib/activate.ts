@@ -3,9 +3,9 @@ import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { cancelScheduledSms, notifyEngineer, sendSms } from "@/lib/sms";
 import { sendEmail } from "@/lib/email";
+import { sendPushNotification } from "@/lib/push";
 import { planDocumentEmailHtml } from "@/lib/plan-doc";
 import { activeMonthlyPence } from "@/lib/plans";
-import { checkReferralBounty } from "@/lib/referral";
 import { appUrl } from "@/lib/app-url";
 
 // Idempotent: safe to call again if Stripe retries the webhook, or if the
@@ -60,9 +60,16 @@ export async function activatePlan(
     consentBasis: "plan-member-transactional",
   });
 
+  // A failed email must never strand an activation half-done: the plan is
+  // already ACTIVE above, so a throw here would skip the engineer ping and
+  // referral check, and Stripe's retry returns early on ACTIVE.
   if (plan.customer.email) {
-    const { subject, html } = await planDocumentEmailHtml(plan.id);
-    await sendEmail({ to: plan.customer.email, subject, html });
+    try {
+      const { subject, html } = await planDocumentEmailHtml(plan.id);
+      await sendEmail({ to: plan.customer.email, subject, html });
+    } catch (err) {
+      console.error("[activate] plan document email failed:", err);
+    }
   }
 
   // C3 — the sustaining dopamine ping to the engineer.
@@ -72,9 +79,21 @@ export async function activatePlan(
     plan.engineerId,
     `🎉 ${plan.customer.firstName} ${plan.customer.lastName} just joined ${plan.tier?.name ?? "your plan"} — £${yearly}/yr added. ${count} plan${count === 1 ? "" : "s"} live, £${Math.round(totalPence / 100)}/mo.`,
   );
-
-  // E10 — pay the referrer's bounty if this engineer just hit the threshold.
-  await checkReferralBounty(plan.engineerId);
+  await sendPushNotification(
+    plan.engineerId,
+    "New plan member",
+    `${plan.customer.firstName} ${plan.customer.lastName} joined ${plan.tier?.name ?? "your plan"} — £${yearly}/yr added.`,
+    { url: `/customer/${plan.customerId}` },
+  );
+  // Section 8 — the staff engineer who signed them up hears too, with no £.
+  if (plan.soldById) {
+    await sendPushNotification(
+      plan.soldById,
+      "Customer signed up",
+      `${plan.customer.firstName} ${plan.customer.lastName} is now on ${plan.tier?.name ?? "a plan"} — nice work.`,
+      { url: `/customer/${plan.customerId}` },
+    );
+  }
 
   return plan;
 }

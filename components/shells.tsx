@@ -35,7 +35,13 @@ export function CustomerShell({
             {EMERGENCY_LINE}
           </a>
         </p>
-        <p>powered by TradeSura</p>
+        {/* Build Guide v2 Part 15 footer. */}
+        <p>
+          Powered by TradeSura ·{" "}
+          <a href="/terms" className="underline">
+            Terms &amp; privacy
+          </a>
+        </p>
       </footer>
     </div>
   );

@@ -3,6 +3,7 @@ import { View, Text, ScrollView, RefreshControl, Pressable, Alert } from "react-
 import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Pill, Button } from "@/components/ui";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 
@@ -167,6 +168,7 @@ function JobsSkeleton() {
 }
 
 export default function Jobs() {
+  const { me } = useAuth();
   const [data, setData] = useState<JobsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -340,9 +342,29 @@ export default function Jobs() {
               </Text>
             </Card>
 
-            <Button variant="copper" onPress={() => router.push("/offer")}>
-              Offer a plan to a no-plan customer
-            </Button>
+            {/* Build Review 2 — nothing to offer (no live plan) or no one to
+                offer it to: grey it out and point at setup, like the other
+                locked buttons. */}
+            {me?.hasPlan && (me?.customerCount ?? 0) > 0 ? (
+              <Button variant="copper" onPress={() => router.push("/offer")}>
+                Offer a plan to a no-plan customer
+              </Button>
+            ) : (
+              <>
+                <Button variant="copper" disabled onPress={() => {}}>
+                  Offer a plan to a no-plan customer
+                </Button>
+                {me?.role === "staff" ? (
+                  <Text className="text-center font-sans text-xs text-muted">
+                    {me?.hasPlan ? "Add a customer first." : "The business has no live plan yet — ask the owner."}
+                  </Text>
+                ) : (
+                  <Button variant="ghost" onPress={() => router.push("/onboarding")}>
+                    {me?.hasPlan ? "Add your customers first — Continue setup" : "Make a plan live first — Continue setup"}
+                  </Button>
+                )}
+              </>
+            )}
           </>
         )}
       </ScrollView>

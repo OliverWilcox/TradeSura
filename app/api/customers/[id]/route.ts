@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getEngineerId } from "@/lib/auth";
+import { getActor, getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { cancelScheduledSms } from "@/lib/sms";
 import { resolvePlanTier } from "@/lib/plan-tier";
@@ -9,12 +9,15 @@ import { nextServiceDate } from "@/lib/reminders";
 type TimelineItem = { at: string; icon: string; text: string };
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const engineerId = await getEngineerId();
-  if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const actor = await getActor();
+  if (!actor) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const engineerId = actor.businessId;
+  // Section 8 — staff open only customers they added, without payment detail.
+  const isStaff = actor.role === "staff";
 
   const { id } = await ctx.params;
   const customer = await prisma.customer.findFirst({
-    where: { id, engineerId },
+    where: { id, engineerId, ...(isStaff ? { addedById: actor.actorId } : {}) },
     include: {
       properties: { include: { appliances: true } },
       plans: {
@@ -32,7 +35,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   // still open their old portal to see history).
   const mostRecentPlan = active ?? customer.plans[0] ?? null;
   const planIds = customer.plans.map((p) => p.id);
-  const payments = planIds.length
+  const payments = planIds.length && !isStaff
     ? await prisma.event.findMany({
         where: {
           name: "payment_confirmed",
@@ -112,14 +115,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       ? {
           id: active.id,
           tierName: signedTier?.name ?? active.tier?.name ?? "Plan",
-          priceMonthlyPence: active.priceMonthlyPence ?? 0,
+          priceMonthlyPence: isStaff ? null : (active.priceMonthlyPence ?? 0),
           benefitLines: signedTier?.clauses.map((c) => c.title) ?? [],
           status: active.status,
-          mandateStatus: active.mandateStatus,
+          mandateStatus: isStaff ? null : active.mandateStatus,
           activatedAt: active.activatedAt?.toISOString() ?? null,
         }
       : null,
     canTextManageLink: Boolean(mostRecentPlan),
+    // Ending a plan and removing a customer are owner actions.
+    viewerIsStaff: isStaff,
     timeline,
   });
 }

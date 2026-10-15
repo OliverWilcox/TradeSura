@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
 import QRCode from "qrcode";
 import { prisma } from "@/lib/db";
-import { getEngineerId } from "@/lib/auth";
+import { getActor } from "@/lib/auth";
 import { appUrl } from "@/lib/app-url";
 
 // Mobile counterpart to app/offer/[planId]/page.tsx — the signup link and its
 // QR code, generated the same way (qrcode package, server-side) so the app
 // doesn't need its own QR-rendering dependency.
 export async function GET(_req: Request, ctx: { params: Promise<{ planId: string }> }) {
-  const engineerId = await getEngineerId();
-  if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const actor = await getActor();
+  if (!actor) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const engineerId = actor.businessId;
 
   const { planId } = await ctx.params;
-  const plan = await prisma.plan.findFirst({ where: { id: planId, engineerId } });
+  const plan = await prisma.plan.findFirst({
+    where: { id: planId, engineerId, ...(actor.role === "staff" ? { soldById: actor.actorId } : {}) },
+  });
   if (!plan) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
   const engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });

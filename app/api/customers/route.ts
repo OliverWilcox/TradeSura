@@ -1,22 +1,25 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getEngineerId } from "@/lib/auth";
+import { getActor } from "@/lib/auth";
 import { normaliseUkPhone } from "@/lib/phone";
 import { track } from "@/lib/track";
 
 // E7 — customer book, ranked by opportunity. Segments: all / on plan / not on
 // plan (the default to-do list) / attention (payment issues, lapsed).
 export async function GET() {
-  const engineerId = await getEngineerId();
-  if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const actor = await getActor();
+  if (!actor) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const engineerId = actor.businessId;
+  // Section 8 — staff see only the customers they added, with no payment detail.
+  const isStaff = actor.role === "staff";
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
   const [customers, failedEvents] = await Promise.all([
     prisma.customer.findMany({
-      where: { engineerId },
+      where: { engineerId, ...(isStaff ? { addedById: actor.actorId } : {}) },
       include: {
         plans: {
           select: {
@@ -90,6 +93,12 @@ export async function GET() {
       paymentIssue,
     };
   });
+  if (isStaff) {
+    for (const r of rows) {
+      r.priceMonthlyPence = null;
+      r.paymentIssue = false;
+    }
+  }
 
   // Not-on-plan sort: never-offered first, then stale offers, then newest.
   const notOnPlanRank = (r: (typeof rows)[number]) =>
@@ -111,7 +120,27 @@ export async function GET() {
     attention,
   };
 
-  return NextResponse.json({ customers: rows, counts });
+  // Section 8 — owners see sales by engineer (for paying their own staff
+  // bonuses): live plans each person signed up, the owner included.
+  let salesByEngineer: { name: string; plans: number }[] | undefined;
+  if (!isStaff) {
+    const [grouped, staff] = await Promise.all([
+      prisma.plan.groupBy({
+        by: ["soldById"],
+        where: { engineerId, activatedAt: { not: null }, status: { in: ["ACTIVE", "PAUSED"] } },
+        _count: true,
+      }),
+      prisma.engineer.findMany({ where: { ownerId: engineerId }, select: { id: true, firstName: true, lastName: true } }),
+    ]);
+    if (staff.length > 0) {
+      const names = new Map(staff.map((s) => [s.id, `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim()]));
+      salesByEngineer = grouped
+        .map((g) => ({ name: g.soldById ? (names.get(g.soldById) ?? "Former staff") : "You", plans: g._count }))
+        .sort((a, b) => b.plans - a.plans);
+    }
+  }
+
+  return NextResponse.json({ customers: rows, counts, salesByEngineer });
 }
 
 const PostBody = z.object({
@@ -130,8 +159,10 @@ const PostBody = z.object({
 // details": deliberately plan-free, no offer, no plan tier. De-dupes by
 // phone against the existing book (the same key /api/offer upserts on).
 export async function POST(req: Request) {
-  const engineerId = await getEngineerId();
-  if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const actor = await getActor();
+  if (!actor) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const engineerId = actor.businessId;
+  const addedById = actor.role === "staff" ? actor.actorId : null;
 
   const parsed = PostBody.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -143,10 +174,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "That doesn't look like a UK mobile number." }, { status: 400 });
   }
 
+  // Staff can't overwrite a customer someone else in the business added.
+  if (addedById) {
+    const existing = await prisma.customer.findUnique({ where: { engineerId_phone: { engineerId, phone } } });
+    if (existing && existing.addedById !== addedById) {
+      return NextResponse.json(
+        { error: "That customer is already in the business's book — ask the owner to offer them a plan." },
+        { status: 409 },
+      );
+    }
+  }
   const customer = await prisma.customer.upsert({
     where: { engineerId_phone: { engineerId, phone } },
     update: { firstName: b.firstName, lastName: b.lastName },
-    create: { engineerId, firstName: b.firstName, lastName: b.lastName, phone, source: "added" },
+    create: { engineerId, addedById, firstName: b.firstName, lastName: b.lastName, phone, source: "added" },
   });
 
   if (b.addressLine1 && b.postcode) {
@@ -178,7 +219,8 @@ export async function POST(req: Request) {
     }
   }
 
-  await track("customer_added_manually", { type: "ENGINEER", id: engineerId }, {
+  await track("customer_added_manually", { type: "ENGINEER", id: actor.actorId }, {
+    engineerId,
     customerId: customer.id,
     hadAddress: Boolean(b.addressLine1),
     hadLastService: Boolean(b.lastServicedAt),

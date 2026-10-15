@@ -15,13 +15,22 @@ type StripeSummary = {
   history: { id: string; amountPence: number; arrivalDate: string; status: string }[];
 };
 type Standing = { state: string; tone: "amber" | "red" | "quiet"; text: string };
+// Real cleared collections and the exact per-collection deductions
+// (app/api/payouts → lib/plans.ts collectionsSince).
+type Collections = {
+  count: number;
+  collectedPence: number;
+  feePence: number;
+  processingPence: number;
+  toBankPence: number;
+};
 type PayoutsData = {
   totalPence: number;
   count: number;
   fee: number;
-  confirmed: number;
+  month: Collections;
+  week: Collections;
   referralBonusPence: number;
-  processingPence: number;
   bankLast4: string | null;
   stripe: StripeSummary | null;
   stripeError: boolean;
@@ -132,7 +141,9 @@ export default function Payouts() {
   }
 
   const s = data?.stripe;
-  const expectedToBank = data ? data.totalPence - data.fee : 0;
+  // Part 6.3 LAW — before Stripe reports a payout, NEXT PAYOUT is this
+  // week's cleared collections, never the monthly total × 80%.
+  const weekToBank = data ? data.week.toBankPence : 0;
 
   return (
     <View className="flex-1 bg-panel">
@@ -177,10 +188,10 @@ export default function Payouts() {
                 <RingProgress size={44} progress={payoutWeekProgress()} dormant={data.count === 0} />
                 <View className="flex-1">
                   <Micro>
-                    {s?.nextPayout ? `Next payout · ${shortDate(s.nextPayout.arrivalDate)}` : "Expected monthly payout"}
+                    {s?.nextPayout ? `Next payout · ${shortDate(s.nextPayout.arrivalDate)}` : "Next payout · Friday"}
                   </Micro>
                   <Text className="mt-0.5 font-mono font-semibold text-3xl text-copper">
-                    {pounds(s?.nextPayout ? s.nextPayout.amountPence : expectedToBank)}
+                    {pounds(s?.nextPayout ? s.nextPayout.amountPence : weekToBank)}
                   </Text>
                 </View>
               </View>
@@ -196,14 +207,12 @@ export default function Payouts() {
                     `data.count === 0` here). */}
                 {data.count === 0
                   ? "Payouts start when your first plan goes live — paid every Friday."
-                  : s
-                    ? `${pounds(s.availablePence)} available · ${pounds(s.pendingPence)} still clearing`
-                    : `${data.count} active plan${data.count === 1 ? "" : "s"} · paid out direct to your bank`}
+                  : "This week's cleared collections — your 80%, paid direct to your bank."}
               </Text>
-              {!s && !data.stripeError && (
+              {s && data.count > 0 && (
                 <Text className="mt-1 font-sans text-[11px] text-night-muted">
-                  The live Stripe payout feed switches on once your first collections clear; until
-                  then this is the maths of your active plans.
+                  <Text className="font-mono">{pounds(s.availablePence)}</Text> available ·{" "}
+                  <Text className="font-mono">{pounds(s.pendingPence)}</Text> still clearing
                 </Text>
               )}
               {data.stripeError && (
@@ -216,8 +225,17 @@ export default function Payouts() {
             <Card>
               <Micro className="mb-1.5">This month, transparently</Micro>
               <RowLine
-                left={`${data.confirmed} collection${data.confirmed === 1 ? "" : "s"} · your 80%`}
-                right={pounds(data.totalPence - data.fee)}
+                left={`${data.month.count} collection${data.month.count === 1 ? "" : "s"} cleared`}
+                right={<Text className="font-mono text-sm text-ink">{pounds(data.month.collectedPence)}</Text>}
+              />
+              <RowLine
+                left="TradeSura fee (20%)"
+                right={
+                  <Text className="font-mono text-ink">
+                    {data.month.feePence > 0 ? "−" : ""}
+                    {pounds(data.month.feePence)}
+                  </Text>
+                }
               />
               {data.referralBonusPence > 0 && (
                 <RowLine
@@ -230,11 +248,12 @@ export default function Payouts() {
                 />
               )}
               <RowLine
-                left={`Processing (${data.confirmed} × ~32p)`}
+                left={`Direct Debit processing (${data.month.count} × 32p)`}
                 right={
-                  <Text className="font-mono text-danger">
-                    {data.processingPence > 0 ? "−" : ""}
-                    {pounds(data.processingPence)}
+                  // Part 12 — costs render neutral, never red; costs aren't errors.
+                  <Text className="font-mono text-ink">
+                    {data.month.processingPence > 0 ? "−" : ""}
+                    {pounds(data.month.processingPence)}
                   </Text>
                 }
               />
@@ -242,9 +261,7 @@ export default function Payouts() {
                 left={<Text className="font-bold text-sm text-ink">To your bank</Text>}
                 right={
                   <Text className="font-mono font-semibold text-copper">
-                    {pounds(
-                      data.totalPence - data.fee + data.referralBonusPence - data.processingPence,
-                    )}
+                    {pounds(data.month.toBankPence + data.referralBonusPence)}
                   </Text>
                 }
               />
@@ -284,7 +301,7 @@ export default function Payouts() {
                   >
                     <View className="shrink">
                       <Text className="font-bold text-sm text-ink">
-                        {p.customerName} · {pounds(p.priceMonthlyPence)}
+                        {p.customerName} · <Text className="font-mono">{pounds(p.priceMonthlyPence)}</Text>
                       </Text>
                       <Micro>STRIPE RETRIES AUTOMATICALLY</Micro>
                     </View>

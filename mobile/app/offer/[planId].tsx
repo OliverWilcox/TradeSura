@@ -104,6 +104,15 @@ export default function OfferLive() {
         <AppHeader title="Offer a plan" />
       </SafeAreaView>
       <ScrollView className="flex-1" contentContainerClassName="gap-3.5 px-4 pb-8 pt-4">
+        {/* Part 16 — route 2's after-state: a quiet confirmation. */}
+        {status && (
+          <View className="flex-row items-center gap-2 rounded-xl bg-flame-tint px-3.5 py-2.5">
+            <Tick size={16} />
+            <Text className="text-[14px] font-semibold text-ink">
+              Offer sent to {status.customerFirstName}
+            </Text>
+          </View>
+        )}
         <Card>
           <Text className="mb-2 font-semibold text-sm text-ink">Link sent by text</Text>
           {infoError ? (
