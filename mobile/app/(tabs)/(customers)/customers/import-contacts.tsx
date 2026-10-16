@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { View, Text, FlatList, Pressable, ActivityIndicator } from "react-native";
-import { router } from "expo-router";
+import { View, Text, FlatList, Pressable } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Contacts from "expo-contacts";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Button } from "@/components/ui";
+import { CenteredSpinner } from "@/components/skeleton";
 
 type PickedContact = { id: string; name: string; phone: string; email?: string };
 
@@ -16,7 +17,10 @@ export default function ImportContacts() {
   const [status, setStatus] = useState<"loading" | "denied" | "ready" | "importing">("loading");
   const [contacts, setContacts] = useState<PickedContact[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [confirmed, setConfirmed] = useState(false);
+  // Ticked already when arriving from Customers, where the same box gates
+  // the button; still shown here so it can be unticked.
+  const { consent } = useLocalSearchParams<{ consent?: string }>();
+  const [confirmed, setConfirmed] = useState(consent === "1");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
 
@@ -81,8 +85,8 @@ export default function ImportContacts() {
 
   if (status === "loading") {
     return (
-      <View className="flex-1 items-center justify-center bg-panel">
-        <ActivityIndicator color="#5FA3F0" />
+      <View className="flex-1 bg-panel">
+        <CenteredSpinner label="Reading your contacts" />
       </View>
     );
   }

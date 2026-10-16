@@ -1,9 +1,11 @@
 import { useCallback, useState } from "react";
-import { View, Text, Pressable, ActivityIndicator, Alert } from "react-native";
+import { View, Text, Pressable, Alert } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Pill, RowLine, Chevron, Button } from "@/components/ui";
+import { Skeleton, Bone, RowBone } from "@/components/skeleton";
 
 // Build Guide v2 Part 7.4 — "Edit plan": three rows, each opening its wizard
 // step pre-filled, plus the stop/start toggle. This screen is a menu into
@@ -23,6 +25,7 @@ const STATUS_PILL: Record<TierDetail["status"], { tone: "ok" | "off"; label: (n:
 };
 
 export default function EditPlan() {
+  const { refreshMe } = useAuth();
   const { tierId } = useLocalSearchParams<{ tierId: string }>();
   const [tier, setTier] = useState<TierDetail | null>(null);
   const [activePlanCount, setActivePlanCount] = useState(0);
@@ -62,7 +65,7 @@ export default function EditPlan() {
     setError(null);
     try {
       await api(`/api/tiers/${tierId}/status`, { method: "POST", body: JSON.stringify({ action }) });
-      await load();
+      await Promise.all([load(), refreshMe()]);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't update this plan.");
     } finally {
@@ -124,9 +127,14 @@ export default function EditPlan() {
         <SafeAreaView edges={["top"]} className="bg-iron">
           <AppHeader title="Edit plan" />
         </SafeAreaView>
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#5FA3F0" />
-        </View>
+        <Skeleton label="Loading plan" className="gap-2.5 px-4 pt-4">
+          <Bone width={110} height={22} radius={11} />
+          <Card>
+            <RowBone left={120} right={10} />
+            <RowBone left={50} right={70} />
+            <RowBone left={50} right={10} last />
+          </Card>
+        </Skeleton>
       </View>
     );
   }
@@ -145,7 +153,8 @@ export default function EditPlan() {
           <Card className="border-warn-tint bg-warn-tint">
             <Text className="font-sans text-xs text-warn">
               Changes apply to new customers — your {activePlanCount} current customer
-              {activePlanCount === 1 ? "" : "s"} keep what they signed up for.
+              {activePlanCount === 1 ? "" : "s"} keep what they signed up for. To change what they
+              pay, use the annual price review below.
             </Text>
           </Card>
         )}
@@ -171,6 +180,16 @@ export default function EditPlan() {
             <RowLine left="Name" right={<Chevron />} />
           </Pressable>
         </Card>
+
+        {/* Build Review 2, ruling 3 — the only way to change what existing
+            customers pay: once a year, with 30 days' notice. */}
+        {activePlanCount > 0 && (
+          <Card>
+            <Pressable onPress={() => router.push({ pathname: "/price-review", params: { tierId } })}>
+              <RowLine left="Annual price review" right={<Chevron />} />
+            </Pressable>
+          </Card>
+        )}
 
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 

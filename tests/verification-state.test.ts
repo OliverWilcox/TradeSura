@@ -14,6 +14,8 @@ const BASE = {
   gasSafeNo: null,
   gasSafeVerifiedAt: null,
   gasSafeReviewRequestedAt: null,
+  gasSafeRejectedAt: null,
+  gasSafeRejectReason: null,
 } as const;
 
 describe("standingState", () => {
@@ -22,13 +24,20 @@ describe("standingState", () => {
   // used to assert the bug as correct behaviour (ACTIVE with nothing else
   // set, i.e. not actually verified) — the fallback should never be ACTIVE.
   it("never defaults to active — an engineer with nothing set is not verified", () => {
-    expect(standingState(BASE)).toBe("CHECK_FAILED");
+    expect(standingState(BASE)).not.toBe("ACTIVE");
   });
 
-  it("still not active with a Gas Safe number entered but no verification or review request", () => {
-    // The exact shape of the reviewed account: signed up, a gasSafeNo on
-    // file, but neither gasSafeVerifiedAt nor gasSafeReviewRequestedAt set.
-    expect(standingState({ ...BASE, gasSafeNo: "584120" })).toBe("CHECK_FAILED");
+  // 29 Sept review — a fresh account that never had anything rejected must
+  // read as pending, not failed.
+  it("pending, not failed, when nothing has been rejected", () => {
+    expect(standingState(BASE)).toBe("CHECK_PENDING");
+    expect(standingState({ ...BASE, gasSafeNo: "584120" })).toBe("CHECK_PENDING");
+  });
+
+  it("failed only once a reviewer has rejected it", () => {
+    expect(
+      standingState({ ...BASE, gasSafeNo: "584120", gasSafeRejectedAt: new Date() }),
+    ).toBe("CHECK_FAILED");
   });
 
   it("check pending when a review is requested and not yet verified", () => {
@@ -93,10 +102,10 @@ describe("standingCopy", () => {
     );
   });
 
-  it("uses the Part 18 verbatim pending string", () => {
+  it("uses the pending string (Build Review 2: no texts until SMS is live)", () => {
     expect(
       standingCopy({ ...BASE, gasSafeNo: "1", gasSafeReviewRequestedAt: new Date() }).text,
-    ).toBe("Gas Safe check in progress — we'll text you within 24 hours.");
+    ).toBe("Gas Safe check in progress — we'll let you know within 24 hours.");
   });
 });
 
@@ -106,12 +115,12 @@ describe("standingCopy", () => {
 describe("gasSafeStatus", () => {
   it("verified wins even if a review was also requested at some point", () => {
     expect(
-      gasSafeStatus({ gasSafeNo: "1", gasSafeVerifiedAt: new Date(), gasSafeReviewRequestedAt: new Date() })
+      gasSafeStatus({ gasSafeNo: "1", gasSafeVerifiedAt: new Date(), gasSafeReviewRequestedAt: new Date(), gasSafeRejectedAt: null })
         .tone,
     ).toBe("quiet");
   });
   it("pending when a review is requested and not yet verified", () => {
-    const s = gasSafeStatus({ gasSafeNo: "1", gasSafeVerifiedAt: null, gasSafeReviewRequestedAt: new Date() });
+    const s = gasSafeStatus({ gasSafeNo: "1", gasSafeVerifiedAt: null, gasSafeReviewRequestedAt: new Date(), gasSafeRejectedAt: null });
     expect(s.tone).toBe("amber");
     expect(s.text).toContain("check in progress");
   });

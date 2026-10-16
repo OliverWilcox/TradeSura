@@ -61,10 +61,10 @@ export default async function PublicPlanPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ src?: string; demo?: string }>;
+  searchParams: Promise<{ src?: string; demo?: string; by?: string }>;
 }) {
   const { slug } = await params;
-  const { src, demo } = await searchParams;
+  const { src, demo, by } = await searchParams;
   const data = await loadEngineer(slug);
   if (!data) notFound();
   const { engineer, tiers } = data;
@@ -110,15 +110,17 @@ export default async function PublicPlanPage({
       // claim to a customer matters more than matching the string exactly.
       sub={gasSafe ? "Gas Safe verified · Backed by TradeSura" : "Backed by TradeSura"}
     >
-      <p className="text-sm">
-        Pick the plan that suits you. The monthly price you see is the full price — no joining
-        fee, nothing added later.
-      </p>
+      {/* Build Guide v2 Part 15.1 — title + sub-line, verbatim. */}
+      <div>
+        <h1 className="font-sans font-semibold text-lg">Choose your plan</h1>
+        <p className="text-sm text-muted">Cancel anytime — set up takes about a minute.</p>
+      </div>
 
       <PublicSignup
         slug={slug}
         engineerName={brand}
         channel={demo ? "demo" : src === "blast" ? "blast" : src === "referral" ? "referral" : "web"}
+        soldById={demo ? by : undefined}
         tiers={tiers.map((t) => ({
           id: t.id,
           name: t.name,

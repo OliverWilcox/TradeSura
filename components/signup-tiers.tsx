@@ -61,7 +61,7 @@ export function SignupTiers({
     const data = await res.json();
     setBusy(false);
     if (!res.ok) {
-      setError(data.error ?? "Something went wrong — try again.");
+      setError(data.error ?? "That didn't go through. Please try again — if it keeps happening, contact your engineer.");
       return;
     }
     setStarted(data);

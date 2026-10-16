@@ -5,22 +5,61 @@ import {
   ScrollView,
   TextInput,
   Pressable,
-  ActivityIndicator,
   Linking,
 } from "react-native";
-import { router, useFocusEffect, useLocalSearchParams, Link } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Button } from "@/components/ui";
+import { Skeleton, Bone, TextBone } from "@/components/skeleton";
+import { checkEmail, checkRequired, checkUkMobile, checkUkPostcode } from "@/lib/validate";
+
+// The script card, then the send card: plan pills, book/new toggle and a
+// few customer rows.
+function OfferSkeleton() {
+  return (
+    <Skeleton label="Loading your customers and plans" className="gap-3.5 px-4 pt-4">
+      <Bone height={50} radius={16} />
+      <Card>
+        <TextBone width={120} size={14} style={{ marginBottom: 8 }} />
+        <View className="mb-3 flex-row gap-2">
+          <Bone width={104} height={28} radius={14} />
+          <Bone width={96} height={28} radius={14} />
+        </View>
+        {[150, 180, 130, 165].map((w, i) => (
+          <View
+            key={w}
+            className={`flex-row items-center justify-between py-2.5 ${i < 3 ? "border-b border-line-soft" : ""}`}
+          >
+            <TextBone width={w} size={14} />
+            <Bone width={14} height={14} radius={7} />
+          </View>
+        ))}
+      </Card>
+    </Skeleton>
+  );
+}
 
 type Customer = { id: string; firstName: string; lastName: string; phone: string };
 type Tier = { id: string; name: string; priceMonthlyPence: number; lines: string[] };
 
-const SCRIPT =
-  "“I put all my customers on a care plan now — £12 a month and your annual service is included. I’ll text you the link, have a look tonight.”";
+// Built from the selected plan: its own price, and the service line only when
+// the plan includes it (Build Review 2, ruling 2 — service is optional).
+function offerScript(tier: Tier | null): string {
+  const price = tier ? `£${(tier.priceMonthlyPence / 100).toFixed(2).replace(/\.00$/, "")} a month` : "a small monthly fee";
+  const service = !tier || tier.lines.some((l) => /annual boiler service/i.test(l));
+  return `“I put all my customers on a care plan now — ${price}${service ? " and your annual service is included" : " and you’re first in my diary"}. I’ll text you the link, have a look tonight.”`;
+}
 
-const inputCls = "rounded-[10px] border border-line bg-paper px-3 py-2 font-sans text-sm text-ink";
+// Thumb-sized, size-only text class (see components/address-lookup.tsx).
+const inputCls = "min-h-[48px] rounded-[10px] border bg-paper px-3.5 font-sans text-[16px] text-ink";
+
+type FormErrors = Partial<Record<"firstName" | "lastName" | "phone" | "email" | "postcode" | "customer", string | null>>;
+
+function FieldError({ children }: { children?: string | null }) {
+  return children ? <Text className="mt-1 font-sans text-[13px] text-danger">{children}</Text> : null;
+}
 
 export default function OfferStart() {
   const { me } = useAuth();
@@ -46,6 +85,7 @@ export default function OfferStart() {
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
 
   const load = useCallback(async () => {
     try {
@@ -78,8 +118,26 @@ export default function OfferStart() {
     }, [load]),
   );
 
+  function setField(key: keyof typeof form, v: string) {
+    setForm((f) => ({ ...f, [key]: v }));
+    setErrors((e) => ({ ...e, [key]: null }));
+  }
+
   async function send(channel: "sms" | "whatsapp") {
     if (!tierId) return;
+    // Never a silent grey button — say what's missing (29 Sept review).
+    const found: FormErrors =
+      mode === "existing"
+        ? { customer: customerId ? null : "Pick a customer to send the offer to." }
+        : {
+            firstName: checkRequired(form.firstName, "customer's first name"),
+            lastName: checkRequired(form.lastName, "customer's last name"),
+            phone: checkUkMobile(form.phone),
+            email: form.email.trim() ? checkEmail(form.email) : null,
+            postcode: form.postcode.trim() ? checkUkPostcode(form.postcode) : null,
+          };
+    setErrors(found);
+    if (Object.values(found).some(Boolean)) return;
     setBusy(true);
     setError(null);
     try {
@@ -110,9 +168,6 @@ export default function OfferStart() {
   const linkPreview = me?.slug ? `tradesura.com/p/${me.slug}` : "your plan link";
   const selectedTier = tiers?.find((t) => t.id === tierId) ?? null;
 
-  const canSend =
-    Boolean(tierId) &&
-    (mode === "existing" ? Boolean(customerId) : Boolean(form.firstName && form.lastName && form.phone));
   const shown = customers ? (showAll ? customers : customers.slice(0, 8)) : [];
 
   return (
@@ -129,9 +184,7 @@ export default function OfferStart() {
           </Button>
         </View>
       ) : customers === null || tierCount === null ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#5FA3F0" />
-        </View>
+        <OfferSkeleton />
       ) : (
         <ScrollView className="flex-1" contentContainerClassName="gap-3.5 px-4 pb-8 pt-4">
           {tierCount > 0 && (
@@ -144,30 +197,62 @@ export default function OfferStart() {
                 <Text className="font-sans text-xs text-warn">{scriptOpen ? "Hide" : "Show"}</Text>
               </Pressable>
               {scriptOpen && (
-                <Text className="mt-1.5 font-sans text-[13px] text-ink">{SCRIPT}</Text>
+                <Text className="mt-1.5 font-sans text-[13px] text-ink">{offerScript(selectedTier)}</Text>
               )}
             </Card>
           )}
 
           {tierCount === 0 ? (
+            // 29 Sept review — this used to be one line with an inline link
+            // nested in Text that didn't respond to taps. A real empty state
+            // with a real button, straight into the plan builder.
             <Card>
-              <Text className="font-sans text-sm text-ink">
-                You need a plan first ·{" "}
-                <Link href="/plans" className="font-semibold text-flame-deep">
-                  Build my plan →
-                </Link>
+              <Micro>Before your first offer</Micro>
+              <Text className="mt-1.5 text-[19px] font-bold text-ink">Build your plan first</Text>
+              <Text className="mt-1 text-[14px] leading-5 text-muted">
+                Customers pick from your plan when they open the link. We&apos;ve drafted Boiler
+                Care at £12/month — approve it or set your own price. Takes about a minute.
               </Text>
+              <Button className="mt-4" onPress={() => router.push("/plans")}>
+                Build my plan
+              </Button>
             </Card>
           ) : !me?.gasSafeVerifiedAt ? (
             // Build Guide v2 Part 6.5 LAW — the two-leg gate: sending an
             // offer needs a live plan AND the badge, not plan-only.
             <Card>
-              <Text className="font-sans text-sm text-ink">
-                You need your Gas Safe badge first ·{" "}
-                <Link href="/more" className="font-semibold text-flame-deep">
-                  Check your status →
-                </Link>
+              <Micro>Almost there</Micro>
+              <Text className="mt-1.5 text-[19px] font-bold text-ink">
+                Offers unlock with your Gas Safe badge
               </Text>
+              <Text className="mt-1 text-[14px] leading-5 text-muted">
+                We&apos;re checking your registration — usually within 24 hours, and we&apos;ll
+                let you know when it&apos;s done. Your plan is ready to go the moment it is.
+              </Text>
+              <Button variant="ghost" className="mt-4" onPress={() => router.push("/more")}>
+                Check my status
+              </Button>
+            </Card>
+          ) : !me?.stripeConnected ? (
+            <Card>
+              <Micro>One more step</Micro>
+              <Text className="mt-1.5 text-[19px] font-bold text-ink">Finish your payment setup</Text>
+              {me?.role === "staff" ? (
+                <Text className="mt-1 text-[14px] leading-5 text-muted">
+                  Customers can&apos;t join until the business owner finishes payment setup — ask them to
+                  do it from their app.
+                </Text>
+              ) : (
+                <>
+                  <Text className="mt-1 text-[14px] leading-5 text-muted">
+                    Customers pay you by Direct Debit through Stripe. Until your payment setup is
+                    done, they can&apos;t join — so finish it before sending an offer.
+                  </Text>
+                  <Button className="mt-4" onPress={() => router.push("/onboarding")}>
+                    Set up payments
+                  </Button>
+                </>
+              )}
             </Card>
           ) : (
             <Card>
@@ -228,7 +313,10 @@ export default function OfferStart() {
                     {shown.map((c) => (
                       <Pressable
                         key={c.id}
-                        onPress={() => setCustomerId(c.id)}
+                        onPress={() => {
+                          setCustomerId(c.id);
+                          setErrors((e) => ({ ...e, customer: null }));
+                        }}
                         className="flex-row items-center justify-between gap-2 border-b border-line-soft py-2.5 last:border-b-0"
                       >
                         <Text className="font-sans text-sm text-ink">
@@ -251,48 +339,69 @@ export default function OfferStart() {
               ) : (
                 <View className="gap-2">
                   <View className="flex-row gap-2">
-                    <TextInput
-                      placeholder="First name"
-                      value={form.firstName}
-                      onChangeText={(v) => setForm({ ...form, firstName: v })}
-                      className={`flex-1 ${inputCls}`}
-                    />
-                    <TextInput
-                      placeholder="Last name"
-                      value={form.lastName}
-                      onChangeText={(v) => setForm({ ...form, lastName: v })}
-                      className={`flex-1 ${inputCls}`}
-                    />
+                    <View className="flex-1">
+                      <TextInput
+                        placeholder="First name"
+                        placeholderTextColor="#6e86a3"
+                        value={form.firstName}
+                        onChangeText={(v) => setField("firstName", v)}
+                        className={`${inputCls} ${errors.firstName ? "border-danger" : "border-line"}`}
+                      />
+                      <FieldError>{errors.firstName}</FieldError>
+                    </View>
+                    <View className="flex-1">
+                      <TextInput
+                        placeholder="Last name"
+                        placeholderTextColor="#6e86a3"
+                        value={form.lastName}
+                        onChangeText={(v) => setField("lastName", v)}
+                        className={`${inputCls} ${errors.lastName ? "border-danger" : "border-line"}`}
+                      />
+                      <FieldError>{errors.lastName}</FieldError>
+                    </View>
                   </View>
-                  <TextInput
-                    placeholder="Mobile (07…)"
-                    keyboardType="phone-pad"
-                    value={form.phone}
-                    onChangeText={(v) => setForm({ ...form, phone: v })}
-                    className={inputCls}
-                  />
-                  <TextInput
-                    placeholder="Email (for the plan document)"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    value={form.email}
-                    onChangeText={(v) => setForm({ ...form, email: v })}
-                    className={inputCls}
-                  />
+                  <View>
+                    <TextInput
+                      placeholder="Mobile (07…)"
+                      placeholderTextColor="#6e86a3"
+                      keyboardType="phone-pad"
+                      value={form.phone}
+                      onChangeText={(v) => setField("phone", v)}
+                      className={`${inputCls} ${errors.phone ? "border-danger" : "border-line"}`}
+                    />
+                    <FieldError>{errors.phone}</FieldError>
+                  </View>
+                  <View>
+                    <TextInput
+                      placeholder="Email (for the plan document)"
+                      placeholderTextColor="#6e86a3"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      value={form.email}
+                      onChangeText={(v) => setField("email", v)}
+                      className={`${inputCls} ${errors.email ? "border-danger" : "border-line"}`}
+                    />
+                    <FieldError>{errors.email}</FieldError>
+                  </View>
                   <View className="flex-row gap-2">
                     <TextInput
                       placeholder="Address line 1"
+                      placeholderTextColor="#6e86a3"
                       value={form.addressLine1}
-                      onChangeText={(v) => setForm({ ...form, addressLine1: v })}
-                      className={`flex-1 ${inputCls}`}
+                      onChangeText={(v) => setField("addressLine1", v)}
+                      className={`flex-1 ${inputCls} border-line`}
                     />
                     <TextInput
                       placeholder="Postcode"
+                      placeholderTextColor="#6e86a3"
+                      autoCapitalize="characters"
                       value={form.postcode}
-                      onChangeText={(v) => setForm({ ...form, postcode: v })}
-                      className={`w-28 ${inputCls}`}
+                      onChangeText={(v) => setField("postcode", v)}
+                      className={`w-28 ${inputCls} ${errors.postcode ? "border-danger" : "border-line"}`}
                     />
                   </View>
+                  <FieldError>{errors.postcode}</FieldError>
                   <Pressable onPress={() => router.push("/plans")} className="pt-1">
                     <Text className="font-semibold text-xs text-flame-deep">Manage my plans →</Text>
                   </Pressable>
@@ -316,18 +425,19 @@ export default function OfferStart() {
                 </Text>
               </View>
 
+              <FieldError>{errors.customer}</FieldError>
               {error && <Text className="mt-2 font-sans text-sm text-danger">{error}</Text>}
               <View className="mt-3 flex-row gap-2">
                 <Button
                   onPress={() => send("sms")}
-                  disabled={busy || !canSend}
+                  disabled={busy}
                   className="flex-1"
                 >
                   {busy ? "Sending…" : "Send by text"}
                 </Button>
                 <Button
                   onPress={() => send("whatsapp")}
-                  disabled={busy || !canSend}
+                  disabled={busy}
                   className="flex-1"
                 >
                   WhatsApp

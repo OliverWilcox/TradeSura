@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { AddressLookup, type AddressValue } from "@/components/address-lookup";
 import { Card, btnClass } from "@/components/ui";
 
 // C2 — the embedded Bacs Direct Debit form. Stays on the engineer's
@@ -23,6 +24,7 @@ function CheckoutForm({
 }) {
   const stripe = useStripe();
   const elements = useElements();
+  const [address, setAddress] = useState<AddressValue>({ line1: "", town: "", postcode: "" });
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +34,22 @@ function CheckoutForm({
     if (!stripe || !elements) return;
     setBusy(true);
     setError(null);
+
+    try {
+      const response = await fetch(`/api/signup/${signupToken}/address`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(address),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error ?? "Couldn't save your address — please try again.");
+        setBusy(false);
+        return;
+      }
+    } catch {
+      setError("Couldn't save your address — check your connection and try again.");
+      setBusy(false);
+      return;
+    }
 
     const { error: submitError } = await elements.submit();
     if (submitError) {
@@ -58,7 +76,7 @@ function CheckoutForm({
 
     if (confirmError) {
       setBusy(false);
-      setError(confirmError.message ?? "Something went wrong — try again.");
+      setError(confirmError.message ?? "That didn't go through. Please try again — if it keeps happening, contact your engineer.");
       return;
     }
     // Bacs confirms inline (no redirect) — send them to the confirmation page.
@@ -67,13 +85,23 @@ function CheckoutForm({
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
+      {/* Build Guide v2 Part 15.2 — title + sub-line. The sub-line carries the
+          full monthly price before the mandate (CLAUDE.md compliance 2). */}
+      <div>
+        <h2 className="font-sans font-semibold text-lg">Set up your plan</h2>
+        <p className="text-sm text-muted">
+          {planName} · {priceLabel} a month · with {engineerName}
+        </p>
+      </div>
+      <AddressLookup signupToken={signupToken} value={address} onChange={setAddress} />
       <p className="text-sm font-semibold">Direct Debit details</p>
       <PaymentElement options={{ layout: "tabs" }} />
 
       <Card className="bg-flame-tint border-flame-tint text-[12.5px]">
-        <b>Protected by the Direct Debit Guarantee.</b> Your first collection is a few working
-        days after you join, then monthly. You&apos;ll get 3 days&apos; notice of any change, and
-        you can cancel anytime.
+        <b>Protected by the Direct Debit Guarantee.</b>{" "}
+        {/* Part 18 pending line, verbatim. */}
+        Your Direct Debit takes 2–3 days to set up. First payment as soon as your Direct Debit is
+        live — we&apos;ll text you before it&apos;s taken.
       </Card>
 
       <Card className="text-[12.5px]">
@@ -101,9 +129,11 @@ function CheckoutForm({
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
-      <button type="submit" disabled={busy || !agreed || !stripe} className={btnClass("green")}>
-        {busy ? "Setting up your Direct Debit…" : `Confirm and join — ${priceLabel}/month`}
+      {/* Part 15.2 — one white button; green on this page is prices only. */}
+      <button type="submit" disabled={busy || !agreed || !stripe} className={btnClass()}>
+        {busy ? "Setting up your Direct Debit…" : "Set up my plan"}
       </button>
+      <p className="text-center text-[11px] text-faint">Cancel anytime.</p>
     </form>
   );
 }

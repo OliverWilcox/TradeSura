@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { checkEmergency } from "@/lib/compliance/interlock";
+import { recentEmergencyCount } from "@/lib/emergencies";
 
 type Tag = { label: string; tone: "danger" | "warn" | "info" | "off"; rank: number };
 
@@ -31,11 +32,7 @@ export async function GET() {
     orderBy: { ts: "desc" },
     take: 100,
   });
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const recentEmergencies = await prisma.event.count({
-    where: { name: "emergency_interlock_triggered", ts: { gte: sevenDaysAgo } },
-  });
+  const recentEmergencies = await recentEmergencyCount(engineerId);
 
   const planIds = [
     ...new Set(

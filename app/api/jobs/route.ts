@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getEngineerId } from "@/lib/auth";
+import { getActor } from "@/lib/auth";
 import { dueServices } from "@/lib/reminders";
 
 // Mobile counterpart to the jobs queries in app/jobs/page.tsx (Screen 07, lite).
 export async function GET() {
-  const engineerId = await getEngineerId();
-  if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const actor = await getActor();
+  if (!actor) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const engineerId = actor.businessId;
+  const addedById = actor.role === "staff" ? actor.actorId : undefined;
 
-  const due = await dueServices(engineerId);
+  const due = await dueServices(engineerId, { addedById });
   const now = new Date();
   const upcoming = due.filter((d) => d.dueDate >= now);
   const overdue = due.filter((d) => d.dueDate < now);
@@ -16,7 +18,7 @@ export async function GET() {
   const pastAppliances = await prisma.appliance.findMany({
     where: {
       lastServicedAt: { not: null, lt: now },
-      property: { customer: { engineerId } },
+      property: { customer: { engineerId, ...(addedById ? { addedById } : {}) } },
     },
     include: { property: { include: { customer: true } } },
     orderBy: { lastServicedAt: "desc" },

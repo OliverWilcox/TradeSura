@@ -1,73 +1,119 @@
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { notifyEngineer } from "@/lib/sms";
-import { payReferralBounty, stripeConfigured } from "@/lib/stripe";
+import { sendPushNotification } from "@/lib/push";
+import { payReferralCommission, stripeConfigured } from "@/lib/stripe";
+import { TRADESURA_FEE_RATE } from "@/lib/clauses";
 
-export const REFERRAL_BOUNTY_PENCE = 5000;
-// Build Guide v2 Part 14 RULED — "the £50 pays when the invited engineer's
-// first plan goes live," closing the old five-plans question. Kept as a
-// named config value, per Part 19's pattern, rather than inlining a literal
-// 1 at every call site.
-export const REFERRAL_REQUIRED_PLANS = 1;
+// Build Review 2, ruling 4 — every installer is an affiliate. They earn a
+// share of TradeSura's fee on plans sold by engineers they bring in: 25% for
+// that engineer's first 12 months, then 10% for life. One level only — nobody
+// earns on their referrals' referrals. Replaces the flat £50 bounty.
+export const REFERRAL_FIRST_YEAR_PERCENT = 25;
+export const REFERRAL_LIFETIME_PERCENT = 10;
+export const REFERRAL_FIRST_YEAR_MONTHS = 12;
 
-// Build Guide v2 Part 14 — "The referral ladder per invitee: Signed up →
-// Verified → Plan live → £50 paid."
-export type ReferralStage = "signed_up" | "verified" | "plan_live" | "paid";
+export function referralRatePercent(inviteeJoinedAt: Date, at: Date = new Date()): number {
+  const cutoff = new Date(inviteeJoinedAt);
+  cutoff.setMonth(cutoff.getMonth() + REFERRAL_FIRST_YEAR_MONTHS);
+  return at < cutoff ? REFERRAL_FIRST_YEAR_PERCENT : REFERRAL_LIFETIME_PERCENT;
+}
+
+// Commission is on TradeSura's 20%, not the Bacs processing pass-through.
+export function referralCommission(invoicePaidPence: number, ratePercent: number) {
+  const feePence = Math.round(invoicePaidPence * TRADESURA_FEE_RATE);
+  return { feePence, amountPence: Math.round((feePence * ratePercent) / 100) };
+}
+
+// Build Guide v2 Part 14's ladder, re-ended for the affiliate model:
+// Signed up → Verified → Plan live → Earning.
+export type ReferralStage = "signed_up" | "verified" | "plan_live" | "earning";
 
 export function referralStage(opts: {
   verified: boolean;
   activePlans: number;
-  bountyPaid: boolean;
+  earnedPence: number;
 }): ReferralStage {
-  if (opts.bountyPaid) return "paid";
-  if (opts.activePlans > 0) return "plan_live"; // bounty pays synchronously on activation
+  if (opts.earnedPence > 0) return "earning";
+  if (opts.activePlans > 0) return "plan_live";
   if (opts.verified) return "verified";
   return "signed_up";
 }
 
-// Called after a plan goes live: if this engineer was referred and has now hit
-// the plan threshold, pay the referrer's flat bounty as a platform-funded
-// Stripe transfer. Idempotent via referralBountyPaidAt.
-export async function checkReferralBounty(inviteeEngineerId: string) {
+// Called from invoice.paid for every collected customer invoice. If the
+// selling engineer was referred, record the referrer's commission and send it
+// as a platform-funded transfer. Idempotent on invoiceId: a replayed webhook
+// finds the row and stops, and the transfer carries the same idempotency key.
+export async function recordReferralEarning(opts: {
+  invoiceId: string;
+  engineerId: string;
+  amountPaidPence: number;
+}) {
+  if (opts.amountPaidPence <= 0) return;
   const invitee = await prisma.engineer.findUnique({
-    where: { id: inviteeEngineerId },
+    where: { id: opts.engineerId },
     include: { referrer: true },
   });
-  if (!invitee?.referrerId || !invitee.referrer || invitee.referralBountyPaidAt) return;
+  if (!invitee?.referrerId || !invitee.referrer) return;
 
-  const activePlans = await prisma.plan.count({
-    where: { engineerId: inviteeEngineerId, status: "ACTIVE" },
-  });
-  if (activePlans < REFERRAL_REQUIRED_PLANS) return;
+  const ratePercent = referralRatePercent(invitee.createdAt);
+  const { feePence, amountPence } = referralCommission(opts.amountPaidPence, ratePercent);
+  if (amountPence <= 0) return;
 
-  // Anti-gaming: same-person / same-household referrals are voided by an admin
-  // flag (not modelled here) — this pays automatically for the clean case.
-  const paidAt = new Date();
-  await prisma.engineer.update({
-    where: { id: inviteeEngineerId },
-    data: { referralBountyPaidAt: paidAt },
-  });
+  const isFirst =
+    (await prisma.referralEarning.count({ where: { inviteeId: invitee.id } })) === 0;
+  let earning;
+  try {
+    earning = await prisma.referralEarning.create({
+      data: {
+        referrerId: invitee.referrerId,
+        inviteeId: invitee.id,
+        invoiceId: opts.invoiceId,
+        feePence,
+        ratePercent,
+        amountPence,
+      },
+    });
+  } catch (err) {
+    if ((err as { code?: string })?.code === "P2002") return; // already recorded
+    throw err;
+  }
 
   const ref = `${invitee.referrer.slug}<-${invitee.slug}`;
-  if (
-    stripeConfigured() &&
-    invitee.referrer.stripeAccountId &&
-    invitee.referrer.stripePayoutsEnabled
-  ) {
+  if (stripeConfigured() && invitee.referrer.stripeAccountId && invitee.referrer.stripePayoutsEnabled) {
     try {
-      await payReferralBounty(invitee.referrer.stripeAccountId, REFERRAL_BOUNTY_PENCE, ref);
+      const transfer = await payReferralCommission(
+        invitee.referrer.stripeAccountId,
+        amountPence,
+        ref,
+        opts.invoiceId,
+      );
+      await prisma.referralEarning.update({
+        where: { id: earning.id },
+        data: { transferId: transfer.id },
+      });
     } catch (err) {
-      console.error("[referral] bounty transfer failed:", err);
+      // Left with transferId null so it shows as owed in the admin ledger.
+      console.error("[referral] commission transfer failed:", err);
     }
   }
 
-  await track("referral_activated", { type: "SYSTEM" }, {
+  await track("referral_commission_earned", { type: "SYSTEM" }, {
     referrerId: invitee.referrerId,
-    inviteeId: inviteeEngineerId,
-    bountyPence: REFERRAL_BOUNTY_PENCE,
+    inviteeId: invitee.id,
+    invoiceId: opts.invoiceId,
+    ratePercent,
+    amountPence,
   });
-  await notifyEngineer(
-    invitee.referrerId,
-    `💷 ${invitee.tradingName?.trim() || "Your referral"}'s first plan just went live — your £${REFERRAL_BOUNTY_PENCE / 100} is in your next payout.`,
-  );
+
+  // One ping when an invitee first starts earning for them, not one per
+  // collection — that would be a text every month per customer.
+  if (isFirst) {
+    const name = invitee.tradingName?.trim() || "Your referral";
+    const body = `💷 ${name}'s first customer just paid — you now earn ${ratePercent}% of our fee on every plan they sell.`;
+    await notifyEngineer(invitee.referrerId, body);
+    await sendPushNotification(invitee.referrerId, "You're earning from a referral", body, {
+      url: "/referral",
+    });
+  }
 }

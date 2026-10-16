@@ -1,39 +1,71 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, Share, Linking, Image } from "react-native";
+import { View, Text, ScrollView, Share, Linking } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, Button } from "@/components/ui";
+import { Skeleton, Bone, TextBone, LoadingImage } from "@/components/skeleton";
 
 type Invitee = {
   name: string;
-  stage: "signed_up" | "verified" | "plan_live" | "paid";
-  bountyPaid: boolean;
+  stage: "signed_up" | "verified" | "plan_live" | "earning";
+  activePlans: number;
+  earnedPence: number;
+  ratePercent: number;
 };
 type Data = {
   link: string;
   qrDataUrl: string;
   cardUrl: string;
-  bountyPence: number;
+  firstYearPercent: number;
+  lifetimePercent: number;
+  firstYearMonths: number;
+  totalEarnedPence: number;
   hasPayout: boolean;
-  paidCount: number;
   invitees: Invitee[];
 };
 
-// Build Guide v2 Part 14 — "The referral ladder per invitee: Signed up →
-// Verified → Plan live → £50 paid."
+// Build Review 2, ruling 4 — the ladder per invitee now ends in "Earning"
+// (their customers are paying, so you are) instead of a one-off £50.
 const STAGE_LABEL: Record<Invitee["stage"], string> = {
-  signed_up: "SIGNED UP",
-  verified: "VERIFIED",
-  plan_live: "PLAN LIVE",
-  paid: "£50 PAID",
+  signed_up: "Signed up",
+  verified: "Verified",
+  plan_live: "Plan live",
+  earning: "Earning",
 };
 const STAGE_INDEX: Record<Invitee["stage"], number> = {
   signed_up: 0,
   verified: 1,
   plan_live: 2,
-  paid: 3,
+  earning: 3,
 };
+
+function pounds(pence: number) {
+  return `£${(pence / 100).toFixed(2)}`;
+}
+
+// The deal hero, the income card and QR (as ring-spinner panels, since
+// they're images), then the referrals list.
+function ReferralSkeleton() {
+  return (
+    <Skeleton label="Loading your invite" className="gap-3.5">
+      <Card variant="hero" className="items-center py-5">
+        <Bone width={90} height={36} radius={8} />
+        <TextBone width={210} size={14} style={{ marginTop: 4 }} />
+        <TextBone width={240} size={12} style={{ marginTop: 2 }} />
+      </Card>
+      <Card className="items-center border-line-strong py-4">
+        <Bone width={260} height={137} radius={10} />
+        <TextBone width={170} size={11} style={{ marginTop: 8 }} />
+      </Card>
+      <Card className="items-center py-4">
+        <Bone width={140} height={140} radius={8} />
+        <TextBone width={220} size={11} style={{ marginTop: 8 }} />
+        <TextBone width={200} size={12} style={{ marginTop: 6 }} />
+      </Card>
+    </Skeleton>
+  );
+}
 
 export default function Referral() {
   const [data, setData] = useState<Data | null>(null);
@@ -88,7 +120,6 @@ export default function Referral() {
     }
   }
 
-  const bounty = data ? `£${(data.bountyPence / 100).toFixed(0)}` : "£50";
 
   return (
     <View className="flex-1 bg-panel">
@@ -98,27 +129,39 @@ export default function Referral() {
       <ScrollView className="flex-1" contentContainerClassName="gap-3.5 px-4 pb-8 pt-4">
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
+        {!data && !error && <ReferralSkeleton />}
+
         {data && (
           <>
-            {/* E10 — the £50 hero card, the screen's money moment. */}
+            {/* Ruling 4 — the hero states the affiliate deal; the green figure is
+                only ever real money earned so far. */}
             <Card variant="hero" className="items-center py-5">
-              <Text className="font-mono font-semibold text-4xl text-copper">{bounty}</Text>
-              <Text className="mt-1 font-semibold text-sm text-white">
-                for every engineer you bring in
+              <Text className="text-center text-xl font-bold text-white">
+                Earn {data.firstYearPercent}% of our fee
               </Text>
-              <Text className="mt-0.5 font-sans text-xs text-night-muted">
-                Paid into your payout when their first plan goes live
+              <Text className="mt-1 text-center font-sans text-sm text-white">
+                on every plan the engineers you bring in sell — for their first year, then{" "}
+                {data.lifetimePercent}% for life.
               </Text>
+              {data.totalEarnedPence > 0 && (
+                <Text className="mt-3 font-mono font-semibold text-2xl text-copper">
+                  {pounds(data.totalEarnedPence)}
+                  <Text className="font-sans text-xs text-night-muted"> earned so far</Text>
+                </Text>
+              )}
             </Card>
 
             {/* Part 14 — "Share my income card... soft-gated ('Unlocks with
                 your first payout') until there's a real card to share." */}
             <Card className="items-center border-line-strong py-4">
-              <Image
-                source={{ uri: data.cardUrl }}
-                style={{ width: 260, height: 137, borderRadius: 10 }}
+              <LoadingImage
+                uri={data.cardUrl}
+                width={260}
+                height={137}
+                radius={10}
                 resizeMode="cover"
                 blurRadius={data.hasPayout ? 0 : 8}
+                accessibilityLabel="Your income card"
               />
               <Text className="mt-2 font-sans text-[11px] text-faint">
                 {data.hasPayout
@@ -138,10 +181,12 @@ export default function Referral() {
             </Card>
 
             <Card className="items-center py-4">
-              <Image
-                source={{ uri: data.qrDataUrl }}
-                style={{ width: 140, height: 140 }}
+              <LoadingImage
+                uri={data.qrDataUrl}
+                width={140}
+                height={140}
                 resizeMode="contain"
+                accessibilityLabel="QR code for your invite link"
               />
               <Text className="mt-2 font-sans text-[11px] text-faint">
                 Or let them scan or copy your invite link.
@@ -155,20 +200,25 @@ export default function Referral() {
               <Micro className="mb-1.5">Your referrals</Micro>
               {data.invitees.length === 0 ? (
                 <Text className="py-1 font-sans text-xs text-muted">
-                  No referrals yet — share your link below.
+                  No referrals yet. Share your link to get started.
                 </Text>
               ) : (
                 data.invitees.map((r, i) => (
                   <View key={i} className="border-b border-line-soft py-2.5 last:border-b-0">
                     <View className="flex-row items-center justify-between">
                       <Text className="font-bold text-sm text-ink">{r.name}</Text>
-                      {r.bountyPaid ? (
-                        <Pill tone="ok">{bounty} PAID</Pill>
-                      ) : (
-                        <Pill tone="info">{STAGE_LABEL[r.stage]}</Pill>
-                      )}
+                      <Pill tone="info">{STAGE_LABEL[r.stage]}</Pill>
                     </View>
-                    {!r.bountyPaid && (
+                    {r.stage === "earning" ? (
+                      <View className="mt-1 flex-row items-center justify-between">
+                        <Text className="font-sans text-xs text-muted">
+                          {r.activePlans} plan{r.activePlans === 1 ? "" : "s"} live · you get {r.ratePercent}% of our fee
+                        </Text>
+                        <Text className="font-mono text-sm font-semibold text-copper">
+                          {pounds(r.earnedPence)}
+                        </Text>
+                      </View>
+                    ) : (
                       <View className="mt-1.5 h-2 overflow-hidden rounded-full bg-line-soft">
                         <View
                           className="h-full rounded-full bg-flame"
@@ -184,9 +234,11 @@ export default function Referral() {
             <Card>
               <Micro className="mb-1">The deal, plainly</Micro>
               <Text className="font-sans text-xs text-muted">
-                Flat {bounty} per engineer — no limit, no ongoing cut. Paid in the next Friday
-                payout once their first plan goes live. Self-referrals and same-household gaming
-                are voided.
+                Every installer is an affiliate. For each engineer you bring in, you earn{" "}
+                {data.firstYearPercent}% of TradeSura&apos;s fee on every plan they sell for their
+                first {data.firstYearMonths} months, then {data.lifetimePercent}% for as long as they
+                use TradeSura. It goes into your Friday payout. One level only — you don&apos;t earn on
+                their referrals. Self-referrals and same-household referrals are voided.
               </Text>
             </Card>
           </>

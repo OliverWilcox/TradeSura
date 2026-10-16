@@ -3,10 +3,13 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import {
+  belongsToAnotherPlatform,
   createAccountOnboardingLink,
+  ensureRecipientConfiguration,
   getOrCreateConnectAccount,
   stripeConfigured,
 } from "@/lib/stripe";
+import { appUrl } from "@/lib/app-url";
 
 // The only Stripe Connect onboarding initiator — the engineer surface is
 // mobile-only. Returns the account-link URL as JSON (bearer-authenticated
@@ -24,7 +27,28 @@ export async function GET() {
     );
   }
 
-  const engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
+  let engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
+  if (engineer.stripeAccountId) {
+    try {
+      // Merchant-only accounts from before the recipient fix pick it up here,
+      // so the link below collects whatever transfers still needs.
+      await ensureRecipientConfiguration(engineer.stripeAccountId);
+    } catch (err) {
+      if (!belongsToAnotherPlatform(err)) throw err;
+      // Saved under an earlier test platform (the key has since changed), so
+      // this key can't see it. Nothing can be charged through it — start
+      // payment setup again on a fresh account.
+      engineer = await prisma.engineer.update({
+        where: { id: engineerId },
+        data: {
+          stripeAccountId: null,
+          stripeDetailsSubmitted: false,
+          stripeChargesEnabled: false,
+          stripePayoutsEnabled: false,
+        },
+      });
+    }
+  }
   const accountId = await getOrCreateConnectAccount(engineer);
   if (accountId !== engineer.stripeAccountId) {
     await prisma.engineer.update({
@@ -37,8 +61,8 @@ export async function GET() {
   // Stripe's Account Links API only accepts http(s) return/refresh URLs, not
   // a bare custom scheme — connect-return bounces on to tradesura://onboarding.
   const url = await createAccountOnboardingLink(accountId, {
-    returnUrl: `${process.env.APP_URL}/api/stripe/connect-return?stripe=return`,
-    refreshUrl: `${process.env.APP_URL}/api/stripe/connect-return?stripe=refresh`,
+    returnUrl: `${appUrl()}/api/stripe/connect-return?stripe=return`,
+    refreshUrl: `${appUrl()}/api/stripe/connect-return?stripe=refresh`,
   });
   return NextResponse.json({ url });
 }

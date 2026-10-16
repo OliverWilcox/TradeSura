@@ -43,11 +43,13 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
   {
     code: "ANNUAL_SERVICE",
     title: "Annual boiler service",
-    kind: "CORE",
+    // Build Review 2, ruling 2 — ticked by default but optional, so an
+    // engineer who didn't fit the boiler can sell a priority-only plan.
+    kind: "ADD",
     status: "SAFE",
     category: CAT_CORE,
     upliftPence: null,
-    pricingLabel: "core — in every tier",
+    pricingLabel: "ticked by default",
     bodyText:
       "We will carry out one scheduled service of your boiler in each 12-month plan period, including the safety checks and maintenance recommended by the manufacturer.",
   },
@@ -175,7 +177,9 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
   // ---------- Warranty & admin ----------
   {
     code: "WARRANTY_VALID",
-    title: "Manufacturer warranty kept valid — service on schedule, logged",
+    // Build Review 2 — the old title read like a guarantee TradeSura can't
+    // give. Wording pending James's confirmation.
+    title: "Annual service on schedule and logged for your manufacturer warranty",
     kind: "ADD",
     status: "SAFE",
     category: CAT_WARRANTY,
@@ -475,7 +479,20 @@ export function withRequiredClauses(codes: string[]): string[] {
   return [...new Set([...codes, ...REQUIRED_CLAUSE_CODES])];
 }
 
-// Base for the self-assembling price suggestion: the two core clauses plus the
+// Pre-ticked in a new plan but removable (Build Review 2, ruling 2).
+export const DEFAULT_ON_CLAUSE_CODES = ["ANNUAL_SERVICE"];
+
+// Without the annual service a plan must still offer something beyond the
+// required priority line — "at least one other approved option is ticked".
+export function serviceRuleError(codes: string[]): string | null {
+  if (codes.includes("ANNUAL_SERVICE")) return null;
+  const extras = codes.filter((c) => !REQUIRED_CLAUSE_CODES.includes(c));
+  return extras.length > 0
+    ? null
+    : "Without the annual service, tick at least one other option so the plan still includes something.";
+}
+
+// Base for the self-assembling price suggestion: service + priority plus the
 // engineer's own margin. Uplifts stack on top of this.
 export const SUGGESTED_BASE_PENCE = 700;
 
@@ -533,9 +550,10 @@ export const TIER_PRESETS = [
   },
 ] as const;
 
-// E6 price stepper bounds (Build Spec v1: £8–£25).
-export const TIER_PRICE_MIN_PENCE = 800;
-export const TIER_PRICE_MAX_PENCE = 2500;
+// Build Review 2, ruling 1 — the engineer sets their own price: £10 minimum,
+// no business maximum. The max is only a typo guard (£1,000/month).
+export const TIER_PRICE_MIN_PENCE = 1000;
+export const TIER_PRICE_MAX_PENCE = 100000;
 
 // Expectation management (handover 1.4). One source of truth — shown on the
 // signup page, the customer portal and in the plan document email.

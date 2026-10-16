@@ -124,9 +124,10 @@ export function NotIncluded() {
         What&apos;s not included
       </p>
       <p className="text-xs text-warn leading-relaxed">
-        <b>Breakdown repairs.</b> If something breaks, your engineer prioritises you and repair
-        work is chargeable at your plan discount. This plan is a maintenance &amp; priority
-        agreement, not an insurance policy.
+        <b>Breakdown repairs.</b>{" "}
+        If something breaks, your engineer prioritises you and repair work is chargeable at your
+        plan discount. This plan is a maintenance &amp; priority agreement, not an insurance
+        policy.
       </p>
     </div>
   );

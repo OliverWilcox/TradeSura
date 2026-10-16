@@ -22,9 +22,15 @@ const TOKEN_KEY = "ts_engineer_token";
 const STRIPE_SKIPPED_KEY = "ts_stripe_skipped";
 const HAS_SIGNED_IN_KEY = "ts_has_signed_in_before";
 const HAS_SEEN_FIRST_PAYOUT_KEY = "ts_has_seen_first_payout";
+const PUSH_PROMPTED_KEY = "ts_push_prompted";
 
 // process.env.EXPO_PUBLIC_* is inlined by Metro at build time — see .env.example.
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+// Absolute URL for a backend web page (terms, privacy) opened in a browser.
+export function apiUrl(path: string): string {
+  return `${API_URL ?? ""}${path}`;
+}
 
 export async function getToken(): Promise<string | null> {
   return SecureStore.getItemAsync(TOKEN_KEY);
@@ -115,14 +121,22 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       },
     });
   } catch (e) {
+    // 4 Oct notes — every error says what happened and what to do next.
     throw new ApiError(
-      `Couldn't reach the server at ${API_URL} — ${e instanceof Error ? e.message : "check it's running and reachable from this device"}.`,
+      __DEV__
+        ? `Couldn't reach the server at ${API_URL} — ${e instanceof Error ? e.message : "check it's running and reachable from this device"}.`
+        : "We couldn't reach TradeSura — check your signal and try again.",
       0,
     );
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(data.error ?? "Something went wrong.", res.status, data);
+    throw new ApiError(
+      data.error ??
+        "That didn't go through. Please try again — if it keeps happening, email info@tradesura.com",
+      res.status,
+      data,
+    );
   }
   return data as T;
 }
@@ -150,4 +164,37 @@ export async function apiText(path: string): Promise<string> {
     throw new ApiError("Couldn't download that file.", res.status);
   }
   return res.text();
+}
+
+// Part 11 — the push pre-prompt is offered once per device; "Not now" is an
+// answer, not a snooze. The OS prompt only ever follows a yes.
+export async function getPushPrompted(): Promise<boolean> {
+  return (await SecureStore.getItemAsync(PUSH_PROMPTED_KEY)) === "1";
+}
+
+export async function setPushPrompted(): Promise<void> {
+  await SecureStore.setItemAsync(PUSH_PROMPTED_KEY, "1");
+}
+
+// Sign-up progress (30 Sept build notes, step 1 item 12): whatever was typed
+// is still there if the engineer leaves the app mid-way. Small JSON — no
+// photos — so it fits SecureStore's per-value limit.
+const SIGNUP_DRAFT_KEY = "ts_signup_draft";
+
+export async function getSignupDraft<T>(): Promise<T | null> {
+  const raw = await SecureStore.getItemAsync(SIGNUP_DRAFT_KEY).catch(() => null);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function setSignupDraft(draft: unknown): Promise<void> {
+  await SecureStore.setItemAsync(SIGNUP_DRAFT_KEY, JSON.stringify(draft)).catch(() => {});
+}
+
+export async function clearSignupDraft(): Promise<void> {
+  await SecureStore.deleteItemAsync(SIGNUP_DRAFT_KEY).catch(() => {});
 }

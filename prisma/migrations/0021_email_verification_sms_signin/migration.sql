@@ -1,0 +1,1 @@
+ALTER TABLE "Engineer" ADD COLUMN "emailVerifiedAt" TIMESTAMP(3), ADD COLUMN "smsSignInEnabled" BOOLEAN NOT NULL DEFAULT false;

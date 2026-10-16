@@ -18,7 +18,7 @@ export function EmergencyStop({ onAcknowledged }: { onAcknowledged: () => void }
         </h1>
         <ul className="text-sm space-y-2 list-disc pl-5">
           <li>
-            <b>Do not</b> use light switches, plugs or naked flames.
+            <b>Do not</b>{" "}use light switches, plugs or naked flames.
           </li>
           <li>Open windows and doors.</li>
           <li>Turn the gas off at the meter if you can do so safely.</li>

@@ -1,10 +1,12 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import CursorGlow from "@/components/cursor-glow";
+import Link from "next/link";
+import { RingMark } from "@/components/ring-mark";
+import { SiteHeader } from "@/components/site-header";
 
 // Same language law as the mobile app's welcome screen (app/assets/TradeSura_Welcome_Screen_W0.html
 // §1): never "insurance", "cover", "protection", "warranty", "doorstep" in customer-facing copy.
@@ -102,18 +104,22 @@ export default function HomePage() {
   return (
     <div ref={root} className="flex min-h-full flex-col bg-black text-ink">
       <CursorGlow />
+      <SiteHeader />
       <main className="flex-1">
         {/* Hero */}
         <section className="relative flex min-h-[92vh] flex-col items-center justify-center overflow-hidden px-6 py-24 text-center">
           <div className="relative flex flex-col items-center gap-6">
-            <Image
-              src="/brand/lockup.png"
-              alt="TradeSura"
-              width={340}
-              height={72}
-              priority
-              className="hero-fade h-auto w-[240px] sm:w-[320px]"
-            />
+            {/* Real vector mark + live text, not the old raster lockup —
+                that image was distorted here anyway (a fixed 340x72 box
+                that didn't match the source's true aspect ratio). See
+                components/ring-mark.tsx. */}
+            <div className="hero-fade flex items-center gap-3">
+              <RingMark size={48} />
+              <span className="text-4xl font-extrabold sm:text-6xl">
+                <span className="text-white">Trade</span>
+                <span className="text-[#5FA3F0]">Sura</span>
+              </span>
+            </div>
             <p className="hero-fade text-lg font-semibold text-flame sm:text-xl">Your trade. On plan.</p>
             <h1 className="hero-fade max-w-2xl text-3xl font-bold leading-tight sm:text-5xl">
               Your customers, paying you <span className="text-ok">every month.</span>
@@ -237,7 +243,15 @@ export default function HomePage() {
       <footer className="relative border-t border-line px-6 py-4 text-xs text-faint">
         <div className="flex items-center justify-between">
           <span className="font-semibold text-ink">TradeSura.com</span>
-          <span>© 2026 TradeSura Ltd · info@tradesura.com</span>
+          <span className="flex items-center gap-4">
+            <Link href="/terms" className="hover:text-ink">
+              Terms of service
+            </Link>
+            <Link href="/privacy" className="hover:text-ink">
+              Privacy
+            </Link>
+            <span>© 2026 TradeSura Ltd · info@tradesura.com</span>
+          </span>
         </div>
         <p className="mt-2 text-center text-[11px] text-faint/80 sm:text-left">
           TradeSura Ltd · Registered in England &amp; Wales, Company No. 17325346 · Registered

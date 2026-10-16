@@ -60,11 +60,21 @@ model Engineer {
   firstName         String?
   lastName          String?
   phone             String?    @unique // E.164, verified by SMS OTP at signup
+  emailVerifiedAt DateTime?
+  smsSignInEnabled Boolean @default(false)
   phoneVerifiedAt   DateTime?
+  // Sign in with Apple's stable user id (the identity token's `sub`), set
+  // when the engineer signs up with "Continue with Apple" (30 Sept build
+  // notes, step 1 item 5). Apple only sends name/email the first time, so
+  // this is what recognises them on every later Apple sign-in.
+  appleSub          String?    @unique
   tradingName       String?
   logoUrl           String?
   businessType      String? // sole_trader | ltd | partnership
   companyNumber     String?
+  // Companies House company_status at signup (active, dissolved, liquidation…).
+  // Flagged, never blocking, in the admin verification queue.
+  companyStatus     String?
   postcode          String? // business postcode, not shown to customers
   marketingConsent  Boolean    @default(false)
   gasSafeNo                String?    @unique // review #13 — one licence, one account
@@ -76,6 +86,13 @@ model Engineer {
   // engineer entered didn't match our register on signup, so they can
   // continue (manual-review escape hatch) rather than being dead-ended.
   gasSafeReviewRequestedAt DateTime?
+  // 29 Sept review — verification is a human decision, not a register
+  // auto-match: signup submits the number + ID-card photo into the admin
+  // queue (app/admin/verifications), which sets gasSafeVerifiedAt or
+  // gasSafeRejectedAt. Card photo lives in Blob under an unguessable path.
+  gasSafeCardUrl           String?
+  gasSafeRejectedAt        DateTime?
+  gasSafeRejectReason      String?
   // Build Guide v2 Part 11 — push notifications. Set once the app has asked
   // permission (after the first plan goes live, per spec) and registered a
   // real device token via POST /api/me/push-token. Null means either the
@@ -99,11 +116,28 @@ model Engineer {
   attribution      Json?
   packAddress      String? // founding-member pack postal address
   packRequestedAt  DateTime?
+  // Part 17.4 — the pack queues on request but only ships once the badge is
+  // live; set from the admin queue's "Packs to post" list when it's posted.
+  packShippedAt     DateTime?
   // E10 — who brought this engineer in, and whether their £50 bounty is paid.
   referrerId           String?
   referrer             Engineer?  @relation("Referrals", fields: [referrerId], references: [id])
   referrals            Engineer[] @relation("Referrals")
-  referralBountyPaidAt DateTime?
+  referralBountyPaidAt DateTime? // retired flat-£50 scheme; kept for history
+  // Build Review 2, section 8 — team accounts. A staff engineer is an Engineer
+  // row with ownerId set to the business owner. Staff sign in to their own
+  // account but act inside the owner's business: customers, plans and money
+  // stay on the owner's row. Removing staff sets staffRemovedAt; access stops
+  // on the next request (lib/auth.ts getActor).
+  ownerId              String?
+  owner                Engineer?  @relation("Team", fields: [ownerId], references: [id])
+  staff                Engineer[] @relation("Team")
+  staffRemovedAt       DateTime?
+  customersAdded       Customer[] @relation("CustomerAddedBy")
+  plansSold            Plan[]     @relation("PlanSoldBy")
+  deletedAt            DateTime? // in-app account deletion (App Store 5.1.1); row anonymised
+  referralEarnings     ReferralEarning[] @relation("ReferralEarnings")
+  referredEarnings     ReferralEarning[] @relation("ReferredEarnings")
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
   customers         Customer[]
@@ -122,6 +156,9 @@ model Customer {
   smsOptOut    Boolean    @default(false)
   stripeCustomerId String?
   source       String     @default("added") // added | doorstep | web | import | contacts
+  // Section 8 — the staff engineer who added them (null = the owner).
+  addedById    String?
+  addedBy      Engineer?  @relation("CustomerAddedBy", fields: [addedById], references: [id])
   createdAt    DateTime   @default(now())
   properties   Property[]
   plans        Plan[]
@@ -221,8 +258,45 @@ model Plan {
   // lib/plan-tier.ts and prefer this, so editing the live tier never rewrites
   // an existing agreement. Null for plans created before this column.
   agreedTier             Json?
+  priceReviews           PriceReview[]
+  // Section 8 — staff engineer who made the sale ("signed up by"); null = owner.
+  soldById               String?
+  soldBy                 Engineer?  @relation("PlanSoldBy", fields: [soldById], references: [id])
   createdAt              DateTime   @default(now())
   updatedAt              DateTime   @updatedAt
+}
+
+// Signup phone codes (30 Sept build notes, step 1 item 15): a code works
+// once, expires after 10 minutes, and 5 wrong tries block the number for 15
+// minutes. Only the code's hash is stored.
+model PhoneOtp {
+  id          String    @id @default(cuid())
+  phone       String // E.164
+  codeHash    String
+  expiresAt   DateTime
+  attempts    Int       @default(0)
+  usedAt      DateTime?
+  lockedUntil DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([phone, createdAt])
+}
+
+// Sign-in codes (4 Oct build notes, section 2): email (text once SMS is
+// live) → 6-digit code → signed in. Same rules as PhoneOtp: 10-minute life,
+// single use, 5 wrong tries block the account for 15 minutes. Hash only.
+model SignInCode {
+  id          String    @id @default(cuid())
+  engineerId  String
+  channel     String // email | sms
+  codeHash    String
+  expiresAt   DateTime
+  attempts    Int       @default(0)
+  usedAt      DateTime?
+  lockedUntil DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([engineerId, createdAt])
 }
 
 model GasSafeRecord {
@@ -294,4 +368,43 @@ model StripeWebhookEvent {
   type        String
   payload     Json
   processedAt DateTime @default(now())
+}
+
+// Build Review 2, ruling 4 — every installer is an affiliate: 25% of
+// TradeSura's fee on plans sold by engineers they bring in, for that
+// engineer's first 12 months, then 10% for life. One level only. One row per
+// paid customer invoice; invoiceId makes the webhook safe to replay.
+model ReferralEarning {
+  id          String   @id @default(cuid())
+  referrerId  String
+  referrer    Engineer @relation("ReferralEarnings", fields: [referrerId], references: [id])
+  inviteeId   String
+  invitee     Engineer @relation("ReferredEarnings", fields: [inviteeId], references: [id])
+  invoiceId   String   @unique
+  feePence    Int // TradeSura's 20% on that invoice
+  ratePercent Int // 25 in the invitee's first 12 months, then 10
+  amountPence Int
+  transferId  String? // Stripe transfer to the referrer, once sent
+  createdAt   DateTime @default(now())
+
+  @@index([referrerId, createdAt])
+}
+
+// Build Review 2, ruling 3 — annual price review for existing customers. At
+// most once a year per plan, 30 days' notice by text and email with the old
+// price, new price, start date and a free cancel link. Applied on
+// effectiveAt by the daily job (lib/price-review.ts).
+model PriceReview {
+  id           String    @id @default(cuid())
+  planId       String
+  plan         Plan      @relation(fields: [planId], references: [id])
+  oldPence     Int
+  newPence     Int
+  noticeSentAt DateTime  @default(now())
+  effectiveAt  DateTime
+  appliedAt    DateTime?
+  voidedAt     DateTime? // plan ended before the new price started
+
+  @@index([planId])
+  @@index([effectiveAt])
 }

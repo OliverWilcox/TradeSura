@@ -3,7 +3,9 @@ import { View, Text, ScrollView, RefreshControl, Pressable, Alert } from "react-
 import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Pill, Button } from "@/components/ui";
+import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 
 type DueItem = {
   customerId: string;
@@ -135,7 +137,38 @@ function JobRow({
 }
 
 // Screen 07 — service calendar & reminders (lite).
+// Intro, the (real, empty) week strip, then next and past jobs as rows.
+function JobsSkeleton() {
+  return (
+    <Skeleton label="Loading your reminders" className="gap-3.5">
+      <View>
+        <TextBone width="95%" size={14} />
+        <TextBone width="60%" size={14} />
+      </View>
+      <WeekStrip jobDates={new Set()} />
+      {[3, 2].map((rows, card) => (
+        <Card key={card}>
+          <TextBone width={80} size={14} style={{ marginBottom: 4 }} />
+          {Array.from({ length: rows }, (_, i) => (
+            <View
+              key={i}
+              className={`flex-row items-center justify-between gap-2 py-2.5 ${i < rows - 1 ? "border-b border-line-soft" : ""}`}
+            >
+              <View className="flex-1">
+                <TextBone width={[130, 110, 150][i]} size={14} />
+                <TextBone width={[180, 160, 200][i]} size={11} />
+              </View>
+              <Bone width={64} height={22} radius={11} />
+            </View>
+          ))}
+        </Card>
+      ))}
+    </Skeleton>
+  );
+}
+
 export default function Jobs() {
+  const { me } = useAuth();
   const [data, setData] = useState<JobsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -201,6 +234,8 @@ export default function Jobs() {
       >
         <Text className="text-[28px] font-extrabold tracking-tight text-ink">Reminders</Text>
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
+
+        {!data && !error && <JobsSkeleton />}
 
         {data && (
           <>
@@ -307,9 +342,29 @@ export default function Jobs() {
               </Text>
             </Card>
 
-            <Button variant="copper" onPress={() => router.push("/offer")}>
-              Offer a plan to a no-plan customer
-            </Button>
+            {/* Build Review 2 — nothing to offer (no live plan) or no one to
+                offer it to: grey it out and point at setup, like the other
+                locked buttons. */}
+            {me?.hasPlan && (me?.customerCount ?? 0) > 0 ? (
+              <Button variant="copper" onPress={() => router.push("/offer")}>
+                Offer a plan to a no-plan customer
+              </Button>
+            ) : (
+              <>
+                <Button variant="copper" disabled onPress={() => {}}>
+                  Offer a plan to a no-plan customer
+                </Button>
+                {me?.role === "staff" ? (
+                  <Text className="text-center font-sans text-xs text-muted">
+                    {me?.hasPlan ? "Add a customer first." : "The business has no live plan yet — ask the owner."}
+                  </Text>
+                ) : (
+                  <Button variant="ghost" onPress={() => router.push("/onboarding")}>
+                    {me?.hasPlan ? "Add your customers first — Continue setup" : "Make a plan live first — Continue setup"}
+                  </Button>
+                )}
+              </>
+            )}
           </>
         )}
       </ScrollView>

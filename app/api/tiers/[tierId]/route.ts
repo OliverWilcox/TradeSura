@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { checkWording } from "@/lib/compliance/blocklist";
-import { TIER_PRICE_MIN_PENCE, TIER_PRICE_MAX_PENCE, withRequiredClauses } from "@/lib/clauses";
+import { TIER_PRICE_MIN_PENCE, TIER_PRICE_MAX_PENCE, serviceRuleError, withRequiredClauses } from "@/lib/clauses";
 
 const Body = z.object({
   name: z.string().min(2).max(28),
@@ -77,7 +77,11 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Check the form and try again." }, { status: 400 });
+    const priceIssue = parsed.error.issues.some((i) => i.path[0] === "priceMonthlyPence");
+    return NextResponse.json(
+      { error: priceIssue ? "The minimum plan price is £10 a month." : "Check the form and try again." },
+      { status: 400 },
+    );
   }
 
   // Locked wording: every free-text label passes the blocklist server-side.
@@ -92,9 +96,13 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
   // rather than trusting the client picker alone.
   const wantedCodes = withRequiredClauses(parsed.data.clauseCodes);
   const clauses = await prisma.clauseTemplate.findMany({ where: { code: { in: wantedCodes } } });
-  if (clauses.length === 0) {
-    return NextResponse.json({ error: "Pick at least one service." }, { status: 400 });
+  // Unknown codes used to be dropped silently, which stripped a plan down to
+  // its required line when a client sent ids instead of codes.
+  if (clauses.length !== wantedCodes.length) {
+    return NextResponse.json({ error: "Some of those options aren't recognised — reopen the plan and try again." }, { status: 400 });
   }
+  const ruleError = serviceRuleError(wantedCodes);
+  if (ruleError) return NextResponse.json({ error: ruleError }, { status: 400 });
 
   await prisma.$transaction([
     prisma.tierClause.deleteMany({ where: { tierId } }),

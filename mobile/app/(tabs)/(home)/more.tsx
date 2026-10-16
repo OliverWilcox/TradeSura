@@ -1,13 +1,15 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, ScrollView, RefreshControl, Pressable, Linking, Image } from "react-native";
+import { View, Text, TextInput, ScrollView, RefreshControl, Pressable, Linking } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as ImagePicker from "expo-image-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { api, ApiError } from "@/lib/api";
+import { api, apiUrl, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
-import { AppHeader, Avatar, Card, Pill, RowLine, Button, Chevron } from "@/components/ui";
+import { AppHeader, Avatar, Card, Pill, RowLine, Button, Chevron, OpeningStripe } from "@/components/ui";
+import { Skeleton, TextBone, RowBone, LoadingImage } from "@/components/skeleton";
+import { StaffAccount } from "@/components/staff-account";
 
 type MoreData = {
   totalPence: number;
@@ -51,7 +53,14 @@ const BUSINESS_TYPE_LABELS: Record<string, string> = {
 // More hub — settings, Stripe status, payouts summary, sign out.
 // The full Payouts & Collections screen (Screen 12) is P1 and stays web-only;
 // this is just the summary CLAUDE.md scoped into the hub.
+// Build Review 2, section 8 — staff get a cut-down Account: no business
+// settings, payments, Team or Refer.
 export default function More() {
+  const { me } = useAuth();
+  return me?.role === "staff" ? <StaffAccount /> : <OwnerAccount />;
+}
+
+function OwnerAccount() {
   const { me, refreshMe, signOut } = useAuth();
   const [data, setData] = useState<MoreData | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -59,6 +68,8 @@ export default function More() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [tradingName, setTradingName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [savedSettings, setSavedSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -78,6 +89,8 @@ export default function More() {
       setData(m);
       setSettings(s);
       setTradingName(s.tradingName);
+      setFirstName(s.firstName ?? "");
+      setLastName(s.lastName ?? "");
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't load this page.");
@@ -96,18 +109,35 @@ export default function More() {
     setRefreshing(false);
   }
 
-  const dirty = settings ? tradingName !== settings.tradingName : false;
+  const dirty = settings
+    ? tradingName !== settings.tradingName ||
+      firstName !== (settings.firstName ?? "") ||
+      lastName !== (settings.lastName ?? "")
+    : false;
 
   async function saveSettings() {
     if (!settings) return;
+    if (!firstName.trim() || !lastName.trim()) {
+      setSettingsError("Enter your first and last name.");
+      return;
+    }
+    if (tradingName.trim().length < 2) {
+      setSettingsError("Enter your trading name — at least 2 characters.");
+      return;
+    }
     setSavingSettings(true);
     setSettingsError(null);
     try {
       await api("/api/settings", {
         method: "PATCH",
-        body: JSON.stringify({ tradingName, logoUrl: settings.logoUrl }),
+        body: JSON.stringify({
+          tradingName,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          logoUrl: settings.logoUrl,
+        }),
       });
-      setSettings({ ...settings, tradingName });
+      setSettings({ ...settings, tradingName, firstName: firstName.trim(), lastName: lastName.trim() });
       setSavedSettings(true);
       await refreshMe();
     } catch (e) {
@@ -235,15 +265,23 @@ export default function More() {
             <StatusLine status={settings.standing} />
           ) : (
             <View className="gap-2">
+              {!settings && !error && (
+                <Skeleton label="Loading your status" className="gap-2">
+                  <TextBone width="70%" size={14} />
+                  <TextBone width="60%" size={14} />
+                </Skeleton>
+              )}
               {settings && <StatusLine status={settings.gasSafe} />}
               {settings &&
                 (settings.payments.tone === "quiet" ? (
                   <StatusLine status={settings.payments} />
                 ) : (
                   <Pressable onPress={connectStripe} disabled={stripeBusy}>
-                    <Text className="font-sans text-sm text-warn">
-                      {stripeBusy ? "Opening…" : settings.payments.text}
-                    </Text>
+                    {stripeBusy ? (
+                      <OpeningStripe />
+                    ) : (
+                      <Text className="font-sans text-sm text-warn">{settings.payments.text}</Text>
+                    )}
                   </Pressable>
                 ))}
               {stripeError && <Text className="font-sans text-xs text-danger">{stripeError}</Text>}
@@ -253,14 +291,14 @@ export default function More() {
 
         <Card>
           <Text className="mb-1 font-semibold text-sm text-ink">Your business</Text>
-          {settings && (settings.firstName || settings.phone || settings.businessType) && (
+          {!settings && !error && (
+            <Skeleton label="Loading your business details" className="mb-1 mt-1">
+              <RowBone left={60} right={110} />
+              <RowBone left={100} right={90} />
+            </Skeleton>
+          )}
+          {settings && (settings.phone || settings.businessType) && (
             <View className="mb-1 mt-1">
-              {(settings.firstName || settings.lastName) && (
-                <RowLine
-                  left="Name"
-                  right={`${settings.firstName ?? ""} ${settings.lastName ?? ""}`.trim()}
-                />
-              )}
               {settings.phone && (
                 <RowLine
                   left="Mobile"
@@ -284,14 +322,45 @@ export default function More() {
               {settings.postcode && <RowLine left="Business postcode" right={settings.postcode} />}
             </View>
           )}
-          <Text className="mt-2 font-sans text-xs text-muted">Trading name</Text>
+          {/* Editable so accounts from older signup builds, which saved no
+              name, can add one — it drives the greeting and avatar initials. */}
+          <View className="mt-2 flex-row gap-2">
+            <View className="flex-1">
+              <Text className="font-sans text-xs text-muted">First name</Text>
+              <TextInput
+                value={firstName}
+                onChangeText={(v) => {
+                  setFirstName(v);
+                  setSavedSettings(false);
+                  setSettingsError(null);
+                }}
+                autoComplete="given-name"
+                className="mt-1 min-h-[48px] rounded-[10px] border border-line bg-paper px-3.5 font-sans text-[16px] text-ink"
+              />
+            </View>
+            <View className="flex-1">
+              <Text className="font-sans text-xs text-muted">Last name</Text>
+              <TextInput
+                value={lastName}
+                onChangeText={(v) => {
+                  setLastName(v);
+                  setSavedSettings(false);
+                  setSettingsError(null);
+                }}
+                autoComplete="family-name"
+                className="mt-1 min-h-[48px] rounded-[10px] border border-line bg-paper px-3.5 font-sans text-[16px] text-ink"
+              />
+            </View>
+          </View>
+          <Text className="mt-3 font-sans text-xs text-muted">Trading name</Text>
           <TextInput
             value={tradingName}
             onChangeText={(v) => {
               setTradingName(v);
               setSavedSettings(false);
+              setSettingsError(null);
             }}
-            className="mt-1 rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-sm text-ink"
+            className="mt-1 min-h-[48px] rounded-[10px] border border-line bg-paper px-3.5 font-sans text-[16px] text-ink"
           />
           <Text className="mt-3 font-sans text-xs text-muted">Logo (optional)</Text>
           <Pressable
@@ -301,9 +370,12 @@ export default function More() {
             style={({ pressed }) => (pressed ? { opacity: 0.5 } : undefined)}
           >
             {settings?.logoUrl ? (
-              <Image
-                source={{ uri: settings.logoUrl }}
-                className="h-12 w-12 rounded-lg bg-paper-2"
+              <LoadingImage
+                uri={settings.logoUrl}
+                width={48}
+                height={48}
+                radius={8}
+                accessibilityLabel="Your logo"
               />
             ) : (
               <View className="h-12 w-12 items-center justify-center rounded-lg border border-dashed border-line bg-paper-2">
@@ -335,7 +407,7 @@ export default function More() {
             <Button
               variant="ghost"
               onPress={saveSettings}
-              disabled={savingSettings || tradingName.length < 2}
+              disabled={savingSettings}
               className="mt-3"
             >
               {savingSettings ? "Saving…" : "Save changes"}
@@ -364,22 +436,21 @@ export default function More() {
         )}
 
         {/* Build Guide v2 Part 13 — four rows, each with a chevron: My
-            plans / Invite an engineer · £50 / WhatsApp support / Terms &
+            plans / Invite an engineer / WhatsApp support / Terms &
             privacy. Cut: "Payouts & collections" (duplicates the tab), "How
             to sell more plans" (moves into How it works — one home),
-            "Trades & TradePacks" (hidden for October). "Messages & tickets"
-            is the exception Part 13 allows for: it's the engineer's only
-            visibility into the gas-emergency interlock firing (see
-            messages.tsx) — load-bearing, so it stays. */}
+            "Trades & TradePacks" and "Messages & tickets" (both hidden for
+            October, Build Review 2). The gas-emergency interlock is still
+            surfaced: Home's Today list links to messages when it fires. */}
         <Card>
           <Pressable onPress={() => router.push("/plans")}>
             <RowLine left="My plans" right={<Chevron />} />
           </Pressable>
-          <Pressable onPress={() => router.push("/messages")}>
-            <RowLine left="Messages & tickets" right={<Chevron />} />
+          <Pressable onPress={() => router.push("/team")}>
+            <RowLine left="Team" right={<Chevron />} />
           </Pressable>
           <Pressable onPress={() => router.push("/referral")}>
-            <RowLine left="Invite an engineer · £50" right={<Chevron />} />
+            <RowLine left="Invite an engineer · earn 25% of our fee" right={<Chevron />} />
           </Pressable>
           <Pressable
             onPress={() =>
@@ -391,7 +462,7 @@ export default function More() {
             <RowLine left="WhatsApp support" right={<Chevron />} />
           </Pressable>
           <Pressable
-            onPress={() => router.push({ pathname: "/coming-soon", params: { title: "Terms & privacy" } })}
+            onPress={() => WebBrowser.openBrowserAsync(apiUrl("/terms")).catch(() => {})}
           >
             <RowLine left="Terms & privacy" right={<Chevron />} />
           </Pressable>
@@ -401,6 +472,10 @@ export default function More() {
         <Button variant="ghost" onPress={signOut}>
           Sign out
         </Button>
+        {/* Section 10 — App Store 5.1.1 needs in-app deletion. */}
+        <Pressable onPress={() => router.push("/delete-account")} className="items-center py-2">
+          <Text className="font-sans text-xs text-muted">Delete my account</Text>
+        </Pressable>
       </ScrollView>
     </View>
   );

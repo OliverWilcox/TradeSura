@@ -6,8 +6,9 @@ import { track } from "@/lib/track";
 import { sendSms } from "@/lib/sms";
 import { normaliseUkPhone } from "@/lib/phone";
 import { newPlanRef, newToken } from "@/lib/plans";
-import { createEmbeddedSubscription, publishableKey } from "@/lib/stripe";
+import { createEmbeddedSubscription, ensureRecipientConfiguration, isMissingDestination, publishableKey } from "@/lib/stripe";
 import { snapshotTier } from "@/lib/plan-tier";
+import { appUrl } from "@/lib/app-url";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 const Body = z.object({
@@ -17,6 +18,8 @@ const Body = z.object({
   phone: z.string().min(6).max(20),
   email: z.string().email().max(200).optional().or(z.literal("")),
   channel: z.enum(["web", "demo", "blast", "referral"]).default("web"),
+  // Section 8 — the staff engineer handing over their phone ("They're with me").
+  soldById: z.string().max(40).optional(),
 });
 
 // Public plan page (C1) → embedded checkout. No pre-created plan and no
@@ -51,6 +54,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     return NextResponse.json({ error: "That doesn't look like a UK mobile number." }, { status: 400 });
   }
 
+  // Only credit a current, verified staff member of this business; anything
+  // else is ignored rather than trusted from the page.
+  const seller = b.soldById
+    ? await prisma.engineer.findFirst({
+        where: {
+          id: b.soldById,
+          ownerId: engineer.id,
+          staffRemovedAt: null,
+          deletedAt: null,
+          gasSafeVerifiedAt: { not: null },
+        },
+        select: { id: true },
+      })
+    : null;
+
   const customer = await prisma.customer.upsert({
     where: { engineerId_phone: { engineerId: engineer.id, phone } },
     update: { email: b.email || undefined },
@@ -61,6 +79,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       phone,
       email: b.email || null,
       source: b.channel === "demo" ? "doorstep" : "web",
+      addedById: seller?.id ?? null,
     },
   });
 
@@ -78,6 +97,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     data: {
       ref: await newPlanRef(),
       engineerId: engineer.id,
+      soldById: seller?.id ?? null,
       customerId: customer.id,
       tierId: tier.id,
       priceMonthlyPence: tier.priceMonthlyPence,
@@ -90,7 +110,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   });
 
   const brand = brandName(engineer);
-  const base = `${process.env.APP_URL}/p/${engineer.slug}/signup/${plan.signupToken}`;
+  const base = `${appUrl()}/p/${engineer.slug}/signup/${plan.signupToken}`;
 
   await track("tier_selected", { type: "CUSTOMER", id: customer.id }, {
     planId: plan.id,
@@ -152,6 +172,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     });
   } catch (err) {
     console.error("[p/start] embedded subscription failed:", err);
+    if (isMissingDestination(err)) {
+      // The engineer's Stripe account can't receive transfers yet (merchant-
+      // only v2 account). Add the recipient configuration and mark payments
+      // unfinished so the app prompts them — a clear message beats a retry
+      // loop that can never succeed.
+      await ensureRecipientConfiguration(engineer.stripeAccountId!).catch((e) =>
+        console.error("[p/start] ensureRecipientConfiguration failed:", e),
+      );
+      await prisma.engineer.update({
+        where: { id: engineer.id },
+        data: { stripeChargesEnabled: false },
+      });
+      return NextResponse.json(
+        {
+          error: `${engineer.tradingName?.trim() || "This engineer"} needs to finish one step of their payment setup before you can join — nothing has been taken.`,
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { error: "Could not start the Direct Debit setup — try again in a minute." },
       { status: 502 },

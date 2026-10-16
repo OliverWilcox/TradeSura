@@ -11,6 +11,7 @@
 //   docs.stripe.com/connect/express-accounts (account links onboarding)
 import Stripe from "stripe";
 import { TRADESURA_FEE_RATE, BACS_PROCESSING_FEE_PENCE } from "@/lib/clauses";
+import { appUrl } from "@/lib/app-url";
 
 // CLAUDE.md: test/sandbox only. Go-live is a human sign-off — a hard stop,
 // not a config toggle. Mirrors the old assertSandbox() guard.
@@ -36,14 +37,74 @@ export function getStripe(): Stripe {
 }
 
 // ---------------------------------------------------------------------------
-// Engineer onboarding — Connect Express
+// Engineer onboarding — Connect v2 Accounts
 // ---------------------------------------------------------------------------
-
-const BUSINESS_TYPE: Record<string, Stripe.AccountCreateParams.BusinessType> = {
+// Accounts v1 (`stripe.accounts.create({ type: "express" })`) is disabled for
+// this platform — Stripe now requires new connected accounts to go through
+// the v2 Accounts API (docs.stripe.com/connect/accounts-v2). Migrated
+// 2026-09-23; field names verified against the installed SDK's own type
+// definitions (node_modules/stripe/.../V2/Core/Accounts.d.ts), not just docs.
+//
+// Configuration: `merchant` AND `recipient`. Merchant makes the engineer the
+// merchant of record (on_behalf_of); recipient carries the
+// stripe_balance.stripe_transfers capability, which is the only thing that
+// lets an account be a `transfer_data.destination`. Merchant-only accounts
+// fail every destination charge with "No such destination: acct_…" (seen in
+// production 29 Sept, req_vqw2i8fG29yblL) — the merchant config has no
+// transfers capability at all in the v2 types.
+//
+// VERIFY IN TEST MODE before relying on this: the bacs_debit_payments
+// capability key under configuration.merchant.capabilities is confirmed to
+// exist in the SDK types, but its actual approval behaviour for a GB
+// individual/company account (does it need anything else alongside
+// card_payments?) hasn't been exercised against a live sandbox call from
+// this session — no Stripe CLI/keys available here. Watch for
+// capability_not_available_* errors on first real account creation.
+const IDENTITY_ENTITY_TYPE: Record<string, "individual" | "company"> = {
   sole_trader: "individual",
   ltd: "company",
   partnership: "company",
 };
+
+const RECIPIENT_CONFIGURATION = {
+  capabilities: { stripe_balance: { stripe_transfers: { requested: true } } },
+};
+
+// Accounts created between the v2 migration (23 Sept) and the recipient fix
+// are merchant-only. Idempotent: adds the recipient configuration if it's
+// missing, no-op otherwise. The engineer may then have a requirement or two
+// to finish in onboarding, which the next account link collects.
+export async function ensureRecipientConfiguration(accountId: string): Promise<void> {
+  const stripe = getStripe();
+  const a = await stripe.v2.core.accounts.retrieve(accountId, {
+    include: ["configuration.recipient"],
+  });
+  if (a.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers) return;
+  await stripe.v2.core.accounts.update(accountId, {
+    configuration: { recipient: RECIPIENT_CONFIGURATION },
+  });
+}
+
+// The error a merchant-only (or otherwise non-transfer-capable) account gives
+// on a destination charge. Checkout routes use this to heal the account and
+// flip the engineer back to "finish payment setup" instead of failing
+// silently on every customer.
+export function isMissingDestination(err: unknown): boolean {
+  return (
+    err instanceof Stripe.errors.StripeInvalidRequestError &&
+    err.code === "resource_missing" &&
+    err.param === "transfer_data[destination]"
+  );
+}
+
+// A saved connected account this key can't see: it was created under another
+// platform (an earlier test sandbox). Stripe answers with a permission error.
+export function belongsToAnotherPlatform(err: unknown): boolean {
+  return (
+    err instanceof Stripe.errors.StripePermissionError ||
+    (err instanceof Stripe.errors.StripeError && err.code === "resource_missing")
+  );
+}
 
 // Creates the connected account on first call, returns the existing id after.
 export async function getOrCreateConnectAccount(engineer: {
@@ -56,29 +117,40 @@ export async function getOrCreateConnectAccount(engineer: {
 }): Promise<string> {
   if (engineer.stripeAccountId) return engineer.stripeAccountId;
   const stripe = getStripe();
-  const account = await stripe.accounts.create({
-    type: "express",
-    country: "GB",
-    email: engineer.email,
-    business_type: engineer.businessType ? BUSINESS_TYPE[engineer.businessType] : undefined,
-    business_profile: {
-      name: engineer.tradingName?.trim() || undefined,
-      // "Get paid" runs before the engineer has a live plan (onboarding step
-      // 1 of 4), so this page can 404 for a little while — still the correct
-      // URL to have on file, and it's what Stripe otherwise flags as an
-      // "Overdue: provide a business website" requirement that pauses
-      // payments/payouts/transfers if left unset entirely.
-      url: `${process.env.APP_URL}/p/${engineer.slug}`,
-      mcc: "1711", // Heating, plumbing, air-conditioning contractors
-      product_description: "Monthly gas boiler care plans sold to the engineer's own customers.",
+  const account = await stripe.v2.core.accounts.create({
+    contact_email: engineer.email,
+    display_name: engineer.tradingName?.trim() || undefined,
+    dashboard: "express",
+    identity: {
+      country: "gb",
+      entity_type: engineer.businessType ? IDENTITY_ENTITY_TYPE[engineer.businessType] : undefined,
     },
-    capabilities: {
-      // Stripe requires card_payments requested alongside bacs_debit_payments
-      // on Express accounts, even though this integration never charges a
-      // card — it's a platform-level prerequisite, not something we use.
-      card_payments: { requested: true },
-      bacs_debit_payments: { requested: true },
-      transfers: { requested: true },
+    defaults: {
+      // Express dashboard requires both collectors set to "application" —
+      // Stripe rejects the combination otherwise
+      // (account_controller_express_dash_without_application_losses_or_fees).
+      responsibilities: { fees_collector: "application", losses_collector: "application" },
+      profile: {
+        // "Get paid" runs before the engineer has a live plan (onboarding
+        // step 1 of 4), so this page can 404 for a little while — still the
+        // correct URL to have on file, and it's what Stripe otherwise flags
+        // as an "Overdue: provide a business website" requirement.
+        business_url: `${appUrl()}/p/${engineer.slug}`,
+        product_description: "Monthly gas boiler care plans sold to the engineer's own customers.",
+      },
+    },
+    configuration: {
+      merchant: {
+        mcc: "1711", // Heating, plumbing, air-conditioning contractors
+        capabilities: {
+          // card_payments is a platform-level prerequisite for the merchant
+          // configuration even though this integration only charges Bacs —
+          // mirrors the same requirement the old v1 Express account had.
+          card_payments: { requested: true },
+          bacs_debit_payments: { requested: true },
+        },
+      },
+      recipient: RECIPIENT_CONFIGURATION,
     },
     metadata: { engineerId: engineer.id },
   });
@@ -90,11 +162,16 @@ export async function createAccountOnboardingLink(
   opts: { returnUrl: string; refreshUrl: string },
 ): Promise<string> {
   const stripe = getStripe();
-  const link = await stripe.accountLinks.create({
+  const link = await stripe.v2.core.accountLinks.create({
     account: accountId,
-    return_url: opts.returnUrl,
-    refresh_url: opts.refreshUrl,
-    type: "account_onboarding",
+    use_case: {
+      type: "account_onboarding",
+      account_onboarding: {
+        configurations: ["merchant", "recipient"],
+        return_url: opts.returnUrl,
+        refresh_url: opts.refreshUrl,
+      },
+    },
   });
   return link.url;
 }
@@ -105,22 +182,34 @@ export type ConnectAccountStatus = {
   payoutsEnabled: boolean;
 };
 
-export async function getConnectAccountStatus(accountId: string): Promise<ConnectAccountStatus> {
-  const stripe = getStripe();
-  const a = await stripe.accounts.retrieve(accountId);
+function statusFromV2Account(a: Stripe.V2.Core.Account): ConnectAccountStatus {
+  const caps = a.configuration?.merchant?.capabilities;
+  // "Charges enabled" means a destination charge will actually succeed, which
+  // needs the recipient's transfers capability too — card_payments alone
+  // let a merchant-only account read as ready while every checkout failed.
+  const transfersActive =
+    a.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status === "active";
+  const chargesEnabled = caps?.card_payments?.status === "active" && transfersActive;
+  const payoutsEnabled = caps?.stripe_balance?.payouts?.status === "active";
+  // v2 has no single "details_submitted" boolean like v1 did — the nearest
+  // analog is whether anything is blocking right now.
+  const currentlyDue = a.requirements?.summary?.minimum_deadline?.status === "currently_due";
   return {
-    detailsSubmitted: a.details_submitted ?? false,
-    chargesEnabled: a.charges_enabled ?? false,
-    payoutsEnabled: a.payouts_enabled ?? false,
+    detailsSubmitted: !currentlyDue && (chargesEnabled || payoutsEnabled),
+    chargesEnabled,
+    payoutsEnabled,
   };
 }
 
-export function accountStatusFrom(a: Stripe.Account): ConnectAccountStatus {
-  return {
-    detailsSubmitted: a.details_submitted ?? false,
-    chargesEnabled: a.charges_enabled ?? false,
-    payoutsEnabled: a.payouts_enabled ?? false,
-  };
+// Used both by the /api/me poll and by the account.updated webhook handler —
+// the webhook only tells us *something* changed on `event.account`, so both
+// paths re-fetch current state rather than trust a payload shape.
+export async function getConnectAccountStatus(accountId: string): Promise<ConnectAccountStatus> {
+  const stripe = getStripe();
+  const a = await stripe.v2.core.accounts.retrieve(accountId, {
+    include: ["configuration.merchant", "configuration.recipient", "requirements"],
+  });
+  return statusFromV2Account(a);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,9 +310,35 @@ export async function cancelStripeSubscription(subscriptionId: string) {
   return stripe.subscriptions.cancel(subscriptionId);
 }
 
+// Ruling 3 — move an existing subscription to a new monthly price from its
+// next invoice. No proration: the notice period already ran, and the
+// customer pays the new amount from the next collection.
+export async function updateSubscriptionPrice(subscriptionId: string, newPricePence: number) {
+  const stripe = getStripe();
+  const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  const item = sub.items.data[0];
+  if (!item) throw new Error(`Subscription ${subscriptionId} has no items`);
+  const productId = typeof item.price.product === "string" ? item.price.product : item.price.product.id;
+  const price = await stripe.prices.create({
+    currency: "gbp",
+    unit_amount: newPricePence,
+    recurring: { interval: "month" },
+    product: productId,
+  });
+  return stripe.subscriptions.update(subscriptionId, {
+    items: [{ id: item.id, price: price.id }],
+    proration_behavior: "none",
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Payouts (E11) — read the connected account's real Stripe balance + payouts
 // ---------------------------------------------------------------------------
+// Unchanged by the v1→v2 Accounts migration above: Balance, Payouts and
+// external_accounts stay on the v1 API surface regardless of which API
+// created the account — the v2 SDK types describe the stripe_balance
+// capability itself as "Enables this Account to complete payouts from their
+// Stripe Balance (/v1/balance)".
 
 export type PayoutSummary = {
   pendingPence: number;
@@ -271,16 +386,26 @@ export async function getPayoutSummary(accountId: string): Promise<PayoutSummary
   };
 }
 
-// Platform-funded transfer to a connected account (E10 referral bounty).
-export async function payReferralBounty(accountId: string, amountPence: number, ref: string) {
+// Platform-funded transfer to a connected account — the referrer's share of
+// TradeSura's fee on one invoice (Build Review 2, ruling 4). Keyed on the
+// invoice so a replayed webhook can't pay twice.
+export async function payReferralCommission(
+  accountId: string,
+  amountPence: number,
+  ref: string,
+  invoiceId: string,
+) {
   const stripe = getStripe();
-  return stripe.transfers.create({
-    amount: amountPence,
-    currency: "gbp",
-    destination: accountId,
-    description: `TradeSura referral bounty (${ref})`,
-    metadata: { kind: "referral_bounty", ref },
-  });
+  return stripe.transfers.create(
+    {
+      amount: amountPence,
+      currency: "gbp",
+      destination: accountId,
+      description: `TradeSura referral commission (${ref})`,
+      metadata: { kind: "referral_commission", ref, invoiceId },
+    },
+    { idempotencyKey: `referral-commission-${invoiceId}` },
+  );
 }
 
 // ---------------------------------------------------------------------------

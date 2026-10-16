@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { offerBlockedReason } from "@/lib/verification-state";
 import { brandName } from "@/lib/engineer";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { sendSms } from "@/lib/sms";
+import { appUrl } from "@/lib/app-url";
 
 // E8 — book import & blast. Un-stubs the old "campaigns" screen. Sends a
 // fixed, templated offer to every no-plan customer, staggered over ~10 min,
@@ -54,6 +56,13 @@ export async function POST(req: Request) {
   const engineerId = await getEngineerId();
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
+  const gateEngineer = await prisma.engineer.findUnique({
+    where: { id: engineerId },
+    select: { gasSafeVerifiedAt: true, pausedAt: true, bannedAt: true },
+  });
+  const blockedReason = gateEngineer ? offerBlockedReason(gateEngineer) : "Not signed in.";
+  if (blockedReason) return NextResponse.json({ error: blockedReason }, { status: 403 });
+
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
@@ -83,7 +92,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Everyone in your book is already on a plan." }, { status: 409 });
   }
 
-  const link = `${process.env.APP_URL}/p/${engineer.slug}?src=blast`;
+  const link = `${appUrl()}/p/${engineer.slug}?src=blast`;
   const priceLabel = `£${(cheapest.priceMonthlyPence / 100).toFixed(0)}`;
   const now = Date.now();
   let sent = 0;

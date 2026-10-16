@@ -1,11 +1,13 @@
 import { Redirect, Tabs, router } from "expo-router";
 import { useCallback, useEffect, useState, type ComponentProps } from "react";
-import { View, ActivityIndicator, Text, Pressable, AppState } from "react-native";
+import { View, Text, Pressable, AppState } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "@/lib/api";
+import { setOverdueBadge } from "@/lib/push";
 import { useAuth } from "@/lib/auth-context";
 import { Button, GateSheet } from "@/components/ui";
 import { AddCustomerSheet } from "@/components/add-customer-sheet";
+import { CenteredSpinner } from "@/components/skeleton";
 import { Icon, type IconName } from "@/components/icon";
 
 // Build Guide v2 Part 3 — the whole map: Home · Customers · Add customer
@@ -45,8 +47,12 @@ type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>
 function useRemindersBadge(navKey: string) {
   const [due, setDue] = useState(0);
   const load = useCallback(() => {
-    api<{ due: number }>("/api/jobs/badge")
-      .then((r) => setDue(r.due))
+    api<{ due: number; overdue: number }>("/api/jobs/badge")
+      .then((r) => {
+        setDue(r.due);
+        // Part 11: the app-icon badge mirrors overdue only.
+        setOverdueBadge(r.overdue);
+      })
       .catch(() => {
         // Badge is a garnish — a failed poll just leaves the last value.
       });
@@ -69,7 +75,11 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
   const { me } = useAuth();
   const [gateOpen, setGateOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const routes = state.routes.filter((r) => VISIBLE_TABS.includes(r.name));
+  // Section 8 — staff never see money, so no Payouts tab.
+  const isStaff = me?.role === "staff";
+  const routes = state.routes.filter(
+    (r) => VISIBLE_TABS.includes(r.name) && !(isStaff && r.name === "payouts"),
+  );
   const active = state.routes[state.index];
   const activeName = active?.name;
   // Re-poll the badge whenever the focused tab or its nested stack moves.
@@ -169,8 +179,13 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
       <GateSheet
         visible={gateOpen}
         onClose={() => setGateOpen(false)}
-        reason="Add customers once your first plan is live — Continue setup →"
-        onCta={() => router.push("/onboarding")}
+        reason={
+          isStaff
+            ? "The business has no live plan yet — ask the owner to make one live."
+            : "Add customers once your first plan is live."
+        }
+        cta={isStaff ? "OK" : undefined}
+        onCta={() => (isStaff ? setGateOpen(false) : router.push("/onboarding"))}
       />
       <AddCustomerSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} />
     </View>
@@ -180,16 +195,19 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
 export default function TabsLayout() {
   const { token, loading, me, meLoading, meError, refreshMe, signOut } = useAuth();
 
-  if (loading) return null;
+  // The launch overlay (app/_layout.tsx) covers these first moments.
+  if (loading) return <View className="flex-1 bg-night" />;
   // W0 — signed-out users land on the welcome screen, not straight on
   // sign-in; it decides for itself whether to promote Sign in (returning
   // device) or Start now (organic/claim/referral).
   if (!token) return <Redirect href="/welcome" />;
 
+  // Straight after sign-in the launch overlay has already gone, so the
+  // profile fetch gets the ring rather than a blank navy screen.
   if (meLoading && !me) {
     return (
-      <View className="flex-1 items-center justify-center bg-bg">
-        <ActivityIndicator color="#5FA3F0" />
+      <View className="flex-1 bg-night">
+        <CenteredSpinner label="Loading your account" />
       </View>
     );
   }

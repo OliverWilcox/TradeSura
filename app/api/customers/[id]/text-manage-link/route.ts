@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { brandName } from "@/lib/engineer";
-import { getEngineerId } from "@/lib/auth";
+import { getActor } from "@/lib/auth";
 import { sendSms } from "@/lib/sms";
 import { track } from "@/lib/track";
+import { appUrl } from "@/lib/app-url";
 
 // Build Guide v2 Part 10 LAW — "There is no engineer-side cancel button.
 // Cancellation lives only behind the customer's manage link — so every
@@ -11,12 +12,15 @@ import { track } from "@/lib/track";
 // manage link'." This is that tool: it never touches the plan itself, it
 // just re-sends the customer their own portal link.
 export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const engineerId = await getEngineerId();
-  if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const actor = await getActor();
+  if (!actor) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const engineerId = actor.businessId;
+  // Section 8 — staff only act on customers they added.
+  const ownOnly = actor.role === "staff" ? { addedById: actor.actorId } : {};
 
   const { id } = await ctx.params;
   const customer = await prisma.customer.findFirst({
-    where: { id, engineerId },
+    where: { id, engineerId, ...ownOnly },
     include: { plans: { orderBy: { createdAt: "desc" } } },
   });
   if (!customer) return NextResponse.json({ error: "Not found." }, { status: 404 });
@@ -31,7 +35,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   const engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
   const brand = brandName(engineer);
-  const portalUrl = `${process.env.APP_URL}/portal/${plan.portalToken}`;
+  const portalUrl = `${appUrl()}/portal/${plan.portalToken}`;
   await sendSms({
     engineerId,
     to: customer.phone,

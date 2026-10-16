@@ -13,16 +13,16 @@ describe("claim code normalisation", () => {
   });
 });
 
-// Build Guide v2 Part 14 — "Signed up → Verified → Plan live → £50 paid."
+// Build Review 2, ruling 4 — "Signed up → Verified → Plan live → Earning."
 describe("referral stage", () => {
   it("signed_up: no badge, no plan", () =>
-    expect(referralStage({ verified: false, activePlans: 0, bountyPaid: false })).toBe("signed_up"));
+    expect(referralStage({ verified: false, activePlans: 0, earnedPence: 0 })).toBe("signed_up"));
   it("verified: badge granted, no plan yet", () =>
-    expect(referralStage({ verified: true, activePlans: 0, bountyPaid: false })).toBe("verified"));
-  it("plan_live: a plan is active, however briefly before the bounty check runs", () =>
-    expect(referralStage({ verified: true, activePlans: 1, bountyPaid: false })).toBe("plan_live"));
+    expect(referralStage({ verified: true, activePlans: 0, earnedPence: 0 })).toBe("verified"));
+  it("plan_live: a plan is active but nothing has been collected yet", () =>
+    expect(referralStage({ verified: true, activePlans: 1, earnedPence: 0 })).toBe("plan_live"));
   it("plan_live outranks an unset verified flag — activation implies it", () =>
-    expect(referralStage({ verified: false, activePlans: 1, bountyPaid: false })).toBe("plan_live"));
-  it("paid once the bounty is marked, regardless of current plan count", () =>
-    expect(referralStage({ verified: true, activePlans: 0, bountyPaid: true })).toBe("paid"));
+    expect(referralStage({ verified: false, activePlans: 1, earnedPence: 0 })).toBe("plan_live"));
+  it("earning once any commission is recorded, regardless of current plan count", () =>
+    expect(referralStage({ verified: true, activePlans: 0, earnedPence: 240 })).toBe("earning"));
 });

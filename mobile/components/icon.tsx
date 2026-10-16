@@ -26,6 +26,23 @@ const ICONS = {
   chat: { ios: "bubble.left", android: "chat" },
   document: { ios: "doc.text", android: "description" },
   close: { ios: "xmark", android: "close" },
+  camera: { ios: "camera", android: "photo_camera" },
+  invite: { ios: "heart", android: "volunteer_activism" },
+  howItWorks: { ios: "checkmark.circle", android: "task_alt" },
+  shop: { ios: "shippingbox", android: "inventory_2" },
+  // How it works (30 Sept build notes)
+  shield: { ios: "checkmark.shield", android: "verified_user" },
+  calendar: { ios: "calendar", android: "calendar_month" },
+  boiler: { ios: "heater.vertical", android: "water_heater" },
+  coin: { ios: "sterlingsign.circle.fill", android: "currency_pound" },
+  van: { ios: "box.truck", android: "local_shipping" },
+  booklet: { ios: "book.closed", android: "menu_book" },
+  leaflets: { ios: "doc.on.doc", android: "file_copy" },
+  cards: { ios: "rectangle.stack", android: "style" },
+  chevronDown: { ios: "chevron.down", android: "expand_more" },
+  search: { ios: "magnifyingglass", android: "search" },
+  info: { ios: "info.circle", android: "info" },
+  importBook: { ios: "square.and.arrow.down", android: "download" },
 } as const;
 
 export type IconName = keyof typeof ICONS;

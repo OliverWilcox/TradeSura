@@ -1,12 +1,12 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { View, Text, TextInput, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
-import { AppHeader, Card, Micro, Button, Tick } from "@/components/ui";
+import { AppHeader, Card, Micro, Button, Tick, OpeningStripe } from "@/components/ui";
 
 // E2 — post-signup onboarding wizard. Four steps, sequenced for activation:
 // get paid → first plan → import book → founding pack. Only step 1 gates the
@@ -66,6 +66,14 @@ export default function Onboarding() {
   const [packBusy, setPackBusy] = useState(false);
   const [packError, setPackError] = useState<string | null>(null);
 
+  // Steps are derived from the profile — re-read it whenever the hub comes
+  // back into view (e.g. returning from the plan wizard or an import).
+  useFocusEffect(
+    useCallback(() => {
+      refreshMe();
+    }, [refreshMe]),
+  );
+
   const paid = Boolean(me?.stripeConnected);
   const hasPlan = Boolean(me?.hasPlan);
   const hasBook = (me?.customerCount ?? 0) > 0;
@@ -97,6 +105,10 @@ export default function Onboarding() {
   }
 
   async function requestPack() {
+    if (packAddress.trim().length < 10) {
+      setPackError("Enter your full postal address, including the postcode.");
+      return;
+    }
     setPackBusy(true);
     setPackError(null);
     try {
@@ -135,14 +147,14 @@ export default function Onboarding() {
           title="Get paid"
           body={
             paid
-              ? "Payouts ready — you'll be paid every week."
+              ? "Payouts ready — you'll be paid every Friday."
               : "Stripe handles your details — TradeSura never sees your bank login."
           }
           state={stepState(paid, !paid)}
           cta={me?.stripeDetailsSubmitted ? "Finish payment setup" : "Set up payments"}
           onPress={connectStripe}
         >
-          {busy && <Text className="mt-2 font-sans text-xs text-muted">Opening…</Text>}
+          {busy && <OpeningStripe />}
           {/* Build Guide v2 review 17 Sept, B3 — "catch it gracefully with a
               retry prompt rather than a bare failure." getConnectLinkWithRetry
               already retries once silently before this ever shows; if it
@@ -171,8 +183,8 @@ export default function Onboarding() {
           // exactly like Step 1, not only once Step 1 also happens to be
           // done. "Done" still means hasPlan, unchanged.
           state={stepState(hasPlan, !hasPlan)}
-          cta="Set up my plan"
-          onPress={() => router.push("/plans")}
+          cta="Build my plan"
+          onPress={() => router.push({ pathname: "/plans", params: { from: "setup" } })}
         />
 
         <StepCard
@@ -180,20 +192,22 @@ export default function Onboarding() {
           title="Your customers"
           body={
             hasBook
-              ? `${me?.customerCount} customer${me?.customerCount === 1 ? "" : "s"} imported — each one is a potential £144/yr.`
-              : "Import your book — every contact is a potential £144/yr."
+              ? `${me?.customerCount} customer${me?.customerCount === 1 ? "" : "s"} imported — each one is a potential £115/yr to you.`
+              : "Import your book — every contact is a potential £115/yr to you."
           }
           state={stepState(hasBook, paid && hasPlan && !hasBook)}
-          cta="Import my book"
+          cta="Import customers"
           onPress={() => router.push("/customers/import-contacts")}
         />
 
         <StepCard
           n={4}
-          title="Your founding pack"
+          title="Your member pack"
           body={
             packDone
-              ? "On its way — free QR cards and a van sticker."
+              ? me?.gasSafeVerifiedAt
+                ? "On its way — free QR cards and a van sticker."
+                : "Address saved — your pack posts as soon as your badge goes live."
               : "Free cards & van sticker with your personal QR code — hand one over at every job."
           }
           state={stepState(packDone, paid && hasPlan && hasBook && !packDone)}
@@ -202,20 +216,26 @@ export default function Onboarding() {
             <View className="mt-2.5 gap-2">
               <TextInput
                 value={packAddress}
-                onChangeText={setPackAddress}
+                onChangeText={(v) => {
+                  setPackAddress(v);
+                  setPackError(null);
+                }}
                 placeholder="Full postal address"
                 placeholderTextColor="#6E86A3"
                 multiline
-                className="min-h-[64px] rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-sm text-ink"
+                className="min-h-[64px] rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-[15px] text-ink"
               />
               {packError && <Text className="font-sans text-xs text-danger">{packError}</Text>}
               <Button
                 onPress={requestPack}
                 variant="ghost"
-                disabled={packBusy || packAddress.trim().length < 10}
+                disabled={packBusy}
               >
                 {packBusy ? "Saving…" : "Send my pack"}
               </Button>
+              <Text className="text-center font-sans text-xs text-muted">
+                Ships when your badge goes live.
+              </Text>
             </View>
           )}
         </StepCard>
@@ -237,7 +257,7 @@ export default function Onboarding() {
           {paid ? "Go to my dashboard" : "Skip setup for now"}
         </Button>
         <Text className="pt-1 text-center font-mono text-[10px] text-faint">
-          Paid out to your bank every week · Powered by Stripe
+          Paid out to your bank every Friday · Powered by Stripe
         </Text>
       </ScrollView>
     </View>

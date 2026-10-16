@@ -4,6 +4,7 @@ import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill } from "@/components/ui";
+import { Skeleton, ListRowBone } from "@/components/skeleton";
 
 type Pack = { code: string; name: string; anchor: string; live: boolean; registered: boolean };
 
@@ -67,6 +68,16 @@ export default function Trades() {
             clause library clears legal review.
           </Text>
         </Card>
+
+        {!packs && !error && (
+          <Skeleton label="Loading trade packs">
+            <Card>
+              {[110, 140, 120, 100].map((w, i) => (
+                <ListRowBone key={w} title={w} subtitle={w + 40} pill={110} last={i === 3} />
+              ))}
+            </Card>
+          </Skeleton>
+        )}
 
         {packs && (
           <Card>
