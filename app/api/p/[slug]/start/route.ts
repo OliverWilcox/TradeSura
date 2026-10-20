@@ -17,7 +17,7 @@ const Body = z.object({
   lastName: z.string().min(1).max(60),
   phone: z.string().min(6).max(20),
   email: z.string().email().max(200).optional().or(z.literal("")),
-  channel: z.enum(["web", "demo", "blast", "referral"]).default("web"),
+  channel: z.enum(["web", "demo", "blast", "referral", "website"]).default("web"),
   // Section 8 — the staff engineer handing over their phone ("They're with me").
   soldById: z.string().max(40).optional(),
 });

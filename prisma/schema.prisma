@@ -119,6 +119,16 @@ model Engineer {
   // Part 17.4 — the pack queues on request but only ships once the badge is
   // live; set from the admin queue's "Packs to post" list when it's posted.
   packShippedAt     DateTime?
+  // 2026 Build Guide getting-started steps. Public profile at
+  // tradesura.com/{slug}: indexable by search engines once published.
+  profileBio         String?
+  serviceArea        String?
+  profilePublishedAt DateTime?
+  // Set the first time the website embed loads on a site that isn't ours.
+  websiteConnectedAt DateTime?
+  websiteHost        String?
+  // First time the engineer shared their invite link from the app.
+  inviteSharedAt     DateTime?
   // E10 — who brought this engineer in, and whether their £50 bounty is paid.
   referrerId           String?
   referrer             Engineer?  @relation("Referrals", fields: [referrerId], references: [id])

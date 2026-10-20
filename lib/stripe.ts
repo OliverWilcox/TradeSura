@@ -11,7 +11,7 @@
 //   docs.stripe.com/connect/express-accounts (account links onboarding)
 import Stripe from "stripe";
 import { TRADESURA_FEE_RATE, BACS_PROCESSING_FEE_PENCE } from "@/lib/clauses";
-import { appUrl } from "@/lib/app-url";
+import { profileUrl } from "@/lib/public-url";
 
 // CLAUDE.md: test/sandbox only. Go-live is a human sign-off — a hard stop,
 // not a config toggle. Mirrors the old assertSandbox() guard.
@@ -135,7 +135,7 @@ export async function getOrCreateConnectAccount(engineer: {
         // step 1 of 4), so this page can 404 for a little while — still the
         // correct URL to have on file, and it's what Stripe otherwise flags
         // as an "Overdue: provide a business website" requirement.
-        business_url: `${appUrl()}/p/${engineer.slug}`,
+        business_url: profileUrl(engineer.slug),
         product_description: "Monthly gas boiler care plans sold to the engineer's own customers.",
       },
     },

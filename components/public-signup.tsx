@@ -32,15 +32,20 @@ export function PublicSignup({
   engineerName,
   channel = "web",
   soldById,
+  initialTierId,
 }: {
   slug: string;
   tiers: Tier[];
   engineerName: string;
   channel?: string;
   soldById?: string;
+  /** Pre-selects a plan, e.g. a Join tap on the engineer's website embed. */
+  initialTierId?: string;
 }) {
   const [selectedId, setSelectedId] = useState(
-    tiers.find((t) => t.isRecommended)?.id ?? tiers[0]?.id,
+    tiers.find((t) => t.id === initialTierId)?.id ??
+      tiers.find((t) => t.isRecommended)?.id ??
+      tiers[0]?.id,
   );
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");

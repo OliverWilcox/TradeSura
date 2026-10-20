@@ -6,7 +6,7 @@ import { brandName } from "@/lib/engineer";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { sendSms } from "@/lib/sms";
-import { appUrl } from "@/lib/app-url";
+import { profileUrl } from "@/lib/public-url";
 
 // E8 — book import & blast. Un-stubs the old "campaigns" screen. Sends a
 // fixed, templated offer to every no-plan customer, staggered over ~10 min,
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Everyone in your book is already on a plan." }, { status: 409 });
   }
 
-  const link = `${appUrl()}/p/${engineer.slug}?src=blast`;
+  const link = `${profileUrl(engineer.slug)}?src=blast`;
   const priceLabel = `£${(cheapest.priceMonthlyPence / 100).toFixed(0)}`;
   const now = Date.now();
   let sent = 0;

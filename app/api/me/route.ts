@@ -48,12 +48,19 @@ export async function GET() {
   // (anyTierCount, any status: zero → every door opens the wizard directly)
   // vs. "a plan is actually offerable" (hasPlan: LIVE only — gates the
   // Add-customer hero, the offer flow, and onboarding's step 2).
-  const [anyTierCount, liveTierCount, customerCount, activePlans] = await Promise.all([
+  const [anyTierCount, liveTierCount, customerCount, activePlans, referralCount] = await Promise.all([
     prisma.planTier.count({ where: { engineerId } }),
     prisma.planTier.count({ where: { engineerId, status: "LIVE" } }),
     prisma.customer.count({ where: { engineerId } }),
     prisma.plan.count({ where: { engineerId, status: "ACTIVE" } }),
+    prisma.engineer.count({ where: { referrerId: engineerId } }),
   ]);
+  // The getting-started hub names the first live plan on its done step.
+  const firstPlan = await prisma.planTier.findFirst({
+    where: { engineerId, status: "LIVE" },
+    orderBy: { sortOrder: "asc" },
+    select: { name: true, priceMonthlyPence: true },
+  });
 
   return NextResponse.json({
     role: "owner",
@@ -84,6 +91,12 @@ export async function GET() {
     customerCount,
     activePlans,
     packRequestedAt: engineer.packRequestedAt,
+    gasSafeRejectedAt: engineer.gasSafeRejectedAt,
+    profilePublishedAt: engineer.profilePublishedAt,
+    websiteConnectedAt: engineer.websiteConnectedAt,
+    inviteSharedAt: engineer.inviteSharedAt,
+    referralCount,
+    firstPlan,
   });
 }
 
