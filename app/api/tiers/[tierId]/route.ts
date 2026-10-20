@@ -61,6 +61,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ tierId: string 
       upliftPence: t.upliftPence,
       pricingLabel: t.pricingLabel,
       highlight: t.highlight,
+      note: t.note,
+      engineerNote: t.engineerNote,
+      bodyText: t.bodyText,
     })),
   });
 }
@@ -84,8 +87,9 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
     );
   }
 
-  // Locked wording: every free-text label passes the blocklist server-side.
-  for (const label of parsed.data.customLabels) {
+  // Locked wording: the plan name and every free-text label pass the
+  // blocklist server-side — the app's own check is a convenience, not the gate.
+  for (const label of [parsed.data.name, ...parsed.data.customLabels]) {
     const check = checkWording(label);
     if (!check.ok) {
       return NextResponse.json({ error: "blocked_wording", label, ...check }, { status: 422 });

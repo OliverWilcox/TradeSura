@@ -9,6 +9,7 @@ import { sendSms } from "@/lib/sms";
 import { normaliseUkPhone } from "@/lib/phone";
 import { newPlanRef, newToken } from "@/lib/plans";
 import { appUrl } from "@/lib/app-url";
+import { clauseLine } from "@/lib/clauses";
 
 const Body = z.object({
   customerId: z.string().optional(),
@@ -58,7 +59,9 @@ export async function GET() {
       id: t.id,
       name: t.name,
       priceMonthlyPence: t.priceMonthlyPence,
-      lines: t.clauses.sort((a, b) => a.clause.sortOrder - b.clause.sortOrder).map((tc) => tc.clause.title),
+      lines: t.clauses
+        .sort((a, b) => a.clause.sortOrder - b.clause.sortOrder)
+        .map((tc) => clauseLine(tc.clause)),
     })),
   });
 }

@@ -25,6 +25,9 @@ export async function GET() {
       upliftPence: t.upliftPence,
       pricingLabel: t.pricingLabel,
       highlight: t.highlight,
+      note: t.note,
+      engineerNote: t.engineerNote,
+      bodyText: t.bodyText,
     })),
   );
 }

@@ -78,6 +78,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
                 <>
                   <span className="text-ink font-bold mr-1.5">✓</span>
                   {c.title}
+                  {c.note && <span className="block pl-5 text-[11.5px] text-muted">{c.note}</span>}
                 </>
               }
               right={

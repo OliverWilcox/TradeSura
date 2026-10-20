@@ -62,8 +62,8 @@ describe("plan service library", () => {
     });
 
     it("de-duplicates when the caller already included a CORE code", () => {
-      const result = withRequiredClauses(["ANNUAL_SERVICE", "ANNUAL_SERVICE"]);
-      expect(result.filter((c) => c === "ANNUAL_SERVICE")).toHaveLength(1);
+      const result = withRequiredClauses(["PRIORITY_48H", "PRIORITY_48H"]);
+      expect(result.filter((c) => c === "PRIORITY_48H")).toHaveLength(1);
     });
   });
 
@@ -89,5 +89,19 @@ describe("plan service library", () => {
     it("never blocks a plan that includes the service", () => {
       expect(serviceRuleError(withRequiredClauses(["ANNUAL_SERVICE"]))).toBeNull();
     });
+  });
+
+  it("makes the annual service optional, after the third payment", () => {
+    const annual = CLAUSE_TEMPLATES.find((c) => c.code === "ANNUAL_SERVICE")!;
+    expect(annual.kind).toBe("ADD");
+    expect(annual.note).toMatch(/third payment/);
+    expect(annual.bodyText).toMatch(/third monthly payment/);
+  });
+
+  it("clause notes pass the blocklist", () => {
+    for (const c of CLAUSE_TEMPLATES) {
+      if (c.note) expect(checkWording(c.note).ok, c.code).toBe(true);
+      if (c.engineerNote) expect(checkWording(c.engineerNote).ok, c.code).toBe(true);
+    }
   });
 });

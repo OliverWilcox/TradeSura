@@ -9,6 +9,7 @@ import {
   serviceRuleError,
   withRequiredClauses,
 } from "@/lib/clauses";
+import { checkWording } from "@/lib/compliance/blocklist";
 
 // Build Guide v2 Part 7 — "My plans" hub. Every plan the engineer has ever
 // started, any status: the hub (not this endpoint) decides whether a draft,
@@ -79,6 +80,24 @@ export async function POST(req: Request) {
   if (Number.isInteger(body.priceMonthlyPence)) priceMonthlyPence = body.priceMonthlyPence;
   if (Array.isArray(body.clauseCodes)) clauseCodes = body.clauseCodes;
 
+  const labels: string[] = Array.isArray(body.customLabels)
+    ? body.customLabels.filter((l: unknown): l is string => typeof l === "string")
+    : [];
+  for (const label of [name, ...labels]) {
+    const check = checkWording(label);
+    if (!check.ok) {
+      return NextResponse.json({ error: "blocked_wording", label, ...check }, { status: 422 });
+    }
+  }
+  // Builder Step 4's provision promise is required to go live.
+  const publishNow = body.publishNow === true;
+  if (publishNow && body.attest !== true) {
+    return NextResponse.json(
+      { error: "Tick to confirm you'll provide everything in this plan.", code: "attest_required" },
+      { status: 400 },
+    );
+  }
+
   if (priceMonthlyPence < TIER_PRICE_MIN_PENCE) {
     return NextResponse.json({ error: "The minimum plan price is £10 a month." }, { status: 400 });
   }
@@ -96,8 +115,9 @@ export async function POST(req: Request) {
       name,
       priceMonthlyPence,
       sortOrder: existing,
-      status: body.publishNow === true ? "LIVE" : "DRAFT",
-      customLabels: Array.isArray(body.customLabels) ? body.customLabels : [],
+      status: publishNow ? "LIVE" : "DRAFT",
+      providerAttestedAt: publishNow ? new Date() : null,
+      customLabels: labels,
       clauses: { create: finalCodes.map((code) => ({ clauseId: byCode.get(code)! })) },
     },
   });

@@ -200,6 +200,9 @@ model ClauseTemplate {
   upliftPence  Int?
   pricingLabel String?
   highlight    Boolean      @default(false)
+  // Small print under the title: customer's words / engineer's words.
+  note         String?
+  engineerNote String?
   sortOrder    Int
   tiers        TierClause[]
 }
@@ -215,6 +218,9 @@ model PlanTier {
   status            PlanTierStatus @default(DRAFT)
   // Display-only extras; blocklist-checked; never enter the plan document.
   customLabels      String[]     @default([])
+  // Builder Step 4: "I'll provide everything in this plan to every customer
+  // on it" — ticked before the plan could go live.
+  providerAttestedAt DateTime?
   clauses           TierClause[]
   plans             Plan[]
 }

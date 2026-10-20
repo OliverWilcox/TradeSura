@@ -25,7 +25,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ tierId: string
     );
   }
 
-  await prisma.planTier.update({ where: { id: tierId }, data: { status: "LIVE" } });
+  // Builder Step 4: "I'll provide everything in this plan to every customer
+  // on it, under the TradeSura customer terms" — required, and recorded.
+  const body = await req.json().catch(() => ({}));
+  if (body?.attest !== true) {
+    return NextResponse.json(
+      { error: "Tick to confirm you'll provide everything in this plan.", code: "attest_required" },
+      { status: 400 },
+    );
+  }
+  await prisma.planTier.update({
+    where: { id: tierId },
+    data: { status: "LIVE", providerAttestedAt: new Date() },
+  });
   await track("plan_live", { type: "ENGINEER", id: engineerId }, {
     tierId,
     name: tier.name,

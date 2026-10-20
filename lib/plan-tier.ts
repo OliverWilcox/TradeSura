@@ -9,7 +9,13 @@
 // the snapshot: they are display-only marketing, never contract text (see
 // tests/plan-doc.test.ts), so nothing on the agreed-plan path should see them.
 
-type ClauseFields = { code: string; title: string; bodyText: string; sortOrder: number };
+type ClauseFields = {
+  code: string;
+  title: string;
+  bodyText: string;
+  sortOrder: number;
+  note?: string | null;
+};
 
 export type AgreedTierSnapshot = {
   name: string;
@@ -37,6 +43,7 @@ export function snapshotTier(tier: LiveTier): AgreedTierSnapshot {
         title: tc.clause.title,
         bodyText: tc.clause.bodyText,
         sortOrder: tc.clause.sortOrder,
+        note: tc.clause.note ?? null,
       }))
       .sort(bySortOrder),
   };

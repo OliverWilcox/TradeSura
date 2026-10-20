@@ -4,6 +4,7 @@ import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { CustomerShell } from "@/components/shells";
 import { SignupTiers } from "@/components/signup-tiers";
+import { clauseLine } from "@/lib/clauses";
 
 export default async function SignupPage({
   params,
@@ -68,7 +69,7 @@ export default async function SignupPage({
           lines: [
             ...t.clauses
               .sort((a, b) => a.clause.sortOrder - b.clause.sortOrder)
-              .map((tc) => tc.clause.title),
+              .map((tc) => clauseLine(tc.clause)),
             ...t.customLabels,
           ],
         }))}

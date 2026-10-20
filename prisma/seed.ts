@@ -15,6 +15,8 @@ async function main() {
       upliftPence: c.upliftPence,
       pricingLabel: c.pricingLabel ?? null,
       highlight: c.highlight ?? false,
+      note: c.note ?? null,
+      engineerNote: c.engineerNote ?? null,
       sortOrder: i,
     };
     await prisma.clauseTemplate.upsert({

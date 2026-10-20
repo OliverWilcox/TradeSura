@@ -21,6 +21,10 @@ export type ClauseSeed = {
   pricingLabel?: string;
   /** Retention anchors — surfaced first in the picker. */
   highlight?: boolean;
+  /** Small print under the title on the customer's plan card. */
+  note?: string;
+  /** The same caveat in the engineer's words, under the title in the builder. */
+  engineerNote?: string;
 };
 
 export const CAT_CORE = "Core gas servicing";
@@ -50,8 +54,12 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     category: CAT_CORE,
     upliftPence: null,
     pricingLabel: "ticked by default",
+    // 2026 Build Guide target: "Optional · available after the customer's
+    // 3rd payment" — so nobody joins, takes the service and cancels.
+    note: "available after your third payment",
+    engineerNote: "available after the customer's 3rd payment",
     bodyText:
-      "We will carry out one scheduled service of your boiler in each 12-month plan period, including the safety checks and maintenance recommended by the manufacturer.",
+      "We will carry out one scheduled service of your boiler in each 12-month plan period, including the safety checks and maintenance recommended by the manufacturer. Your first service is available once your third monthly payment has been collected.",
   },
   {
     code: "GAS_FIRE_SERVICE",
@@ -475,6 +483,11 @@ export const REQUIRED_CLAUSE_CODES = CLAUSE_TEMPLATES.filter((c) => c.kind === "
   (c) => c.code,
 );
 
+// A clause as one line on a customer's plan card, with its small print.
+export function clauseLine(c: { title: string; note?: string | null }): string {
+  return c.note ? `${c.title} — ${c.note}` : c.title;
+}
+
 export function withRequiredClauses(codes: string[]): string[] {
   return [...new Set([...codes, ...REQUIRED_CLAUSE_CODES])];
 }
@@ -500,9 +513,10 @@ export function suggestedPricePence(upliftsPence: (number | null)[]): number {
   return SUGGESTED_BASE_PENCE + upliftsPence.reduce<number>((a, b) => a + (b ?? 0), 0);
 }
 
-// Two-tap tier presets (Build Spec v1 E6: Boiler Care ~£12 / Boiler + Controls
-// ~£15 / Landlord Care ~£15). Each is a starting point the engineer re-prices
-// and re-scopes; wording still assembles only from the clause templates.
+// Starter chips on the builder's Step 1 (2026 Build Guide target screens:
+// Boiler Care / Service + Priority / Landlord). Each is a starting point the
+// engineer re-prices and re-scopes; wording still assembles only from the
+// clause templates.
 export const TIER_PRESETS = [
   {
     name: "Boiler Care",
@@ -510,28 +524,18 @@ export const TIER_PRESETS = [
     isRecommended: false,
     clauseCodes: [
       "ANNUAL_SERVICE",
+      "HEALTH_CHECK",
+      "CO_ALARM_TEST",
       "PRIORITY_48H",
       "NO_CALLOUT_FEE",
-      "SERVICE_HISTORY",
-      "ANNUAL_REMINDER",
-      "CO_ALARM_TEST",
+      "LABOUR_DISCOUNT_15",
     ],
   },
   {
-    name: "Boiler + Controls",
-    priceMonthlyPence: 1500,
-    isRecommended: true,
-    clauseCodes: [
-      "ANNUAL_SERVICE",
-      "PRIORITY_48H",
-      "NO_CALLOUT_FEE",
-      "SERVICE_HISTORY",
-      "ANNUAL_REMINDER",
-      "CO_ALARM_TEST",
-      "SMART_THERMOSTAT",
-      "HEALTH_CHECK",
-      "BOILER_TUNE",
-    ],
+    name: "Service + Priority",
+    priceMonthlyPence: 1000,
+    isRecommended: false,
+    clauseCodes: ["ANNUAL_SERVICE", "PRIORITY_48H", "ANNUAL_REMINDER", "SERVICE_HISTORY"],
   },
   {
     name: "Landlord Care",
