@@ -68,8 +68,8 @@ export function setupSteps(me: Me | null): SetupStep[] {
     {
       key: "invite",
       title: "Invite engineers you know",
-      sub: "Earn ",
-      money: "£50 when their first plan goes live",
+      // Build Review 2, ruling 4 — the affiliate deal, as on the hub target.
+      sub: "Earn 25% of our fee on their plans",
       done: Boolean(me?.inviteSharedAt) || (me?.referralCount ?? 0) > 0,
       cta: "Share invite",
       href: "/referral",
