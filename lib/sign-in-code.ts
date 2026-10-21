@@ -5,6 +5,7 @@ import { createHash, randomInt } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { signToken } from "@/lib/auth";
 import { emailConfigured, sendEmail } from "@/lib/email";
+import { codeEmail } from "@/lib/code-email";
 
 export const CODE_TTL_MS = 10 * 60 * 1000;
 export const RESEND_AFTER_MS = 30 * 1000;
@@ -48,7 +49,11 @@ type Issued =
   | { ok: true; requestToken: string; devCode?: string }
   | { ok: false; status: number; error: string };
 
-export async function issueSignInCode(engineer: { id: string; email: string }): Promise<Issued> {
+export async function issueSignInCode(engineer: {
+  id: string;
+  email: string;
+  firstName?: string | null;
+}): Promise<Issued> {
   if (!emailConfigured() && process.env.NODE_ENV !== "development") {
     return { ok: false, status: 503, error: "Sign-in emails are unavailable — please contact info@tradesura.com." };
   }
@@ -75,13 +80,14 @@ export async function issueSignInCode(engineer: { id: string; email: string }): 
   });
 
   try {
-    await sendEmail({
-      to: engineer.email,
-      subject: `${code} is your TradeSura sign-in code`,
-      html: `<p>Your TradeSura sign-in code is:</p>
-<p style="font-size:28px;font-weight:700;letter-spacing:6px;font-family:monospace">${code}</p>
-<p>It works once and expires at ${ukTime(new Date(Date.now() + CODE_TTL_MS))} (UK time). If you didn't try to sign in, you can ignore this email — nobody can get in without the code.</p>`,
+    // 2026 Build Guide code-email mock-up.
+    const { subject, html } = codeEmail({
+      code,
+      firstName: engineer.firstName,
+      expiresAt: new Date(Date.now() + CODE_TTL_MS),
+      purpose: "sign in",
     });
+    await sendEmail({ to: engineer.email, subject, html });
   } catch (err) {
     console.error("[sign-in] code email failed:", err);
     await prisma.signInCode.delete({ where: { id: row.id } }).catch(() => {});

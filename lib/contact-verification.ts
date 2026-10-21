@@ -2,8 +2,9 @@ import { randomInt } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { signToken, verifyToken } from "@/lib/auth";
 import { sendEmail, emailConfigured } from "@/lib/email";
+import { codeEmail } from "@/lib/code-email";
 import { sendVerificationCode } from "@/lib/sms";
-import { hashCode, ukTime } from "@/lib/sign-in-code";
+import { hashCode } from "@/lib/sign-in-code";
 
 export function smsAvailable() {
   return Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_NUMBER);
@@ -32,7 +33,7 @@ export async function requestContactCode(purpose: Purpose, destination: string, 
   });
   try {
     if (sms) await sendVerificationCode(destination, code);
-    else await sendEmail({ to: destination, subject: `${code} is your TradeSura verification code`, html: `<p>Your TradeSura email verification code is <strong>${code}</strong>.</p><p>It expires at ${ukTime(new Date(Date.now() + 10 * 60 * 1000))} (UK time) and works once.</p>` });
+    else await sendEmail({ to: destination, ...codeEmail({ code, expiresAt: new Date(Date.now() + 10 * 60 * 1000) }) });
   } catch {
     await prisma.signInCode.delete({ where: { id: row.id } });
     throw new VerificationError("We couldn't send your code — please try again.", 503);

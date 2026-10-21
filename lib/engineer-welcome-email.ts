@@ -1,124 +1,130 @@
-// Engineer signup welcome email. Table-based layout with inline styles
-// throughout — same pattern as epc-builder/improveasy's email templates
-// (Outlook and most mail clients don't support flexbox/grid/external CSS,
-// so this can't reuse the app's own NativeWind-driven dark theme; a light
-// body with a dark brand header band is the safe, standard shape).
+// Engineer signup welcome email — 2026 Build Guide mock-up (15 Oct), which
+// wins over older rules (CLAUDE.md). The checklist ticks off from the
+// account's real setup state.
 import { prisma } from "@/lib/db";
+import { appUrl } from "@/lib/app-url";
+import { EMAIL, emailShell, escapeHtml } from "@/lib/email-layout";
+import { REFERRAL_FIRST_YEAR_PERCENT, REFERRAL_LIFETIME_PERCENT } from "@/lib/referral";
 
-const BLUE = "#1966CC";
-const BLUE_DEEP = "#0F4C9E";
-const NAVY = "#0B1A2E";
-const MONEY = "#0E9F5B";
-const INK = "#14202E";
-const MUTED = "#5B6B7C";
-const LINE = "#E1E8F0";
-const WASH = "#F5F8FB";
 const SUPPORT_EMAIL = "support@tradesura.com";
 
-function wrapper(title: string, preheader: string, body: string): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<meta http-equiv="X-UA-Compatible" content="IE=edge">
-<title>${title}</title>
-</head>
-<body style="margin:0;padding:0;background-color:${WASH};font-family:Arial,Helvetica,sans-serif;">
-<span style="display:none;max-height:0;overflow:hidden;">${preheader}</span>
-<table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:${WASH};padding:32px 16px;">
-  <tr><td align="center">
-    <table cellpadding="0" cellspacing="0" border="0" width="600"
-      style="max-width:600px;background-color:#ffffff;border-radius:12px;overflow:hidden;border:1px solid ${LINE};">
-      <tr>
-        <td bgcolor="${NAVY}" style="background-color:${NAVY};padding:28px 40px;">
-          <span style="font-size:22px;font-weight:900;color:#ffffff;letter-spacing:-0.5px;">TRADE<span style="color:#5FA3F0;">SURA</span><span style="color:#3DD68C;">✓</span></span>
-        </td>
-      </tr>
-      <tr><td style="padding:36px 40px 8px;">
-        <p style="margin:0;font-size:24px;font-weight:900;color:${INK};line-height:30px;">${title}</p>
+type Item = { done: boolean; title: string; hint: string };
+
+function checklistRow(item: Item, last: boolean): string {
+  const border = last ? "" : `border-bottom:1px solid ${EMAIL.line};`;
+  const mark = item.done
+    ? `<div style="width:22px;height:22px;border-radius:11px;background:#3DD68C;color:${EMAIL.navy};font-weight:700;text-align:center;line-height:22px;font-size:13px;">&#10003;</div>`
+    : `<div style="width:18px;height:18px;border-radius:11px;border:2px solid ${EMAIL.blue};"></div>`;
+  const label = item.done
+    ? `<span style="color:${EMAIL.muted};"><s>${item.title}</s></span>`
+    : `<b>${item.title}</b> <span style="color:${EMAIL.muted};">· ${item.hint}</span>`;
+  return `<tr><td width="34" valign="top" style="padding:9px 0;">${mark}</td>
+          <td style="padding:9px 0;${border}">${label}</td></tr>`;
+}
+
+export async function engineerWelcomeEmailHtml(engineerId: string) {
+  const e = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
+  const [liveTiers, customerCount] = await Promise.all([
+    prisma.planTier.count({ where: { engineerId, status: "LIVE" } }),
+    prisma.customer.count({ where: { engineerId } }),
+  ]);
+  const firstName = escapeHtml(e.firstName || "there");
+  const brand = escapeHtml(e.tradingName || "Your business");
+  const base = appUrl();
+  const open = (to: string) => `${base}/api/open?to=${to}`;
+  // The mock-up's "WhatsApp us on …" line — set SUPPORT_WHATSAPP to show it.
+  const whatsapp = process.env.SUPPORT_WHATSAPP?.trim();
+
+  // The mock-up's six rows, in its order (inviting has its own block below).
+  const items: Item[] = [
+    { done: Boolean(e.packRequestedAt), title: "Member pack address saved", hint: "posts when your badge goes live" },
+    { done: e.stripeChargesEnabled, title: "Set up payments", hint: "2 minutes with Stripe" },
+    { done: liveTiers > 0, title: "Build your first plan", hint: "start from Boiler Care at £12" },
+    { done: Boolean(e.profilePublishedAt), title: "Get found on Google", hint: "your free profile page" },
+    { done: Boolean(e.websiteConnectedAt), title: "Connect your website", hint: "sell plans there too" },
+    { done: customerCount > 0, title: "Bring in your customers", hint: "each one worth up to £115 a year to you" },
+  ];
+  const doneCount = items.filter((i) => i.done).length;
+
+  const rows = `
+  <tr><td bgcolor="${EMAIL.navy}" style="background:${EMAIL.navy};padding:4px 32px 30px;">
+    <div style="font-size:28px;line-height:34px;font-weight:700;color:#ffffff;">You're in, ${firstName} &#128075;</div>
+    <div style="font-size:16px;line-height:24px;color:#C5D0E0;padding-top:10px;"><b style="color:#ffffff;">${brand}</b> now has a free TradeSura account. Sell your own care plans at the end of every job. Customers pay monthly by Direct Debit, you keep <b style="color:#3DD68C;">80%</b>, paid every Friday.</div>
+  </td></tr>
+
+  <tr><td style="padding:24px 32px 6px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F2FBF6;border:1px solid #BDEBD3;border-radius:12px;">
+      <tr><td style="padding:16px 18px;font-size:15px;line-height:22px;color:${EMAIL.ink};">
+        Just <b>10 customers</b> on a £12 plan =<br>
+        <span style="font-size:26px;line-height:34px;font-weight:700;color:${EMAIL.money};">£1,152 a year</span> <span style="color:${EMAIL.muted};">in your pocket</span>
       </td></tr>
-      ${body}
+    </table>
+  </td></tr>
+
+  <tr><td style="padding:22px 32px 4px;">
+    <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${EMAIL.blue};text-transform:uppercase;">Your setup · ${doneCount} of ${items.length} done</div>
+    <div style="font-size:13px;color:${EMAIL.muted};padding:4px 0 10px;">About 8 minutes in total. Pick up where you left off any time.</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:15px;line-height:21px;color:${EMAIL.ink};">
+      ${items.map((it, i) => checklistRow(it, i === items.length - 1)).join("")}
+    </table>
+  </td></tr>
+
+  <tr><td align="center" style="padding:22px 32px 8px;">
+    <a href="${open("onboarding")}" style="display:block;background:${EMAIL.blue};color:#ffffff;text-decoration:none;font-weight:700;font-size:17px;line-height:52px;border-radius:12px;">Open TradeSura and finish setup</a>
+  </td></tr>
+
+  <tr><td style="padding:22px 32px 4px;">
+    <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${EMAIL.blue};text-transform:uppercase;padding-bottom:8px;">What happens next</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;line-height:20px;color:${EMAIL.ink};">
+      <tr><td width="28" valign="top" style="color:${EMAIL.link};font-weight:700;padding:5px 0;">1</td><td style="padding:5px 0;">We check your Gas Safe registration, usually within 24 hours.</td></tr>
+      <tr><td width="28" valign="top" style="color:${EMAIL.link};font-weight:700;padding:5px 0;">2</td><td style="padding:5px 0;">Your <b>Gas Safe verified</b> badge goes live on your plans and profile.</td></tr>
+      <tr><td width="28" valign="top" style="color:${EMAIL.link};font-weight:700;padding:5px 0;">3</td><td style="padding:5px 0;">Your member pack is posted, with QR boiler stickers that link each boiler to its Home Passport.</td></tr>
+    </table>
+  </td></tr>
+
+  <tr><td style="padding:22px 32px 4px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
       <tr>
-        <td bgcolor="${WASH}" style="background-color:${WASH};padding:20px 40px;border-top:1px solid ${LINE};">
-          <p style="margin:0 0 4px;font-size:13px;font-weight:800;color:${INK};">TradeSura</p>
-          <p style="margin:0;font-size:11px;color:#8B95A1;">${SUPPORT_EMAIL} · tradesura.com</p>
+        <td width="50%" valign="top" style="padding-right:8px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${EMAIL.wash};border-radius:12px;"><tr><td style="padding:16px;font-size:14px;line-height:20px;color:${EMAIL.ink};">
+            <div style="font-weight:700;font-size:15px;padding-bottom:4px;">Give customers a choice</div>
+            Offer 2 or 3 plans, e.g. service and priority from £10, Boiler Care, and a Landlord plan with the CP12. Customers like picking.
+            <div style="padding-top:8px;"><a href="${open("plan-wizard")}" style="color:${EMAIL.link};font-weight:700;text-decoration:none;">Build a plan &rarr;</a></div>
+          </td></tr></table>
+        </td>
+        <td width="50%" valign="top" style="padding-left:8px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${EMAIL.wash};border-radius:12px;"><tr><td style="padding:16px;font-size:14px;line-height:20px;color:${EMAIL.ink};">
+            <div style="font-weight:700;font-size:15px;padding-bottom:4px;">Know another engineer?</div>
+            Earn <b>${REFERRAL_FIRST_YEAR_PERCENT}% of our fee</b> on every plan they sell for their first year, then <b>${REFERRAL_LIFETIME_PERCENT}% for life</b>.
+            <div style="padding-top:8px;"><a href="${base}/r/${escapeHtml(e.slug)}" style="color:${EMAIL.link};font-weight:700;text-decoration:none;">Share your invite link &rarr;</a></div>
+          </td></tr></table>
         </td>
       </tr>
     </table>
   </td></tr>
-</table>
-</body>
-</html>`;
-}
 
-const STEPS: [string, string, string][] = [
-  ["1", "Set up payments", "Connect Stripe — takes about 2 minutes, and you're paid out every Friday."],
-  ["2", "Build your first plan", "Start from Boiler Care at £12/month, or set your own price and inclusions."],
-  ["3", "Bring in your customers", "Import your book — every contact is a potential £144/year."],
-];
+  <tr><td style="padding:16px 32px 4px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #DCE3EC;border-radius:12px;"><tr><td style="padding:16px;font-size:14px;line-height:20px;color:${EMAIL.ink};">
+      <div style="font-weight:700;font-size:15px;padding-bottom:4px;">Your customers come with the house</div>
+      Every plan builds a <b>Home Passport</b>: a full service history that stays with the home. When it sells, the new owner finds your name on the boiler and your work on record, ready to carry on.
+    </td></tr></table>
+  </td></tr>
 
-export async function engineerWelcomeEmailHtml(engineerId: string) {
-  const engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
-  const firstName = engineer.firstName || "there";
-  const brand = engineer.tradingName || "your business";
-  const verified = Boolean(engineer.gasSafeNo && engineer.gasSafeVerifiedAt);
+  <tr><td style="padding:22px 32px 26px;font-size:14px;line-height:21px;color:${EMAIL.body};">
+    Any questions, just reply to this email${whatsapp ? ` or WhatsApp us on ${escapeHtml(whatsapp)}` : ` or write to <a href="mailto:${SUPPORT_EMAIL}" style="color:${EMAIL.link};">${SUPPORT_EMAIL}</a>`}. We're here to help you get your first plan live.<br><br>
+    The TradeSura team
+  </td></tr>`;
 
-  const verifiedCard = verified
-    ? `
-      <tr><td style="padding:0 40px 24px;">
-        <table cellpadding="0" cellspacing="0" border="0" width="100%"
-          style="background-color:${WASH};border-radius:10px;border:1px solid ${LINE};">
-          <tr><td style="padding:20px 24px;">
-            <p style="margin:0 0 4px;font-size:13px;font-weight:800;color:${MONEY};">✓ Gas Safe verified</p>
-            <p style="margin:0;font-size:14px;color:${INK};">
-              ${engineer.gasSafeName ?? ""}${engineer.gasSafeCompany ? ` · ${engineer.gasSafeCompany}` : ""}
-              ${engineer.gasSafeNo ? ` · Licence ${engineer.gasSafeNo}` : ""}
-            </p>
-            ${engineer.gasSafeCategories ? `<p style="margin:4px 0 0;font-size:12.5px;color:${MUTED};">${engineer.gasSafeCategories}</p>` : ""}
-          </td></tr>
-        </table>
-      </td></tr>`
-    : "";
-
-  const stepsHtml = STEPS.map(
-    ([num, title, desc]) => `
-      <tr>
-        <td valign="top" style="padding:0 12px 16px 0;width:32px;">
-          <div style="width:26px;height:26px;background-color:${BLUE};border-radius:50%;text-align:center;line-height:26px;font-size:12px;font-weight:900;color:#ffffff;">${num}</div>
-        </td>
-        <td valign="top" style="padding:2px 0 16px;">
-          <p style="margin:0 0 2px;font-size:14px;font-weight:800;color:${INK};">${title}</p>
-          <p style="margin:0;font-size:13px;color:${MUTED};line-height:19px;">${desc}</p>
-        </td>
-      </tr>`,
-  ).join("");
-
-  const body = `
-    <tr><td style="padding:0 40px 20px;font-size:15px;color:${INK};line-height:24px;">
-      Hi <strong>${firstName}</strong>, welcome to TradeSura.
-    </td></tr>
-    <tr><td style="padding:0 40px 24px;font-size:14px;color:${MUTED};line-height:23px;">
-      ${brand} now has a free TradeSura account. Sell your own care plans at the end of the job —
-      we collect the Direct Debit, you keep 80%, paid out every Friday.
-    </td></tr>
-    ${verifiedCard}
-    <tr><td style="padding:0 40px 24px;">
-      <table cellpadding="0" cellspacing="0" border="0" width="100%"
-        style="background-color:#ffffff;border-radius:10px;border:1px solid ${LINE};">
-        <tr><td style="padding:24px;">
-          <p style="margin:0 0 16px;font-size:13px;font-weight:800;color:${INK};letter-spacing:0.02em;">WHAT'S NEXT</p>
-          <table cellpadding="0" cellspacing="0" border="0" width="100%">${stepsHtml}</table>
-        </td></tr>
-      </table>
-    </td></tr>
-    <tr><td style="padding:0 40px 28px;font-size:13px;color:${MUTED};line-height:22px;">
-      Questions any time — reply to this email or reach us at
-      <a href="mailto:${SUPPORT_EMAIL}" style="color:${BLUE_DEEP};font-weight:700;">${SUPPORT_EMAIL}</a>.
-    </td></tr>`;
+  const footerExtra = `<img src="${base}/brand/stripe/Powered_by_Stripe_blurple.png" width="110" alt="Powered by Stripe" style="display:block;border:0;margin-bottom:10px;">
+    You're receiving this because you created a TradeSura account. <a href="${base}/privacy" style="color:${EMAIL.muted};">Privacy policy</a> · <a href="mailto:${SUPPORT_EMAIL}" style="color:${EMAIL.muted};">Help</a><br>`;
 
   return {
-    subject: `Welcome to TradeSura, ${firstName} — you're set up`,
-    html: wrapper(`You're in, ${firstName} 👋`, `Welcome to TradeSura — your free account is ready.`, body),
+    subject: `Welcome to TradeSura, ${e.firstName || "there"}`,
+    html: emailShell({
+      title: `Welcome to TradeSura, ${e.firstName || "there"}`,
+      preheader: "Your free account is ready. Set up payments and build your first plan in about 10 minutes.",
+      rows,
+      footerExtra,
+    }),
   };
 }
