@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { NotIncluded, btnClass } from "@/components/ui";
+import { NotIncluded } from "@/components/ui";
 import { EmbeddedCheckout } from "@/components/embedded-checkout";
+import { JOIN_BTN, PlanTierCard } from "@/components/plan-tier-card";
 
 type Tier = {
   id: string;
@@ -70,15 +71,13 @@ export function SignupTiers({
   if (started && selected) {
     return (
       <>
-        <div className="rounded-xl bg-paper border-[1.5px] border-flame p-3.5">
-          <div className="flex justify-between items-baseline">
-            <span className="font-disp text-[17px] uppercase tracking-wide">{selected.name}</span>
-            <span className="font-mono text-xl font-semibold">
-              {pounds(selected.priceMonthlyPence)}
-              <small className="text-[11px] text-muted font-normal">/mo</small>
-            </span>
-          </div>
-        </div>
+        <PlanTierCard
+          name={selected.name}
+          priceMonthlyPence={selected.priceMonthlyPence}
+          lines={selected.lines}
+          selected
+          compact
+        />
         <EmbeddedCheckout
           clientSecret={started.clientSecret}
           publishableKey={started.publishableKey}
@@ -101,27 +100,16 @@ export function SignupTiers({
         <button
           key={t.id}
           onClick={() => setSelectedId(t.id)}
-          className={`relative text-left bg-paper rounded-xl p-3.5 border-[1.5px] ${
-            t.id === selectedId
-              ? "border-flame shadow-[0_0_20px_rgba(95,163,240,0.25)]"
-              : t.isRecommended
-                ? "border-copper shadow-[0_0_20px_rgba(61,214,140,0.20)]"
-                : "border-line"
-          }`}
+          aria-pressed={t.id === selectedId}
+          className="block w-full text-left"
         >
-          {t.isRecommended && (
-            <span className="absolute -top-2 left-3 bg-copper text-[#052614] font-mono text-[9px] font-semibold px-2 py-0.5 rounded-full tracking-wide">
-              MOST CHOSEN
-            </span>
-          )}
-          <div className="flex justify-between items-baseline">
-            <span className="font-disp text-[17px] uppercase tracking-wide">{t.name}</span>
-            <span className="font-mono text-xl font-semibold">
-              {pounds(t.priceMonthlyPence)}
-              <small className="text-[11px] text-muted font-normal">/mo</small>
-            </span>
-          </div>
-          <p className="text-xs text-muted mt-1">{t.lines.join(" · ")}</p>
+          <PlanTierCard
+            name={t.name}
+            priceMonthlyPence={t.priceMonthlyPence}
+            lines={t.lines}
+            selected={t.id === selectedId}
+            recommended={t.isRecommended}
+          />
         </button>
       ))}
 
@@ -132,7 +120,7 @@ export function SignupTiers({
       {/* Price before mandate: the full monthly price is restated on the
           button itself, the last thing seen before the Payment Element. */}
       {selected && (
-        <button onClick={choose} disabled={busy} className={btnClass()}>
+        <button onClick={choose} disabled={busy} className={JOIN_BTN}>
           {busy
             ? "Opening secure Direct Debit setup…"
             : `Choose ${selected.name} — ${pounds(selected.priceMonthlyPence)}/month by Direct Debit`}

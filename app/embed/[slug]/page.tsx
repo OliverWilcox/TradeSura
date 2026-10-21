@@ -5,15 +5,11 @@ import { track } from "@/lib/track";
 import { appUrl } from "@/lib/app-url";
 import { clauseLine } from "@/lib/clauses";
 import { profileUrl } from "@/lib/public-url";
-import { btnClass } from "@/components/ui";
+import { JOIN_BTN, PlanTierCard } from "@/components/plan-tier-card";
 import { EmbedResizer } from "@/components/embed-resizer";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
-
-function pounds(pence: number) {
-  return pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
-}
 
 // What /embed.js puts in an iframe on the engineer's own website: their live
 // plans, each with a Join that opens the full plan page (checkout never runs
@@ -65,25 +61,9 @@ export default async function EmbedPlans({
               ...t.customLabels,
             ];
             return (
-              <div key={t.id} className="bg-paper border border-line rounded-xl p-3.5 flex flex-col">
-                <div className="font-semibold text-base">{t.name}</div>
-                <div className="text-sm mt-0.5">
-                  <span className="font-bold text-ok">{pounds(t.priceMonthlyPence)}</span> a month
-                </div>
-                <ul className="mt-2 space-y-1 text-[13px] flex-1">
-                  {lines.map((l) => (
-                    <li key={l} className="flex gap-1.5">
-                      <span aria-hidden>✓</span>
-                      <span>{l}</span>
-                    </li>
-                  ))}
-                </ul>
-                <a
-                  href={`${base}?src=website&tier=${t.id}`}
-                  target="_blank"
-                  rel="noopener"
-                  className={`${btnClass("green")} mt-3`}
-                >
+              <div key={t.id} className="flex flex-col gap-2.5">
+                <PlanTierCard name={t.name} priceMonthlyPence={t.priceMonthlyPence} lines={lines} />
+                <a href={`${base}?src=website&tier=${t.id}`} target="_blank" rel="noopener" className={JOIN_BTN}>
                   Join
                 </a>
               </div>
