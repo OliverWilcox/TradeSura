@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, ScrollView, Pressable, Share, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, TextInput, ScrollView, Pressable, KeyboardAvoidingView, Platform } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
@@ -7,6 +7,7 @@ import { AppHeader, Card, Button, Tick } from "@/components/ui";
 import { Icon } from "@/components/icon";
 import { CenteredSpinner } from "@/components/skeleton";
 import { checkEmail } from "@/lib/validate";
+import { copyText } from "@/lib/clipboard";
 
 // Getting started · "Connect your website" — the embed snippet (public/
 // embed.js on the web app), a plain-link fallback, and an email-it-to-my-
@@ -22,6 +23,14 @@ export default function WebsiteScreen() {
   const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const [copied, setCopied] = useState<"code" | "link" | null>(null);
+
+  async function copy(what: "code" | "link", text: string) {
+    if ((await copyText(text)) === "copied") {
+      setCopied(what);
+      setTimeout(() => setCopied(null), 2000);
+    }
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -95,8 +104,8 @@ export default function WebsiteScreen() {
                 Works with WordPress, Wix, Squarespace and most site builders: add an HTML or embed
                 block where the plans should go.
               </Text>
-              <Button variant="ghost" className="mt-3" onPress={() => Share.share({ message: data.snippet }).catch(() => {})}>
-                Copy the code
+              <Button variant="ghost" className="mt-3" onPress={() => copy("code", data.snippet)}>
+                {copied === "code" ? "Copied" : "Copy the code"}
               </Button>
             </Card>
 
@@ -141,8 +150,10 @@ export default function WebsiteScreen() {
               <Text selectable className="mt-1.5 font-mono text-[13px] text-ink">
                 {data.link}
               </Text>
-              <Pressable onPress={() => Share.share({ message: data.link }).catch(() => {})} className="mt-2.5">
-                <Text className="text-[14px] font-semibold text-flame">Copy the link</Text>
+              <Pressable onPress={() => copy("link", data.link)} className="mt-2.5">
+                <Text className="text-[14px] font-semibold text-flame">
+                  {copied === "link" ? "Copied" : "Copy the link"}
+                </Text>
               </Pressable>
             </Card>
           </ScrollView>

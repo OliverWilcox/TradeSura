@@ -16,6 +16,7 @@ import {
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "@/lib/api";
+import { copyText } from "@/lib/clipboard";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icon";
@@ -130,10 +131,13 @@ export default function PlanLive() {
   const display = link?.display ?? (me?.slug ? `tradesura.com/${me.slug}` : "your plan link");
   const shareText = `Here are my care plans — pick one and pay monthly by Direct Debit: ${link?.url ?? ""}`;
 
-  // No clipboard module in the current native build — the share sheet's own
-  // "Copy" does the job until one is added.
-  async function shareLink() {
-    if (link) await Share.share({ message: link.url }).catch(() => {});
+  const [copied, setCopied] = useState(false);
+  async function copyLink() {
+    if (!link) return;
+    if ((await copyText(link.url)) === "copied") {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   }
   async function whatsapp() {
     const wa = `whatsapp://send?text=${encodeURIComponent(shareText)}`;
@@ -171,7 +175,7 @@ export default function PlanLive() {
             </Text>
             <View className="mt-3 flex-row gap-2">
               {[
-                { icon: "share" as const, label: "Copy link", onPress: shareLink },
+                { icon: "copy" as const, label: copied ? "Copied" : "Copy link", onPress: copyLink },
                 { icon: "message" as const, label: "WhatsApp", onPress: whatsapp },
                 { icon: "qr" as const, label: "Show QR", onPress: () => setQrOpen(true) },
               ].map((b) => (

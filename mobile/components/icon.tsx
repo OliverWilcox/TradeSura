@@ -58,6 +58,7 @@ const ICONS = {
   mail: { ios: "envelope", android: "mail" },
   code: { ios: "chevron.left.forwardslash.chevron.right", android: "code" },
   pound: { ios: "sterlingsign", android: "currency_pound" },
+  copy: { ios: "doc.on.doc", android: "content_copy" },
 } as const;
 
 export type IconName = keyof typeof ICONS;

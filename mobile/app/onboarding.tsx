@@ -116,7 +116,7 @@ export default function Onboarding() {
           </Pressable>
 
           <View className="items-start">
-            <StripeBadge caption="Paid out every Friday" height={22} />
+            <StripeBadge caption="Paid out every Friday" height={22} light />
           </View>
 
           <Pressable

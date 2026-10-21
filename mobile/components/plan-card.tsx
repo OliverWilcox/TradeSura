@@ -1,5 +1,5 @@
 import { View, Text, Pressable } from "react-native";
-import { Tick, Button } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { Icon } from "@/components/icon";
 
 export type PlanLine = string | { title: string; note?: string | null };
@@ -8,12 +8,14 @@ function pounds(pence: number) {
   return `£${(pence / 100).toFixed(2).replace(/\.00$/, "")}`;
 }
 
-// Build Guide v2 Part 8 Step 4 / Part 9.1 / Part 15.1 — "the exact
-// customer-facing card... same card component as wizard Step 4 and the
-// public page." Title, £X a month in money-green, the included lines with
-// white ticks (green is money only — Part 2.1 LAW). With `engineer` it adds
-// the public page's header (initials, trading name, Gas Safe badge) and the
-// customer's green Join, the one green button CLAUDE.md allows.
+// The customer's view of a plan, as the 2026 Build Guide targets draw it on
+// the builder's steps 2–4: a white card, navy text, blue ticks, a green
+// "Cancel anytime" chip and the customer's blue Join. (2026 guide wins over
+// Build Guide v2's colour rules — see CLAUDE.md.)
+const NAVY = "#0B1A2E";
+const JOIN_BLUE = "#1F5FC4";
+const TICK_BLUE = "#1F5FC4";
+
 export function CustomerPlanCard({
   name,
   priceMonthlyPence,
@@ -40,64 +42,62 @@ export function CustomerPlanCard({
     .map((w) => w[0]!.toUpperCase())
     .join("");
   return (
-    <View className="rounded-2xl border border-line-strong bg-paper p-4">
-      {engineer && (
-        <View className="mb-3 flex-row flex-wrap items-center gap-2">
-          <View className="h-9 w-9 items-center justify-center rounded-full bg-flame-deep">
-            <Text className="text-[13px] font-bold text-white">{initials}</Text>
+    <View>
+      <View className="rounded-2xl bg-white p-4">
+        {engineer && (
+          <View className="mb-3 flex-row flex-wrap items-center gap-2.5">
+            <View className="h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: JOIN_BLUE }}>
+              <Text className="text-[14px] font-bold text-white">{initials}</Text>
+            </View>
+            <Text className="text-[16px] font-bold" style={{ color: NAVY }}>
+              {engineer.tradingName}
+            </Text>
+            {/* Never claimed for an engineer who isn't actually verified. */}
+            {engineer.verified && (
+              <View className="flex-row items-center gap-1.5 rounded-full border border-[#D5DDE8] px-2.5 py-1">
+                <Icon name="verified" size={14} color={JOIN_BLUE} />
+                <Text className="text-[12.5px]" style={{ color: NAVY }}>
+                  Gas Safe verified
+                </Text>
+              </View>
+            )}
           </View>
-          <Text className="text-[15px] font-semibold text-ink">{engineer.tradingName}</Text>
-          {/* Never claimed for an engineer who isn't actually verified. */}
-          {engineer.verified && (
-            <View className="flex-row items-center gap-1 rounded-full border border-line-strong px-2 py-0.5">
-              <Tick credential size={11} />
-              <Text className="text-[11px] text-ink">Gas Safe verified</Text>
-            </View>
-          )}
-        </View>
-      )}
-      {engineer ? (
-        <>
-          <Text className="text-[22px] font-bold text-ink">{name}</Text>
-          <Text className="mt-0.5 text-[15px] text-ink">
-            <Text className="font-bold text-ok">{pounds(priceMonthlyPence)}</Text> a month
-          </Text>
-        </>
-      ) : (
-        <View className="flex-row items-baseline justify-between">
-          <Text className="font-bold text-lg text-ink">{name}</Text>
-          <Text className="font-mono font-extrabold text-ok">
-            {pounds(priceMonthlyPence)}
-            <Text className="text-xs font-bold text-muted">/month</Text>
-          </Text>
-        </View>
-      )}
-      {cancelChip && (
-        <Text className="mt-2.5 self-start overflow-hidden rounded-full bg-flame-tint px-2.5 py-1 text-[12px] font-semibold text-flame">
-          Cancel anytime
+        )}
+        <Text className="text-[24px] font-bold" style={{ color: NAVY }}>
+          {name}
         </Text>
-      )}
-      <View className="mt-2.5 gap-1.5">
-        {lines.map((line) => {
-          const l = typeof line === "string" ? { title: line } : line;
-          return (
-            <View key={l.title} className="flex-row items-start gap-2">
-              <View className="pt-0.5">
-                <Tick size={13} />
+        <Text className="mt-0.5 text-[16px]" style={{ color: NAVY }}>
+          {pounds(priceMonthlyPence)} a month
+        </Text>
+        {cancelChip && (
+          <Text className="mt-2.5 self-start overflow-hidden rounded-full bg-[#C9F2DA] px-3 py-1 text-[13px] text-[#14532D]">
+            Cancel anytime
+          </Text>
+        )}
+        <View className="mt-2.5 gap-2">
+          {lines.map((line) => {
+            const l = typeof line === "string" ? { title: line } : line;
+            return (
+              <View key={l.title} className="flex-row items-start gap-2.5">
+                <View className="pt-0.5">
+                  <Icon name="check" size={15} color={TICK_BLUE} weight="bold" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-[15px]" style={{ color: NAVY }}>
+                    {l.title}
+                  </Text>
+                  {l.note && <Text className="text-[13px] text-[#5B6B82]">{l.note}</Text>}
+                </View>
               </View>
-              <View className="flex-1">
-                <Text className="text-[13.5px] text-ink">{l.title}</Text>
-                {l.note && <Text className="text-[12px] text-muted">{l.note}</Text>}
-              </View>
-            </View>
-          );
-        })}
-      </View>
-      {showJoin && (
-        <View className="mt-3.5 items-center rounded-xl bg-ok py-3">
-          <Text className="text-sm font-bold text-on-light">Join</Text>
+            );
+          })}
         </View>
-      )}
+        {showJoin && (
+          <View className="mt-4 items-center rounded-xl py-3" style={{ backgroundColor: JOIN_BLUE }}>
+            <Text className="text-[16px] font-semibold text-white">Join</Text>
+          </View>
+        )}
+      </View>
       {cta && (
         <Button className="mt-3.5" onPress={cta.onPress} disabled={cta.disabled}>
           {cta.label}
@@ -125,26 +125,25 @@ export function CustomerPlanPeek({
 }) {
   const shown = lines.slice(0, max).map((l) => (typeof l === "string" ? l : l.title));
   return (
-    <Pressable onPress={onPress} disabled={!onPress} className="rounded-xl border border-line-strong bg-paper-2 p-3.5">
-      <Text className="text-[13.5px] text-ink" numberOfLines={1}>
-        <Text className="font-bold">{tradingName}</Text> · {name} ·{" "}
-        <Text className="font-bold text-ok">{pounds(priceMonthlyPence)}</Text> a month
+    <Pressable onPress={onPress} disabled={!onPress} className="rounded-xl bg-white p-3.5">
+      <Text className="text-[14px]" style={{ color: NAVY }} numberOfLines={1}>
+        <Text className="font-bold">{tradingName}</Text> · {name} · {pounds(priceMonthlyPence)} a month
       </Text>
       <View className="mt-2 gap-1">
         {shown.map((t) => (
           <View key={t} className="flex-row items-center gap-2">
-            <Icon name="check" size={12} weight="bold" />
-            <Text className="flex-1 text-[12.5px] text-ink" numberOfLines={1}>
+            <Icon name="check" size={13} color={NAVY} weight="bold" />
+            <Text className="flex-1 text-[13.5px]" style={{ color: NAVY }} numberOfLines={1}>
               {t}
             </Text>
           </View>
         ))}
         {lines.length > max && (
-          <Text className="pl-5 text-[12px] text-muted">+ {lines.length - max} more</Text>
+          <Text className="pl-5 text-[12.5px] text-[#5B6B82]">+ {lines.length - max} more</Text>
         )}
       </View>
-      <View className="mt-2.5 self-start rounded-lg bg-ok px-4 py-1.5">
-        <Text className="text-[13px] font-bold text-on-light">Join</Text>
+      <View className="mt-2.5 self-start rounded-md px-5 py-1.5" style={{ backgroundColor: JOIN_BLUE }}>
+        <Text className="text-[14px] text-white">Join</Text>
       </View>
     </Pressable>
   );

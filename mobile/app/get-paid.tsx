@@ -90,7 +90,7 @@ export default function GetPaid() {
             Your customer pays monthly by Direct Debit
           </FlowRow>
           <FlowRow icon="person" n={2}>
-            You keep <Text className="font-bold text-ink">80%</Text>
+            You keep <Text className="font-bold text-ok">80%</Text>
           </FlowRow>
           <FlowRow icon="bank" n={3}>
             Paid into your bank every Friday
@@ -127,8 +127,8 @@ export default function GetPaid() {
           </Text>
         </View>
 
-        <View className="py-1">
-          <StripeBadge />
+        <View className="items-center py-1">
+          <StripeBadge light />
         </View>
 
         {error && (

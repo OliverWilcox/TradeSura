@@ -17,6 +17,13 @@ everywhere; one native icon family (`mobile/components/icon.tsx`, SF
 Symbols / Material Symbols), no emoji as icons; pushed-page titles sit
 left-aligned beside the back chevron; avatar initials are first + last name.
 The Verified Member seal PNG is concept-only (mirrored text) — never ship it.
+[DECISION 2026-10-20, human] The **TradeSura Build Guide 2026** pack
+(`app/assets/tradesura build guide 2026/`: target screens + email mock-ups)
+is the newest guide and wins wherever it conflicts with Build Guide v2 or
+anything above — e.g. the customer's Join is blue, done ticks and "80%" are
+green, the welcome email keeps its blue button and emoji. Always follow the
+newest guide. Referrals are the 25% / 10% affiliate deal (Build Review 2,
+ruling 4), as the invite target shows.
 
 Care-plan platform for UK gas engineers. Engineers build tiered maintenance plans,
 sell them on the doorstep via a link/QR, customers pay by Direct Debit (Stripe
