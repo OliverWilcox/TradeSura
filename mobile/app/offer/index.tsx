@@ -165,7 +165,7 @@ export default function OfferStart() {
       ? customers?.find((c) => c.id === customerId)?.firstName ?? "there"
       : form.firstName || "there";
   const brandLabel = me?.tradingName ?? "your engineer";
-  const linkPreview = me?.slug ? `tradesura.com/p/${me.slug}` : "your plan link";
+  const linkPreview = me?.slug ? `tradesura.com/${me.slug}` : "your plan link";
   const selectedTier = tiers?.find((t) => t.id === tierId) ?? null;
 
   const shown = customers ? (showAll ? customers : customers.slice(0, 8)) : [];

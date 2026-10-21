@@ -1,10 +1,14 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, Share, Linking } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { View, Text, ScrollView, Share, Linking, Pressable } from "react-native";
+import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, Button } from "@/components/ui";
 import { Skeleton, Bone, TextBone, LoadingImage } from "@/components/skeleton";
+import { Icon, type IconName } from "@/components/icon";
+import { RingMark } from "@/components/ring-mark";
+import { useAuth } from "@/lib/auth-context";
+import { copyText } from "@/lib/clipboard";
 
 type Invitee = {
   name: string;
@@ -67,7 +71,26 @@ function ReferralSkeleton() {
   );
 }
 
+// The target's worked example: 30 customers on £12 plans, at the 20% fee.
+const EXAMPLE_CUSTOMERS = 30;
+const EXAMPLE_PLAN_PENCE = 1200;
+const FEE_RATE = 0.2;
+
+function ShareChip({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-line-strong py-3"
+    >
+      <Icon name={icon} size={17} />
+      <Text className="text-[14.5px] text-ink">{label}</Text>
+    </Pressable>
+  );
+}
+
 export default function Referral() {
+  const { me, refreshMe } = useAuth();
+  const [copied, setCopied] = useState(false);
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cardBusy, setCardBusy] = useState(false);
@@ -87,13 +110,47 @@ export default function Referral() {
     }, [load]),
   );
 
+  // Any share ticks off the getting-started hub's "Invite engineers" step.
+  function markShared() {
+    api("/api/referral/shared", { method: "POST" })
+      .then(() => refreshMe())
+      .catch(() => {});
+  }
+
+  function inviteText() {
+    return `I'm using TradeSura to put my customers on monthly care plans — free account, you keep 80%, paid every Friday. Worth a look: ${data?.link ?? ""}`;
+  }
+
   async function share() {
     if (!data) return;
-    const msg = `I'm using TradeSura to put my customers on monthly care plans — free account, you keep 80%, paid weekly. Worth a look: ${data.link}`;
+    const msg = inviteText();
     const wa = `whatsapp://send?text=${encodeURIComponent(msg)}`;
-    const canWa = await Linking.canOpenURL(wa);
+    const canWa = await Linking.canOpenURL(wa).catch(() => false);
+    markShared();
     if (canWa) return Linking.openURL(wa);
     await Share.share({ message: msg });
+  }
+
+  async function text() {
+    if (!data) return;
+    markShared();
+    await Linking.openURL(`sms:&body=${encodeURIComponent(inviteText())}`).catch(() =>
+      Share.share({ message: inviteText() }),
+    );
+  }
+
+  async function copy() {
+    if (!data) return;
+    markShared();
+    if ((await copyText(data.link)) === "copied") {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
+  function later() {
+    if (router.canGoBack()) router.back();
+    else router.replace("/");
   }
 
   // Review #6 — the name-stamped income card was only ever previewed on
@@ -124,7 +181,14 @@ export default function Referral() {
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader title="Refer an engineer" />
+        <AppHeader
+          title="Getting started · Invite engineers"
+          right={
+            <Pressable onPress={later} hitSlop={10}>
+              <Text className="text-[14px] text-muted">Skip for now</Text>
+            </Pressable>
+          }
+        />
       </SafeAreaView>
       <ScrollView className="flex-1" contentContainerClassName="gap-3.5 px-4 pb-8 pt-4">
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
@@ -133,23 +197,71 @@ export default function Referral() {
 
         {data && (
           <>
-            {/* Ruling 4 — the hero states the affiliate deal; the green figure is
-                only ever real money earned so far. */}
-            <Card variant="hero" className="items-center py-5">
-              <Text className="text-center text-xl font-bold text-white">
-                Earn {data.firstYearPercent}% of our fee
+            {/* 2026 Build Guide TARGET_invite_step, with Build Review 2's
+                affiliate deal (ruling 4). Green is only ever real money. */}
+            <View className="flex-row items-center justify-center gap-4 pt-2">
+              <Icon name="person" size={52} color="#5fa3f0" />
+              <RingMark size={84} />
+              <Icon name="person" size={52} color="#3dd68c" />
+            </View>
+            <View>
+              <Text className="text-center text-[26px] font-extrabold text-ink">Know another gas engineer?</Text>
+              <Text className="mt-1.5 text-center text-[15px] text-muted">
+                Invite them to TradeSura and earn from every plan they sell.
               </Text>
-              <Text className="mt-1 text-center font-sans text-sm text-white">
-                on every plan the engineers you bring in sell — for their first year, then{" "}
-                {data.lifetimePercent}% for life.
-              </Text>
+            </View>
+
+            <Card>
+              <Micro className="text-flame">The deal</Micro>
+              <View className="mt-2 flex-row items-center gap-4">
+                <Text className="w-[104px] text-[46px] font-extrabold text-copper">{data.firstYearPercent}%</Text>
+                <Text className="flex-1 text-[16px] leading-[22px] text-ink">
+                  of our fee on every plan they sell, for their first year
+                </Text>
+              </View>
+              <View className="mt-1 flex-row items-center gap-4">
+                <Text className="w-[104px] text-[46px] font-extrabold text-copper">{data.lifetimePercent}%</Text>
+                <Text className="flex-1 text-[16px] leading-[22px] text-ink">for life after that</Text>
+              </View>
+              <Text className="mt-2 text-[13.5px] text-muted">Paid with your Friday payouts. One level only.</Text>
               {data.totalEarnedPence > 0 && (
-                <Text className="mt-3 font-mono font-semibold text-2xl text-copper">
-                  {pounds(data.totalEarnedPence)}
-                  <Text className="font-sans text-xs text-night-muted"> earned so far</Text>
+                <Text className="mt-2 text-[15px] font-semibold text-copper">
+                  {pounds(data.totalEarnedPence)} earned so far
                 </Text>
               )}
             </Card>
+
+            <Card>
+              <Micro className="text-flame">For example</Micro>
+              <Text className="mt-1.5 text-[15px] text-ink">
+                An engineer you invite gets {EXAMPLE_CUSTOMERS} customers on £{EXAMPLE_PLAN_PENCE / 100} plans.
+              </Text>
+              <Text className="mt-1 text-[15px] font-semibold text-ok">
+                You earn about £
+                {Math.round((EXAMPLE_CUSTOMERS * EXAMPLE_PLAN_PENCE * FEE_RATE * 12 * data.firstYearPercent) / 10000)} in
+                their first year, then about £
+                {Math.round((EXAMPLE_CUSTOMERS * EXAMPLE_PLAN_PENCE * FEE_RATE * 12 * data.lifetimePercent) / 10000)} a year.
+              </Text>
+              <Text className="mt-1 text-[12.5px] text-muted">Example only</Text>
+            </Card>
+
+            <Card>
+              <Micro className="text-flame">Your invite link</Micro>
+              <Text selectable className="mt-1.5 text-[19px] font-bold text-ink">
+                {data.link.replace(/^https?:\/\/(www\.)?/, "")}
+              </Text>
+              {me?.slug && <Text className="mt-0.5 text-[14px] text-muted">Your code: {me.slug}</Text>}
+              <View className="mt-3 flex-row gap-2">
+                <ShareChip icon="message" label="WhatsApp" onPress={share} />
+                <ShareChip icon="chat" label="Text" onPress={text} />
+                <ShareChip icon="copy" label={copied ? "Copied" : "Copy"} onPress={copy} />
+              </View>
+            </Card>
+
+            <Button onPress={share}>Share my invite</Button>
+            <Pressable onPress={later} className="items-center py-1">
+              <Text className="text-[15px] font-semibold text-flame">I&apos;ll do this later</Text>
+            </Pressable>
 
             {/* Part 14 — "Share my income card... soft-gated ('Unlocks with
                 your first payout') until there's a real card to share." */}
@@ -243,9 +355,6 @@ export default function Referral() {
             </Card>
           </>
         )}
-        <Button onPress={share} disabled={!data}>
-          Invite on WhatsApp
-        </Button>
       </ScrollView>
     </View>
   );

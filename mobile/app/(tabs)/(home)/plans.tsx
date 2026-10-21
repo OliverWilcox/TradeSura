@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, Pressable } from "react-native";
+import { View, Text, ScrollView, RefreshControl } from "react-native";
 import { useFocusEffect, useLocalSearchParams, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
-import { AppHeader, Card, Micro, Pill, Tick, Button } from "@/components/ui";
+import { AppHeader, Card, Pill, Tick, Button } from "@/components/ui";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 
 type Tier = {
@@ -14,17 +14,6 @@ type Tier = {
   clauseTitles: string[];
   activePlanCount: number;
 };
-
-// Build Guide v2 Part 7 — quick starts, mirroring lib/clauses.ts's
-// TIER_PRESETS by hand (display only; the server owns what actually gets
-// created — see /api/tiers's `template` handling). CONFIG 19.2: whether
-// these show at launch is Matt's call — this constant is the switch.
-const SHOW_QUICK_STARTS = true;
-const TEMPLATES = [
-  { name: "Boiler Care", priceMonthlyPence: 1200 },
-  { name: "Boiler + Controls", priceMonthlyPence: 1500 },
-  { name: "Landlord Care", priceMonthlyPence: 1500 },
-] as const;
 
 const FEE_RATE = 0.2;
 
@@ -72,8 +61,6 @@ export default function PlansHub() {
   const [tiers, setTiers] = useState<Tier[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -101,27 +88,6 @@ export default function PlansHub() {
     setRefreshing(false);
   }
 
-  async function startFromTemplate(name: string) {
-    setCreating(true);
-    setError(null);
-    try {
-      const { id } = await api<{ id: string }>("/api/tiers", {
-        method: "POST",
-        body: JSON.stringify({ template: name }),
-      });
-      setPickerOpen(false);
-      router.push({ pathname: "/plan-wizard", params: { tierId: id } });
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't start that plan.");
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  function createBlank() {
-    setPickerOpen(false);
-    router.push("/plan-wizard");
-  }
 
   if (!tiers) {
     return (
@@ -154,31 +120,10 @@ export default function PlansHub() {
           Your active plans — ready to offer to your customers.
         </Text>
 
-        <Button onPress={() => (SHOW_QUICK_STARTS ? setPickerOpen((v) => !v) : createBlank())}>
-          ＋ Create a new plan
-        </Button>
+        {/* The builder's Step 1 starter chips replace the old quick-start
+            picker that used to open here. */}
+        <Button onPress={() => router.push("/plan-wizard")}>＋ Create a new plan</Button>
 
-        {pickerOpen && (
-          <Card>
-            <Micro className="mb-1.5">Start from</Micro>
-            <Pressable onPress={createBlank} className="border-b border-line-soft py-2.5">
-              <Text className="font-semibold text-sm text-flame-deep">Start blank</Text>
-            </Pressable>
-            {TEMPLATES.map((t) => (
-              <Pressable
-                key={t.name}
-                onPress={() => startFromTemplate(t.name)}
-                disabled={creating}
-                className="flex-row items-baseline justify-between border-b border-line-soft py-2.5 last:border-b-0"
-              >
-                <Text className="font-sans text-sm text-ink">{t.name}</Text>
-                <Text className="font-mono text-xs text-muted">
-                  £{(t.priceMonthlyPence / 100).toFixed(0)}/mo
-                </Text>
-              </Pressable>
-            ))}
-          </Card>
-        )}
 
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 

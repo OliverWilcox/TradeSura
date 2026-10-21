@@ -1,265 +1,137 @@
-import { useCallback, useState, type ReactNode } from "react";
-import { View, Text, TextInput, ScrollView, Pressable } from "react-native";
+import { useCallback } from "react";
+import { View, Text, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as WebBrowser from "expo-web-browser";
 import { router, useFocusEffect } from "expo-router";
-import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
-import { AppHeader, Card, Micro, Button, Tick, OpeningStripe } from "@/components/ui";
+import { setupSteps, type SetupStep } from "@/lib/setup-steps";
+import { Icon } from "@/components/icon";
+import { RingProgress } from "@/components/ring-progress";
+import { StripeBadge } from "@/components/stripe-badge";
 
-// E2 — post-signup onboarding wizard. Four steps, sequenced for activation:
-// get paid → first plan → import book → founding pack. Only step 1 gates the
-// app (see (tabs)/_layout.tsx); 2–4 are strong nudges that resume from wherever
-// the engineer left off (state derived from /api/me, not stored).
-type StepState = "done" | "next" | "later";
+// 2026 Build Guide TARGET_getting_started_hub — seven numbered steps, a
+// progress ring, and the Gas Safe check status. Steps can be done in any
+// order; the first unfinished one is highlighted with its button inline.
+// State is derived from /api/me (lib/setup-steps.ts), never stored.
 
-function StepCard({
-  n,
-  title,
-  body,
-  state,
-  cta,
-  onPress,
-  children,
-}: {
-  n: number;
-  title: string;
-  body: string;
-  state: StepState;
-  cta?: string;
-  onPress?: () => void;
-  children?: ReactNode;
-}) {
+function StepRow({ n, step, current }: { n: number; step: SetupStep; current: boolean }) {
   return (
-    <Card
-      variant={state === "next" ? "raised" : "flat"}
-      className={
-        state === "next" ? "border-[1.5px] border-flame" : state === "later" ? "opacity-60" : ""
-      }
+    <Pressable
+      onPress={() => router.push(step.href)}
+      accessibilityRole="button"
+      accessibilityLabel={`Step ${n}: ${step.title}${step.done ? ", done" : ""}`}
+      className={`flex-row items-center gap-3.5 rounded-2xl border px-3.5 py-3.5 ${current ? "border-[1.5px] border-flame" : "border-line-strong"}`}
     >
-      <View className="flex-row items-start justify-between gap-2">
-        <View className="shrink">
-          <Micro className={state === "next" ? "text-flame" : ""}>
-            {state === "done" ? "Done" : `Step ${n}`}
-          </Micro>
-          <Text className="mt-0.5 font-semibold text-[15px] text-ink">{title}</Text>
-          <Text className="mt-0.5 font-sans text-xs text-muted">{body}</Text>
-        </View>
-        {state === "done" && <Tick size={18} />}
+      <View className="h-12 w-12 items-center justify-center rounded-full border border-line-strong bg-paper">
+        <Text className="text-[20px] font-semibold text-ink">{n}</Text>
       </View>
-      {children}
-      {state !== "done" && cta && onPress && (
-        <Button onPress={onPress} variant={state === "next" ? "flame" : "ghost"} className="mt-3">
-          {cta}
-        </Button>
+      <View className="flex-1">
+        <Text className="text-[17px] font-semibold text-ink">{step.title}</Text>
+        <Text className="mt-0.5 text-[13.5px] text-muted">
+          {step.sub}
+          {step.money && <Text className="font-semibold text-ok">{step.money}</Text>}
+        </Text>
+      </View>
+      {step.done ? (
+        <View className="h-10 w-10 items-center justify-center rounded-full bg-ok">
+          <Icon name="check" size={18} color="#0f2140" weight="bold" />
+        </View>
+      ) : current ? (
+        <View className="flex-row items-center gap-1.5">
+          <View className="rounded-xl bg-white px-3 py-2">
+            <Text className="text-[13.5px] font-bold text-on-light">{step.cta}</Text>
+          </View>
+          <Icon name="chevron" size={15} color="#c9d6e6" weight="semibold" />
+        </View>
+      ) : (
+        <Icon name="chevron" size={15} color="#c9d6e6" weight="semibold" />
       )}
-    </Card>
+    </Pressable>
   );
 }
 
 export default function Onboarding() {
   const { me, refreshMe, skipStripe } = useAuth();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [packAddress, setPackAddress] = useState("");
-  const [packBusy, setPackBusy] = useState(false);
-  const [packError, setPackError] = useState<string | null>(null);
 
-  // Steps are derived from the profile — re-read it whenever the hub comes
-  // back into view (e.g. returning from the plan wizard or an import).
+  // Steps come from the profile — re-read it whenever the hub comes back
+  // into view (returning from the wizard, Stripe, an import…).
   useFocusEffect(
     useCallback(() => {
       refreshMe();
     }, [refreshMe]),
   );
 
-  const paid = Boolean(me?.stripeConnected);
-  const hasPlan = Boolean(me?.hasPlan);
-  const hasBook = (me?.customerCount ?? 0) > 0;
-  const packDone = Boolean(me?.packRequestedAt);
-
-  async function connectStripe() {
-    setBusy(true);
-    setError(null);
-    try {
-      // Build Guide v2 review 17 Sept, B3 — see lib/stripe.ts's
-      // getConnectLinkWithRetry for why a single retry belongs here.
-      const { url } = await getConnectLinkWithRetry();
-      // Build Guide v2 Part 17.1 — "Kill the iOS 'wants to use stripe.com'
-      // popup: run Stripe onboarding in an ephemeral web session (no
-      // shared-cookie prompt)." preferEphemeralSession is iOS-only
-      // (ASWebAuthenticationSession's prefersEphemeralWebBrowserSession);
-      // it's ignored, harmlessly, on Android.
-      const result = await WebBrowser.openAuthSessionAsync(url, "tradesura://onboarding", {
-        preferEphemeralSession: true,
-      });
-      const err = stripeResultError(result);
-      if (err) setError(err);
-      else if (result.type === "success") await refreshMe();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't start payment setup.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function requestPack() {
-    if (packAddress.trim().length < 10) {
-      setPackError("Enter your full postal address, including the postcode.");
-      return;
-    }
-    setPackBusy(true);
-    setPackError(null);
-    try {
-      await api("/api/onboarding/pack", {
-        method: "POST",
-        body: JSON.stringify({ address: packAddress.trim() }),
-      });
-      await refreshMe();
-    } catch (e) {
-      setPackError(e instanceof ApiError ? e.message : "Couldn't save your address.");
-    } finally {
-      setPackBusy(false);
-    }
-  }
-
-  function stepState(done: boolean, isNext: boolean): StepState {
-    if (done) return "done";
-    return isNext ? "next" : "later";
-  }
+  const steps = setupSteps(me);
+  const done = steps.filter((s) => s.done).length;
+  const currentIdx = steps.findIndex((s) => !s.done);
+  const verified = Boolean(me?.gasSafeVerifiedAt);
+  const rejected = Boolean(me?.gasSafeRejectedAt) && !verified;
+  const inReview = Boolean(me?.gasSafeReviewRequestedAt) && !verified && !rejected;
 
   return (
-    <View className="flex-1 bg-panel">
-      <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader title="Getting started" />
-      </SafeAreaView>
-      <ScrollView className="flex-1" contentContainerClassName="gap-2.5 px-4 pb-6 pt-4">
-        <Text className="font-bold text-2xl uppercase tracking-wide text-ink">
-          {me?.firstName ? `Welcome, ${me.firstName}` : "Welcome"}
-        </Text>
-        <Text className="mb-1 font-sans text-sm text-muted">
-          Four steps and you&apos;re earning. About 8 minutes.
-        </Text>
-
-        <StepCard
-          n={1}
-          title="Get paid"
-          body={
-            paid
-              ? "Payouts ready — you'll be paid every Friday."
-              : "Stripe handles your details — TradeSura never sees your bank login."
-          }
-          state={stepState(paid, !paid)}
-          cta={me?.stripeDetailsSubmitted ? "Finish payment setup" : "Set up payments"}
-          onPress={connectStripe}
-        >
-          {busy && <OpeningStripe />}
-          {/* Build Guide v2 review 17 Sept, B3 — "catch it gracefully with a
-              retry prompt rather than a bare failure." getConnectLinkWithRetry
-              already retries once silently before this ever shows; if it
-              still fails, the copy itself now reads as an invitation to tap
-              the button above again, not a dead-end error report. */}
-          {error && (
-            <Text className="mt-2 font-sans text-xs text-danger">
-              {error} Tap &ldquo;{me?.stripeDetailsSubmitted ? "Finish payment setup" : "Set up payments"}
-              &rdquo; above to try again.
-            </Text>
-          )}
-        </StepCard>
-
-        <StepCard
-          n={2}
-          title="Your first plan"
-          body={
-            hasPlan
-              ? "Your plan page is live — customers can join it now."
-              : "We've drafted Boiler Care at £12/month — approve it or set your own price."
-          }
-          // Per the user's direct ask: getting paid and building a plan can
-          // happen in either order — neither blocks the other (see B6's
-          // fix, (tabs)/_layout.tsx). This card now matches that: "next"
-          // (highlighted, flame button) as soon as it isn't done yet,
-          // exactly like Step 1, not only once Step 1 also happens to be
-          // done. "Done" still means hasPlan, unchanged.
-          state={stepState(hasPlan, !hasPlan)}
-          cta="Build my plan"
-          onPress={() => router.push({ pathname: "/plans", params: { from: "setup" } })}
-        />
-
-        <StepCard
-          n={3}
-          title="Your customers"
-          body={
-            hasBook
-              ? `${me?.customerCount} customer${me?.customerCount === 1 ? "" : "s"} imported — each one is a potential £115/yr to you.`
-              : "Import your book — every contact is a potential £115/yr to you."
-          }
-          state={stepState(hasBook, paid && hasPlan && !hasBook)}
-          cta="Import customers"
-          onPress={() => router.push("/customers/import-contacts")}
-        />
-
-        <StepCard
-          n={4}
-          title="Your member pack"
-          body={
-            packDone
-              ? me?.gasSafeVerifiedAt
-                ? "On its way — free QR cards and a van sticker."
-                : "Address saved — your pack posts as soon as your badge goes live."
-              : "Free cards & van sticker with your personal QR code — hand one over at every job."
-          }
-          state={stepState(packDone, paid && hasPlan && hasBook && !packDone)}
-        >
-          {!packDone && (
-            <View className="mt-2.5 gap-2">
-              <TextInput
-                value={packAddress}
-                onChangeText={(v) => {
-                  setPackAddress(v);
-                  setPackError(null);
-                }}
-                placeholder="Full postal address"
-                placeholderTextColor="#6E86A3"
-                multiline
-                className="min-h-[64px] rounded-[10px] border border-line bg-paper px-3 py-2.5 font-sans text-[15px] text-ink"
-              />
-              {packError && <Text className="font-sans text-xs text-danger">{packError}</Text>}
-              <Button
-                onPress={requestPack}
-                variant="ghost"
-                disabled={packBusy}
-              >
-                {packBusy ? "Saving…" : "Send my pack"}
-              </Button>
-              <Text className="text-center font-sans text-xs text-muted">
-                Ships when your badge goes live.
+    <View className="flex-1 bg-bg">
+      <SafeAreaView edges={["top"]} className="flex-1">
+        <ScrollView contentContainerClassName="gap-3 px-4 pb-8 pt-4">
+          <View className="flex-row items-start justify-between">
+            <Text className="flex-1 pt-3 text-[36px] font-extrabold leading-[42px] text-ink">Getting started</Text>
+            <View className="items-center justify-center" style={{ width: 112, height: 112 }}>
+              <RingProgress size={112} strokeWidth={14} progress={done / steps.length} />
+              <Text className="absolute text-[20px] font-semibold text-ink">
+                {done} of {steps.length}
               </Text>
             </View>
+          </View>
+
+          <View>
+            <Text className="text-[26px] font-bold text-ink">
+              {me?.firstName ? `Welcome, ${me.firstName}` : "Welcome"}
+            </Text>
+            <Text className="mt-1 text-[15px] text-muted">
+              A few quick steps and you&apos;re earning. About 10 minutes in total.
+            </Text>
+          </View>
+
+          {inReview && (
+            <View className="flex-row items-center justify-center gap-2 rounded-xl border border-warn/50 bg-warn-tint px-3 py-2.5">
+              <Icon name="clock" size={17} color="#f2b84b" />
+              <Text className="text-[14px] text-warn">Gas Safe check in progress · usually within 24 hours</Text>
+            </View>
           )}
-        </StepCard>
+          {rejected && (
+            <Pressable
+              onPress={() => router.push("/more")}
+              className="flex-row items-center justify-center gap-2 rounded-xl border border-danger/50 bg-danger-tint px-3 py-2.5"
+            >
+              <Icon name="warning" size={16} color="#ff6b6b" />
+              <Text className="text-[14px] text-danger">Your Gas Safe check needs attention — tap to see why</Text>
+            </Pressable>
+          )}
 
-        {/* Part 5 — "How TradeSura works → the How it works page (Part 14)."
-            Never gated, same as every other route into that room. */}
-        <Pressable onPress={() => router.push("/how-it-works")} className="items-center py-1">
-          <Text className="font-semibold text-sm text-flame-deep">How TradeSura works</Text>
-        </Pressable>
+          {steps.map((s, i) => (
+            <StepRow key={s.key} n={i + 1} step={s} current={i === currentIdx} />
+          ))}
 
-        <Button
-          onPress={() => {
-            if (!paid) skipStripe();
-            router.replace("/");
-          }}
-          variant={paid ? "flame" : "ghost"}
-          className="mt-1"
-        >
-          {paid ? "Go to my dashboard" : "Skip setup for now"}
-        </Button>
-        <Text className="pt-1 text-center font-mono text-[10px] text-faint">
-          Paid out to your bank every Friday · Powered by Stripe
-        </Text>
-      </ScrollView>
+          {/* Part 5 — "How TradeSura works", never gated. */}
+          <Pressable onPress={() => router.push("/how-it-works")} className="py-1">
+            <Text className="text-[15px] font-semibold text-flame">How TradeSura works</Text>
+          </Pressable>
+
+          <View className="items-start">
+            <StripeBadge caption="Paid out every Friday" height={22} />
+          </View>
+
+          <Pressable
+            onPress={() => {
+              if (!me?.stripeConnected) skipStripe();
+              router.replace("/");
+            }}
+            className="items-center py-3"
+          >
+            <Text className="text-[15px] text-muted">
+              {done === steps.length ? "Go to my dashboard" : "Skip setup for now"}
+            </Text>
+          </Pressable>
+        </ScrollView>
+      </SafeAreaView>
     </View>
   );
 }

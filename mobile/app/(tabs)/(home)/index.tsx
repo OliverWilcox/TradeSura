@@ -11,6 +11,7 @@ import { Icon, type IconName } from "@/components/icon";
 import { RingProgress, payoutWeekProgress } from "@/components/ring-progress";
 import { RingMark } from "@/components/ring-mark";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
+import { setupSteps } from "@/lib/setup-steps";
 
 type DueItem = {
   customerId: string;
@@ -213,20 +214,13 @@ function OwnerHome() {
     };
   }, [awake]);
 
-  // Part 5 — the dashboard's "Finish setup — N of 4 done" card reads the
-  // same truth as the Getting Started hub's four steps.
-  const setupSteps = [
-    { done: Boolean(me?.stripeConnected), label: "payments" },
-    { done: awake, label: "your first plan" },
-    { done: (me?.customerCount ?? 0) > 0, label: "your customers" },
-    { done: Boolean(me?.packRequestedAt), label: "your member pack" },
-  ];
-  const setupDone = setupSteps.filter((x) => x.done).length;
-  const waiting = setupSteps.filter((x) => !x.done).map((x) => x.label);
-  const waitingLine =
-    waiting.length === 0
-      ? ""
-      : `${(waiting.length === 1 ? waiting[0] : `${waiting.slice(0, -1).join(", ")} and ${waiting.at(-1)}`).replace(/^./, (c) => c.toUpperCase())} ${waiting.length === 1 ? "is" : "are"} still waiting.`;
+  // Part 5 — the dashboard's "Finish setup — N of 7 done" card reads the
+  // same steps as the Getting started hub (lib/setup-steps.ts).
+  const steps = setupSteps(me);
+  const setupDone = steps.filter((x) => x.done).length;
+  const nextStep = steps.find((x) => !x.done);
+  const waitingLine = nextStep ? `Next: ${nextStep.title.toLowerCase()}.` : "";
+  const essentialsDone = steps.filter((x) => x.key === "plan" || x.key === "paid").every((x) => x.done);
 
   // Part 6.5 LAW — the two-leg gate: an offer needs a live plan AND the badge.
   const offerBlockedBy = !awake
@@ -328,12 +322,15 @@ function OwnerHome() {
             </Card>
 
             {/* Part 6.6 — the action card cycles: Finish setup → first
-                customer → next best action. Never two "first"s at once. */}
-            {setupDone < 4 ? (
+                customer → next best action. Never two "first"s at once.
+                With seven setup steps (some optional), setup only holds the
+                card until the plan and payments are done; the first offer
+                comes before the rest. */}
+            {!essentialsDone || (data.count > 0 && setupDone < steps.length) ? (
               <Card>
                 <Micro>Get started</Micro>
                 <Text className="mt-1.5 text-[19px] font-bold text-ink">
-                  Finish setup — {setupDone} of 4 done
+                  Finish setup — {setupDone} of {steps.length} done
                 </Text>
                 <Text className="mt-1 text-[14px] text-muted">{waitingLine}</Text>
                 <Button className="mt-4" onPress={() => router.push("/onboarding")}>

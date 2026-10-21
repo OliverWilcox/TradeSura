@@ -20,7 +20,7 @@ export default function Demo() {
   const [loading, setLoading] = useState(true);
   const base = process.env.EXPO_PUBLIC_API_URL;
   // Staff hand over their phone too — `by` credits the sale to them (section 8).
-  const url = me && base ? `${base}/p/${me.slug}?demo=1${me.role === "staff" ? `&by=${me.id}` : ""}` : null;
+  const url = me && base ? `${base}/${me.slug}?demo=1${me.role === "staff" ? `&by=${me.id}` : ""}` : null;
 
   if (viewing && url) {
     return (

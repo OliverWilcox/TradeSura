@@ -1,3 +1,4 @@
+import { Image, View, Text } from "react-native";
 import { SvgXml } from "react-native-svg";
 
 // W0 changes item 10: the official white "Powered by Stripe" badge, used
@@ -35,5 +36,40 @@ export function PoweredByStripe({ width }: { width: number }) {
       height={width / RATIO}
       accessibilityLabel="Powered by Stripe"
     />
+  );
+}
+
+// 2026 Build Guide placements. Dark surfaces use the vector badge above;
+// `light` is the white pill the hub and Get paid targets show, which needs
+// Stripe's black artwork (2026 asset pack) — placed, never redrawn.
+const BLACK = require("../assets/brand/stripe/Powered_by_Stripe_black.png");
+
+export function StripeBadge({
+  caption,
+  height = 24,
+  light = false,
+}: {
+  caption?: string;
+  height?: number;
+  light?: boolean;
+}) {
+  if (light) {
+    return (
+      <View className="items-center self-start rounded-xl bg-white px-3.5 py-2">
+        <Image
+          source={BLACK}
+          style={{ height, width: (height * 600) / 136 }}
+          resizeMode="contain"
+          accessibilityLabel="Powered by Stripe"
+        />
+        {caption && <Text className="mt-0.5 text-[12.5px] text-[#3c4a5e]">{caption}</Text>}
+      </View>
+    );
+  }
+  return (
+    <View className="items-center gap-1.5">
+      <PoweredByStripe width={height * RATIO} />
+      {caption && <Text className="text-center text-[12px] text-muted">{caption}</Text>}
+    </View>
   );
 }

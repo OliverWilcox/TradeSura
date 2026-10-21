@@ -45,6 +45,11 @@ export type Me = {
   customerCount: number;
   activePlans: number;
   packRequestedAt: string | null;
+  profilePublishedAt: string | null;
+  websiteConnectedAt: string | null;
+  inviteSharedAt: string | null;
+  referralCount: number;
+  firstPlan: { name: string; priceMonthlyPence: number } | null;
 };
 
 type AuthState = {
