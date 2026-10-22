@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
+import { cleanRates } from "@/lib/clauses";
+import { goLiveError } from "@/lib/plan-rules";
 
 // Build Guide v2 Part 8, Step 4 — "Make this plan live." The wizard commits
 // nothing until this call; a DRAFT becomes LIVE and is offerable from this
@@ -12,7 +14,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ tierId: string
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   const { tierId } = await ctx.params;
-  const tier = await prisma.planTier.findFirst({ where: { id: tierId, engineerId } });
+  const tier = await prisma.planTier.findFirst({
+    where: { id: tierId, engineerId },
+    include: { clauses: { include: { clause: { select: { code: true } } } } },
+  });
   if (!tier) return NextResponse.json({ error: "Plan not found." }, { status: 404 });
 
   if (tier.status === "LIVE") {
@@ -34,6 +39,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ tierId: string
       { status: 400 },
     );
   }
+  // Section 5 — the builder can't produce a plan that breaks the terms.
+  const err = await goLiveError(
+    engineerId,
+    tier.clauses.map((c) => c.clause.code),
+    cleanRates(tier.clauseRates),
+    tier.name,
+  );
+  if (err) return NextResponse.json({ error: err.error, code: err.code }, { status: 400 });
   await prisma.planTier.update({
     where: { id: tierId },
     data: { status: "LIVE", providerAttestedAt: new Date() },

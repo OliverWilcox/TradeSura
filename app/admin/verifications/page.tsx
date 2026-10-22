@@ -1,6 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
+import { Prisma } from "@/lib/generated/prisma/client";
+import { CLAUSE_TEMPLATES } from "@/lib/clauses";
+import { confirmedQualifications } from "@/lib/plan-rules";
 import { notifyEngineer } from "@/lib/sms";
 import { sendEmail } from "@/lib/email";
 import { sendPushNotification } from "@/lib/push";
@@ -153,8 +156,18 @@ export default async function Verifications({
       businessType: true,
       companyNumber: true,
       companyStatus: true,
+      qualificationConfirmations: true,
       createdAt: true,
     },
+  });
+
+  // Review 3 R12 — every engineer who has confirmed a qualification, newest
+  // first, so a confirmation made after approval is still seen.
+  const qualified = await prisma.engineer.findMany({
+    where: { qualificationConfirmations: { not: Prisma.DbNull } },
+    orderBy: { updatedAt: "desc" },
+    take: 100,
+    select: { id: true, firstName: true, lastName: true, tradingName: true, gasSafeNo: true, qualificationConfirmations: true },
   });
 
   const officersByEngineer = new Map(
@@ -223,6 +236,7 @@ export default async function Verifications({
                   </div>
                 )}
                 <div className="mt-2 font-mono text-base">Gas Safe {e.gasSafeNo}</div>
+                <Qualifications value={e.qualificationConfirmations} />
                 <div className="mt-2 text-muted">
                   {e.email} · {e.phone} · signed up {e.createdAt.toLocaleString("en-GB")}
                 </div>
@@ -287,6 +301,38 @@ export default async function Verifications({
           </li>
         ))}
       </ul>
+      <h2 className="mt-10 text-xl font-bold">Qualification confirmations</h2>
+      <p className="mt-1 text-sm text-muted">
+        Engineers who confirmed they&apos;re qualified for an option (gas fires, cookers, unvented
+        cylinders, legionella). Spot-check against the register categories.
+      </p>
+      {qualified.length === 0 && <p className="mt-4 text-sm">None yet.</p>}
+      <ul className="mt-4 flex flex-col gap-2">
+        {qualified.map((e) => (
+          <li key={e.id} className="rounded-xl border border-line bg-paper p-3 text-sm">
+            <b>
+              {e.firstName} {e.lastName}
+            </b>{" "}
+            · {e.tradingName} · Gas Safe {e.gasSafeNo}
+            <Qualifications value={e.qualificationConfirmations} />
+          </li>
+        ))}
+      </ul>
     </main>
+  );
+}
+
+function Qualifications({ value }: { value: unknown }) {
+  const entries = Object.entries(confirmedQualifications(value));
+  if (!entries.length) return null;
+  return (
+    <ul className="mt-2 list-disc pl-5">
+      {entries.map(([code, at]) => (
+        <li key={code}>
+          {CLAUSE_TEMPLATES.find((c) => c.code === code)?.title ?? code}: confirmed{" "}
+          {new Date(at).toLocaleDateString("en-GB")}
+        </li>
+      ))}
+    </ul>
   );
 }

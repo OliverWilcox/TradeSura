@@ -7,5 +7,11 @@ import { Stack } from "expo-router";
 export const unstable_settings = { initialRouteName: "index" };
 
 export default function HomeStack() {
-  return <Stack screenOptions={{ headerShown: false, animation: "fade", animationDuration: 220 }} />;
+  return (
+    <Stack screenOptions={{ headerShown: false, animation: "fade", animationDuration: 220 }}>
+      {/* Review 3 P0 — Back in the wizard means the previous step, so the
+          swipe-back gesture can't skip out of it. */}
+      <Stack.Screen name="plan-wizard" options={{ gestureEnabled: false }} />
+    </Stack>
+  );
 }

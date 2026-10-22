@@ -6,7 +6,6 @@ import {
   ScrollView,
   Pressable,
   Alert,
-  Switch,
   Modal,
   Linking,
 } from "react-native";
@@ -21,6 +20,7 @@ import { CustomerPlanCard, CustomerPlanPeek, type PlanLine } from "@/components/
 import { CenteredSpinner } from "@/components/skeleton";
 import { Slider } from "@/components/slider";
 import { StripeBadge } from "@/components/stripe-badge";
+import { Toggle } from "@/components/toggle";
 
 // The plan builder, matched to the 2026 Build Guide target screens
 // (TARGET_wizard_step1–4). One component, two modes:
@@ -66,7 +66,15 @@ const SUGGESTED_BASE_PENCE = 700;
 const DEFAULT_ON_CODES = ["ANNUAL_SERVICE"];
 const FEE_RATE = 0.2;
 const NAME_MAX = 28;
-const NAME_CHIPS = ["Boiler Care", "Boiler Care Plus", "Complete Care", "Landlord Care"];
+const NAME_CHIPS = ["Boiler Care", "Boiler Care Plus", "Complete Care"];
+const LANDLORD_NAME_CHIPS = ["Landlord Care", "Landlord Care Plus", "Landlord Complete"];
+// Section 5 rules mirrored from ../../../lib/clauses.ts for instant feedback;
+// the server (lib/plan-rules.ts) is the gate.
+const CORE_CATEGORY = "Core gas servicing";
+const LANDLORD_CATEGORY = "Landlord pack";
+const RATE_LABEL = "you set the rate";
+const RECOMMENDED_MIN = 3;
+const RECOMMENDED_MAX = 6;
 const SCRATCH = "Start from scratch";
 
 function pounds(pence: number, alwaysPence = false) {
@@ -80,8 +88,9 @@ function guidePence(selected: Template[]) {
   const sum = selected.reduce((a, t) => a + (t.upliftPence ?? 0), SUGGESTED_BASE_PENCE);
   return Math.max(PRICE_MIN_PENCE, Math.round(sum / 100) * 100);
 }
+// Review 3 — our 20% rounds DOWN to the penny, in the engineer's favour.
 function keepPence(pricePence: number) {
-  return pricePence - Math.round(pricePence * FEE_RATE);
+  return pricePence - Math.floor(pricePence * FEE_RATE);
 }
 
 type Step = 1 | 2 | 3 | 4;
@@ -109,11 +118,18 @@ export default function PlanWizard() {
   const [starter, setStarter] = useState<string | null>(null);
   const [step, setStep] = useState<Step>(isEdit ? singleStep : 1);
 
-  const [name, setName] = useState("Boiler Care");
+  // Review 3 — the box starts empty (or from the quick start), never "New plan".
+  const [name, setName] = useState("");
   const [pricePence, setPricePence] = useState(1200);
   const [priceTouched, setPriceTouched] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [customLabels, setCustomLabels] = useState<string[]>([]);
+  const [rates, setRates] = useState<Record<string, string>>({});
+  const [qualified, setQualified] = useState<Record<string, string>>({});
+  const [qualPrompts, setQualPrompts] = useState<Record<string, string>>({});
+  const [qualAsk, setQualAsk] = useState<Template | null>(null);
+  const [qualTicked, setQualTicked] = useState(false);
+  const [priceNote, setPriceNote] = useState<string | null>(null);
   const [activePlanCount, setActivePlanCount] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [savedOnce, setSavedOnce] = useState(false);
@@ -137,7 +153,13 @@ export default function PlanWizard() {
     try {
       if (tierId) {
         const data = await api<{
-          tier: { name: string; priceMonthlyPence: number; clauseIds: string[]; customLabels: string[] };
+          tier: {
+            name: string;
+            priceMonthlyPence: number;
+            clauseIds: string[];
+            customLabels: string[];
+            clauseRates?: Record<string, string>;
+          };
           templates: Template[];
           activePlanCount: number;
         }>(`/api/tiers/${tierId}`);
@@ -149,6 +171,7 @@ export default function PlanWizard() {
         const ids = new Set(data.tier.clauseIds);
         setSelected(new Set(data.templates.filter((t) => ids.has(t.id)).map((t) => t.code)));
         setCustomLabels(data.tier.customLabels ?? []);
+        setRates(data.tier.clauseRates ?? {});
         setActivePlanCount(data.activePlanCount);
         setSavedOnce(true);
         if (!isEdit) {
@@ -183,6 +206,13 @@ export default function PlanWizard() {
   useFocusEffect(
     useCallback(() => {
       load();
+      // R12 — which qualification confirmations this engineer has given.
+      api<{ prompts: Record<string, string>; confirmed: Record<string, string> }>("/api/me/qualifications")
+        .then((q) => {
+          setQualPrompts(q.prompts);
+          setQualified(q.confirmed);
+        })
+        .catch(() => {});
     }, [load]),
   );
 
@@ -193,14 +223,23 @@ export default function PlanWizard() {
   );
   const guide = guidePence(selectedTemplates);
 
-  // Ruling 2 — no annual service means at least one other option beyond the
-  // required priority line. Mirrors serviceRuleError in lib/clauses.ts.
+  // R2/R3 — no annual service means at least one other Core gas servicing
+  // item, so every plan includes real maintenance. Mirrors lib/clauses.ts.
   const serviceRuleError =
     templates.length > 0 &&
     !selected.has("ANNUAL_SERVICE") &&
-    !templates.some((t) => t.kind !== "CORE" && selected.has(t.code))
-      ? "Without the annual service, tick at least one other option so the plan still includes something."
+    !templates.some((t) => t.category === CORE_CATEGORY && selected.has(t.code))
+      ? "Without the annual service, switch on at least one other Core gas servicing item so the plan includes real maintenance."
       : null;
+  // R6 — "you set the rate" options need the engineer's rate.
+  const missingRates = templates.filter(
+    (t) => t.pricingLabel === RATE_LABEL && selected.has(t.code) && !rates[t.code]?.trim(),
+  );
+  const rateError = missingRates.length
+    ? `Enter your rate for ${missingRates.map((t) => t.title).join(" and ")}.`
+    : null;
+  const landlordPlan = templates.some((t) => t.category === LANDLORD_CATEGORY && selected.has(t.code));
+  const suggestedName = landlordPlan ? "Landlord Care" : "Boiler Care";
   // Until the engineer sets a price themselves, the price follows the guide.
   const price = priceTouched ? pricePence : guide;
   const keep = keepPence(price);
@@ -209,10 +248,13 @@ export default function PlanWizard() {
   // Core first, then the order the library lists them in.
   const customerLines: PlanLine[] = useMemo(
     () => [
-      ...selectedTemplates.map((t) => ({ title: t.title, note: t.note })),
+      ...selectedTemplates.map((t) => ({
+        title: rates[t.code]?.trim() ? `${t.title}: ${rates[t.code].trim()}` : t.title,
+        note: t.note,
+      })),
       ...customLabels.map((l) => ({ title: l })),
     ],
-    [selectedTemplates, customLabels],
+    [selectedTemplates, customLabels, rates],
   );
 
   const grouped = useMemo(() => {
@@ -239,6 +281,7 @@ export default function PlanWizard() {
     setStarter(label);
     if (label === SCRATCH) {
       setSelected(new Set(core));
+      if (!isEdit && !savedOnce) setName("");
     } else {
       const p = presets.find((x) => x.name === label);
       if (!p) return;
@@ -250,6 +293,12 @@ export default function PlanWizard() {
 
   function toggle(t: Template) {
     if (t.kind === "CORE") return; // required, unremovable — the server enforces it too.
+    // R12 — switching on an option that needs a qualification asks first.
+    if (!selected.has(t.code) && qualPrompts[t.code] && !qualified[t.code]) {
+      setQualTicked(false);
+      setQualAsk(t);
+      return;
+    }
     const next = new Set(selected);
     if (next.has(t.code)) next.delete(t.code);
     else next.add(t.code);
@@ -258,7 +307,28 @@ export default function PlanWizard() {
     markDirty();
   }
 
+  async function confirmQualification() {
+    const t = qualAsk;
+    if (!t || !qualTicked) return;
+    try {
+      const r = await api<{ confirmed: Record<string, string> }>("/api/me/qualifications", {
+        method: "POST",
+        body: JSON.stringify({ code: t.code }),
+      });
+      setQualified(r.confirmed);
+      setSelected(new Set([...selected, t.code]));
+      setStarter(null);
+      markDirty();
+      setQualAsk(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't save that — try again.");
+      setQualAsk(null);
+    }
+  }
+
   function setPrice(p: number) {
+    // Review 3 P2 — say why the minus stops at £10 rather than just stopping.
+    setPriceNote(p < PRICE_MIN_PENCE ? "£10 is the lowest price." : null);
     setPricePence(Math.min(PRICE_MAX_PENCE, Math.max(PRICE_MIN_PENCE, p)));
     setPriceTouched(true);
     markDirty();
@@ -266,15 +336,18 @@ export default function PlanWizard() {
 
   function commitTypedPrice() {
     const v = Math.round(parseFloat(priceText.replace(/[£,\s]/g, "")) * 100);
-    if (Number.isFinite(v) && v > 0) {
-      if (v < PRICE_MIN_PENCE) setError("Plans start from £10 a month.");
-      setPrice(v);
-    }
+    if (Number.isFinite(v) && v > 0) setPrice(v);
     setTypingPrice(false);
   }
 
   function payload() {
-    return JSON.stringify({ name, priceMonthlyPence: price, clauseCodes: [...selected], customLabels });
+    return JSON.stringify({
+      name: name.trim(),
+      priceMonthlyPence: price,
+      clauseCodes: [...selected],
+      customLabels,
+      clauseRates: rates,
+    });
   }
 
   function showBlocked(e: unknown): boolean {
@@ -288,6 +361,10 @@ export default function PlanWizard() {
 
   async function checkName(candidate: string): Promise<boolean> {
     setError(null);
+    if (/^\s*new\s+plan\s*$/i.test(candidate)) {
+      setError("Give your plan a name customers will understand, like Boiler Care.");
+      return false;
+    }
     if (candidate.trim().length < 2) {
       setError("Give your plan a name — at least 2 characters.");
       return false;
@@ -298,7 +375,7 @@ export default function PlanWizard() {
         { method: "POST", body: JSON.stringify({ text: candidate }) },
       );
       if (!check.ok) {
-        setBlocked({ explanation: check.explanation, suggestion: check.suggestion });
+        setBlocked({ explanation: check.explanation, suggestion: { title: suggestedName } });
         return false;
       }
       setBlocked(null);
@@ -341,7 +418,15 @@ export default function PlanWizard() {
     }
   }
 
+  // Review 3 P0 — Back goes to the previous step with everything kept; only
+  // Step 1's Back leaves the wizard (the draft is saved at every Next).
   function exit() {
+    if (!isEdit && step > 1) {
+      setError(null);
+      setStep((step - 1) as Step);
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      return;
+    }
     if (isEdit || !dirty) {
       router.back();
       return;
@@ -387,6 +472,10 @@ export default function PlanWizard() {
   async function goNext() {
     setError(null);
     if (step === 1 && serviceRuleError) return;
+    if (step === 1 && rateError) {
+      setError(rateError);
+      return;
+    }
     if (step === 3 && !(await checkName(name))) return;
     if (step < 4) {
       setBusy(true);
@@ -594,14 +683,24 @@ export default function PlanWizard() {
                             )}
                           </View>
                           {sub ? <Text className="mt-0.5 text-[12.5px] text-muted">{sub}</Text> : null}
+                          {on && t.pricingLabel === RATE_LABEL && (
+                            <TextInput
+                              value={rates[t.code] ?? ""}
+                              onChangeText={(v) => {
+                                setRates({ ...rates, [t.code]: v.slice(0, 40) });
+                                markDirty();
+                              }}
+                              placeholder="Your rate, e.g. 10% off"
+                              placeholderTextColor="#6e86a3"
+                              accessibilityLabel={`Your rate for ${t.title}`}
+                              className="mt-2 min-h-[42px] rounded-xl border border-line-strong bg-bg px-3 text-[15px] text-ink"
+                            />
+                          )}
                         </View>
-                        <Switch
+                        <Toggle
                           value={on}
                           onValueChange={() => toggle(t)}
                           disabled={locked}
-                          trackColor={{ false: "#2a3d58", true: "#5fa3f0" }}
-                          thumbColor="#ffffff"
-                          ios_backgroundColor="#2a3d58"
                           accessibilityLabel={t.title}
                         />
                       </View>
@@ -613,8 +712,8 @@ export default function PlanWizard() {
           </>
         )}
 
-        {step === 1 && serviceRuleError && (
-          <Text className="px-1 text-center text-[13px] text-warn">{serviceRuleError}</Text>
+        {step === 1 && (serviceRuleError || rateError) && (
+          <Text className="px-1 text-center text-[13px] text-warn">{serviceRuleError ?? rateError}</Text>
         )}
 
         {/* Step 2 — Set your price */}
@@ -672,8 +771,9 @@ export default function PlanWizard() {
                 </Pressable>
               </View>
               <Text className="mt-1 text-center text-[13px] text-muted">
-                Tap to type · from £10, no upper limit
+                Tap to type · from £10, no upper limit · pence allowed
               </Text>
+              {priceNote && <Text className="mt-1 text-center text-[13px] text-warn">{priceNote}</Text>}
               {!priceTouched && (
                 <Text className="mt-0.5 text-center text-[12px] text-faint">
                   Starts at the guide price for what you picked
@@ -777,7 +877,7 @@ export default function PlanWizard() {
                     markDirty();
                   }}
                   maxLength={NAME_MAX}
-                  placeholder="Boiler Care"
+                  placeholder={`e.g. ${suggestedName}`}
                   placeholderTextColor="#6e86a3"
                   className="min-h-[44px] text-[18px] text-ink"
                 />
@@ -786,7 +886,7 @@ export default function PlanWizard() {
                 </Text>
               </View>
               <View className="mt-3 flex-row flex-wrap gap-2">
-                {NAME_CHIPS.map((s) => {
+                {(landlordPlan ? LANDLORD_NAME_CHIPS : NAME_CHIPS).map((s) => {
                   const on = name === s;
                   return (
                     <Pressable
@@ -804,11 +904,19 @@ export default function PlanWizard() {
                 })}
               </View>
               {blocked && (
-                <View className="mt-3 rounded-xl border border-danger-tint bg-danger-tint p-3">
-                  <Text className="text-[13px] text-danger">{blocked.explanation}</Text>
-                  <Text className="mt-1 text-[13px] text-danger">
-                    Try something like <Text className="font-semibold">{blocked.suggestion.title}</Text> instead.
-                  </Text>
+                <View className="mt-3 rounded-xl border border-warn/50 bg-warn-tint p-3">
+                  <Text className="text-[13px] text-warn">{blocked.explanation}</Text>
+                  <Pressable
+                    onPress={() => {
+                      setName(blocked.suggestion.title);
+                      setBlocked(null);
+                      markDirty();
+                    }}
+                  >
+                    <Text className="mt-1 text-[13px] text-warn">
+                      Try <Text className="font-semibold underline">{blocked.suggestion.title}</Text>
+                    </Text>
+                  </Pressable>
                 </View>
               )}
             </Card>
@@ -819,7 +927,7 @@ export default function PlanWizard() {
                 <Text className="text-[13px] font-bold uppercase tracking-[0.1em] text-flame">Naming tips</Text>
               </View>
               {[
-                "Say what it covers: Boiler Care, Landlord Care",
+                "Say what's included: Boiler Care, Landlord Care",
                 "Offering more than one? Make the step up clear: Boiler Care, Boiler Care Plus, Complete Care",
                 "Plans are maintenance, not insurance, so words like cover, breakdown or emergency can't be used",
                 "Under 20 characters fits best on your customer's phone",
@@ -862,7 +970,7 @@ export default function PlanWizard() {
             />
 
             <Card>
-              <SectionTitle>Summary</SectionTitle>
+              <SectionTitle>Your plan</SectionTitle>
               {[
                 {
                   label: `${optionCount} option${optionCount === 1 ? "" : "s"} included`,
@@ -936,15 +1044,57 @@ export default function PlanWizard() {
           <View className="flex-row items-center gap-3 px-4 py-3">
             <View className="flex-1">
               <Text className="text-[19px] font-bold text-ink">{selected.size} selected</Text>
+              {selected.size > RECOMMENDED_MAX ? (
+                <Text className="text-[12.5px] text-warn">Over 6 options can be a lot for customers to take in</Text>
+              ) : selected.size < RECOMMENDED_MIN && !serviceRuleError ? (
+                <Text className="text-[12.5px] text-muted">Most plans have 3 to 6 options</Text>
+              ) : null}
               <Text className="text-[17px] font-semibold text-ok">Guide price {pounds(guide)}/mo</Text>
               <Text className="text-[13px] text-muted">You set your final price next</Text>
             </View>
-            <Button onPress={goNext} disabled={busy || Boolean(serviceRuleError)} className="min-w-[130px]">
+            <Button onPress={goNext} disabled={busy || Boolean(serviceRuleError) || Boolean(rateError)} className="min-w-[130px]">
               {busy ? "Saving…" : "Next"}
             </Button>
           </View>
         </SafeAreaView>
       )}
+
+      {/* R12 — confirm a qualification before switching the option on. */}
+      <Modal visible={qualAsk !== null} transparent animationType="fade" onRequestClose={() => setQualAsk(null)}>
+        <Pressable className="flex-1 justify-end bg-black/60" onPress={() => setQualAsk(null)}>
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            className="rounded-t-3xl border-t border-line-strong bg-paper px-5 pb-10 pt-4"
+          >
+            <View className="mb-4 h-1 w-10 self-center rounded-full bg-line-strong" />
+            <Text className="text-[18px] font-bold text-ink">Confirm you&apos;re qualified for this</Text>
+            <Text className="mt-1.5 text-[14.5px] leading-[21px] text-muted">
+              {qualAsk?.title} needs the right qualification. We keep a dated record of your confirmation.
+            </Text>
+            <Pressable
+              onPress={() => setQualTicked(!qualTicked)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: qualTicked }}
+              className="mt-4 flex-row items-start gap-3"
+            >
+              <View
+                className={`mt-0.5 h-7 w-7 items-center justify-center rounded-md border-[1.5px] ${qualTicked ? "border-flame bg-flame" : "border-white/70"}`}
+              >
+                {qualTicked && <Icon name="check" size={16} color="#0f2140" weight="bold" />}
+              </View>
+              <Text className="flex-1 text-[15px] leading-[22px] text-ink">
+                {qualAsk ? qualPrompts[qualAsk.code] : ""}
+              </Text>
+            </Pressable>
+            <Button className="mt-5" onPress={confirmQualification} disabled={!qualTicked}>
+              Confirm and switch on
+            </Button>
+            <Pressable onPress={() => setQualAsk(null)} className="items-center py-3">
+              <Text className="text-[15px] text-muted">Not now</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal visible={info !== null} transparent animationType="fade" onRequestClose={() => setInfo(null)}>
         <Pressable className="flex-1 justify-end bg-black/60" onPress={() => setInfo(null)}>
@@ -958,6 +1108,21 @@ export default function PlanWizard() {
               What your customer agrees to
             </Text>
             <Text className="mt-2 text-[15px] leading-[22px] text-ink">{info?.bodyText}</Text>
+            {info && qualPrompts[info.code] && (
+              <>
+                <Text className="mt-4 text-[12px] font-bold uppercase tracking-[0.08em] text-muted">
+                  Qualification
+                </Text>
+                <Text className="mt-1 text-[15px] leading-[22px] text-ink">
+                  You&apos;ll be asked to confirm: {qualPrompts[info.code]}
+                </Text>
+              </>
+            )}
+            {info?.pricingLabel === RATE_LABEL && (
+              <Text className="mt-4 text-[14px] leading-[21px] text-muted">
+                You set the rate. It shows on your customer&apos;s plan page.
+              </Text>
+            )}
             <Button className="mt-5" onPress={() => setInfo(null)}>
               Got it
             </Button>

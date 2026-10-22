@@ -4,13 +4,22 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { checkWording } from "@/lib/compliance/blocklist";
-import { TIER_PRICE_MIN_PENCE, TIER_PRICE_MAX_PENCE, serviceRuleError, withRequiredClauses } from "@/lib/clauses";
+import {
+  TIER_PRICE_MIN_PENCE,
+  TIER_PRICE_MAX_PENCE,
+  cleanRates,
+  isPlaceholderName,
+  serviceRuleError,
+  withRequiredClauses,
+} from "@/lib/clauses";
 
 const Body = z.object({
-  name: z.string().min(2).max(28),
+  // Empty until Step 3 (the box starts empty); required to go live.
+  name: z.string().max(28),
   priceMonthlyPence: z.number().int().min(TIER_PRICE_MIN_PENCE).max(TIER_PRICE_MAX_PENCE),
   clauseCodes: z.array(z.string()).max(20),
   customLabels: z.array(z.string().min(2).max(80)).max(5),
+  clauseRates: z.record(z.string(), z.string()).optional(),
 });
 
 // One wizard step editor at a time (Part 7.4: "each opening its wizard step
@@ -51,6 +60,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ tierId: string 
       status: tier.status,
       customLabels: tier.customLabels,
       clauseIds: tier.clauses.map((c) => c.clauseId),
+      clauseRates: cleanRates(tier.clauseRates),
     },
     templates: templates.map((t) => ({
       id: t.id,
@@ -87,6 +97,12 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
     );
   }
 
+  if (tier.status === "LIVE" && parsed.data.name.trim().length < 2) {
+    return NextResponse.json({ error: "Give your plan a name — at least 2 characters." }, { status: 400 });
+  }
+  if (isPlaceholderName(parsed.data.name)) {
+    return NextResponse.json({ error: "Give your plan a name customers will understand, like Boiler Care." }, { status: 400 });
+  }
   // Locked wording: the plan name and every free-text label pass the
   // blocklist server-side — the app's own check is a convenience, not the gate.
   for (const label of [parsed.data.name, ...parsed.data.customLabels]) {
@@ -98,7 +114,12 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
 
   // Part 7.1 LAW — required (CORE) options are unremovable; union them in
   // rather than trusting the client picker alone.
-  const wantedCodes = withRequiredClauses(parsed.data.clauseCodes);
+  // R4 — approved options only. An option withdrawn for legal review (R7)
+  // drops out of the plan on its next edit; agreed plans keep their snapshot.
+  const withdrawn = new Set(
+    (await prisma.clauseTemplate.findMany({ where: { status: { not: "SAFE" } }, select: { code: true } })).map((c) => c.code),
+  );
+  const wantedCodes = withRequiredClauses(parsed.data.clauseCodes).filter((c) => !withdrawn.has(c));
   const clauses = await prisma.clauseTemplate.findMany({ where: { code: { in: wantedCodes } } });
   // Unknown codes used to be dropped silently, which stripped a plan down to
   // its required line when a client sent ids instead of codes.
@@ -116,6 +137,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
         name: parsed.data.name,
         priceMonthlyPence: parsed.data.priceMonthlyPence,
         customLabels: parsed.data.customLabels,
+        ...(parsed.data.clauseRates ? { clauseRates: cleanRates(parsed.data.clauseRates) } : {}),
         clauses: { create: clauses.map((c) => ({ clauseId: c.id })) },
       },
     }),

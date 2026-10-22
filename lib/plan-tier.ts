@@ -1,3 +1,4 @@
+import { cleanRates, withRate } from "@/lib/clauses";
 // LAW (plan wording is locked). A PlanTier can be edited after customers have
 // joined it, so the contract each customer agreed to is snapshotted onto their
 // Plan (`agreedTier`) at tier-selection. Every read of the *agreed* plan — the
@@ -26,6 +27,7 @@ export type AgreedTierSnapshot = {
 type LiveTier = {
   name: string;
   isRecommended: boolean;
+  clauseRates?: unknown;
   clauses: { clause: ClauseFields }[];
 };
 
@@ -40,7 +42,8 @@ export function snapshotTier(tier: LiveTier): AgreedTierSnapshot {
     clauses: tier.clauses
       .map((tc) => ({
         code: tc.clause.code,
-        title: tc.clause.title,
+        // R6 — the engineer's rate is part of what the customer agreed.
+        title: withRate(tc.clause.title, cleanRates(tier.clauseRates)[tc.clause.code]),
         bodyText: tc.clause.bodyText,
         sortOrder: tc.clause.sortOrder,
         note: tc.clause.note ?? null,

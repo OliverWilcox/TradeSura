@@ -70,7 +70,7 @@ export function CustomerPlanCard({
           {pounds(priceMonthlyPence)} a month
         </Text>
         {cancelChip && (
-          <Text className="mt-2.5 self-start overflow-hidden rounded-full bg-[#C9F2DA] px-3 py-1 text-[13px] text-[#14532D]">
+          <Text className="mt-2.5 self-start overflow-hidden rounded-full bg-[#E3EEFB] px-3 py-1 text-[13px] text-[#1F4E8C]">
             Cancel anytime
           </Text>
         )}

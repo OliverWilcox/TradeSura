@@ -489,8 +489,13 @@ export const REQUIRED_CLAUSE_CODES = CLAUSE_TEMPLATES.filter((c) => c.kind === "
 );
 
 // A clause as one line on a customer's plan card, with its small print.
-export function clauseLine(c: { title: string; note?: string | null }): string {
-  return c.note ? `${c.title} — ${c.note}` : c.title;
+// R6 — a "you set the rate" option carries the engineer's rate.
+export function clauseLine(
+  c: { code?: string; title: string; note?: string | null },
+  rates?: unknown,
+): string {
+  const title = c.code ? withRate(c.title, cleanRates(rates)[c.code]) : c.title;
+  return c.note ? `${title} — ${c.note}` : title;
 }
 
 export function withRequiredClauses(codes: string[]): string[] {
@@ -500,15 +505,74 @@ export function withRequiredClauses(codes: string[]): string[] {
 // Pre-ticked in a new plan but removable (Build Review 2, ruling 2).
 export const DEFAULT_ON_CLAUSE_CODES = ["ANNUAL_SERVICE"];
 
-// Without the annual service a plan must still offer something beyond the
-// required priority line — "at least one other approved option is ticked".
+// Review 3 R2/R3 — every plan includes real maintenance: the annual service,
+// or (if that's unticked) at least one other Core gas servicing item. With
+// the locked-on priority line that makes the hard minimum of two.
+export const CORE_SERVICING_CODES = CLAUSE_TEMPLATES.filter(
+  (c) => c.category === CAT_CORE && c.status === "SAFE",
+).map((c) => c.code);
+
 export function serviceRuleError(codes: string[]): string | null {
   if (codes.includes("ANNUAL_SERVICE")) return null;
-  const extras = codes.filter((c) => !REQUIRED_CLAUSE_CODES.includes(c));
-  return extras.length > 0
+  return codes.some((c) => CORE_SERVICING_CODES.includes(c))
     ? null
-    : "Without the annual service, tick at least one other option so the plan still includes something.";
+    : "Without the annual service, switch on at least one other Core gas servicing item so the plan includes real maintenance.";
 }
+
+// R3 — 3 to 6 options recommended; a gentle nudge outside that range.
+export const RECOMMENDED_MIN_OPTIONS = 3;
+export const RECOMMENDED_MAX_OPTIONS = 6;
+
+// R6 — "you set the rate" options can't go live until the engineer enters
+// their rate; it shows on the customer's plan page.
+export const RATE_REQUIRED_CODES = CLAUSE_TEMPLATES.filter(
+  (c) => c.pricingLabel === "you set the rate",
+).map((c) => c.code);
+
+export function cleanRates(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [code, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (RATE_REQUIRED_CODES.includes(code) && typeof v === "string" && v.trim()) {
+      out[code] = v.trim().slice(0, 40);
+    }
+  }
+  return out;
+}
+
+export function missingRateError(codes: string[], rates: Record<string, string>): string | null {
+  const missing = CLAUSE_TEMPLATES.filter(
+    (c) => RATE_REQUIRED_CODES.includes(c.code) && codes.includes(c.code) && !rates[c.code],
+  );
+  return missing.length
+    ? `Enter your rate for ${missing.map((c) => `"${c.title}"`).join(" and ")} before this plan goes live.`
+    : null;
+}
+
+// A customer-facing line with the engineer's rate, e.g. "Multi-appliance
+// discount: 10% off".
+export function withRate(title: string, rate?: string | null): string {
+  return rate ? `${title}: ${rate}` : title;
+}
+
+// Review 3 — the name box starts empty; "New plan" is never a real name.
+export function isPlaceholderName(name: string): boolean {
+  return /^\s*new\s+plan\s*$/i.test(name);
+}
+
+// R9 — any Landlord pack item makes it a Landlord plan; checkout asks the
+// customer to confirm the property is let.
+export function isLandlordPlan(codes: string[]): boolean {
+  return CLAUSE_TEMPLATES.some((c) => c.category === CAT_LANDLORD && codes.includes(c.code));
+}
+
+// R12 — options that need a qualification the engineer confirms they hold.
+export const QUALIFICATION_PROMPTS: Record<string, string> = {
+  GAS_FIRE_SERVICE: "I'm Gas Safe registered for gas fires.",
+  COOKER_HOB_CHECK: "I'm Gas Safe registered for cookers and hobs.",
+  UNVENTED_CYLINDER: "I hold a G3 unvented hot water certificate.",
+  LEGIONELLA: "I'm trained to carry out legionella risk assessments.",
+};
 
 // Base for the self-assembling price suggestion: service + priority plus the
 // engineer's own margin. Uplifts stack on top of this.
@@ -572,14 +636,9 @@ export const NOT_INCLUDED_COPY =
 
 export const TRADESURA_FEE_RATE = 0.2;
 
-// The engineer's own display estimate (plan builder earnings preview) — the
-// real per-invoice deduction taken via Stripe also includes the Bacs
-// processing cost; see BACS_PROCESSING_FEE_PENCE and lib/stripe.ts.
+// Review 3 — our 20% is rounded DOWN to the penny, in the engineer's favour:
+// £15.99 → fee £3.19, engineer keeps £12.80. Stripe's processing cost comes
+// out of TradeSura's share, never the engineer's 80%.
 export function appFeePence(priceMonthlyPence: number): number {
-  return Math.round(priceMonthlyPence * TRADESURA_FEE_RATE);
+  return Math.floor(priceMonthlyPence * TRADESURA_FEE_RATE);
 }
-
-// Build Spec v1 S1/Q2: the flat 20% app fee is refined to "20% + ~32p
-// processing" borne by the engineer, applied per invoice via Stripe's
-// application_fee_amount (see lib/stripe.ts's computeApplicationFeePence).
-export const BACS_PROCESSING_FEE_PENCE = 32;

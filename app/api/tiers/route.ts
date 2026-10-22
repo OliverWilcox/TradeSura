@@ -6,9 +6,12 @@ import {
   TIER_PRESETS,
   TIER_PRICE_MIN_PENCE,
   TIER_PRICE_MAX_PENCE,
+  cleanRates,
+  isPlaceholderName,
   serviceRuleError,
   withRequiredClauses,
 } from "@/lib/clauses";
+import { goLiveError } from "@/lib/plan-rules";
 import { checkWording } from "@/lib/compliance/blocklist";
 
 // Build Guide v2 Part 7 — "My plans" hub. Every plan the engineer has ever
@@ -62,10 +65,12 @@ export async function POST(req: Request) {
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const clauses = await prisma.clauseTemplate.findMany();
+  // R4 — approved options only: options awaiting sign-off can't be added.
+  const clauses = await prisma.clauseTemplate.findMany({ where: { status: "SAFE" } });
   const byCode = new Map(clauses.map((c) => [c.code, c.id]));
 
-  let name = "New plan";
+  // Review 3 — a draft has no name until Step 3; the box starts empty.
+  let name = "";
   let priceMonthlyPence = 1200;
   let clauseCodes: string[] = [];
 
@@ -108,6 +113,15 @@ export async function POST(req: Request) {
   const ruleError = serviceRuleError(finalCodes);
   if (ruleError) return NextResponse.json({ error: ruleError }, { status: 400 });
 
+  if (typeof body.name === "string" && isPlaceholderName(body.name)) {
+    return NextResponse.json({ error: "Give your plan a name customers will understand, like Boiler Care." }, { status: 400 });
+  }
+  const clauseRates = cleanRates(body.clauseRates);
+  if (publishNow) {
+    const err = await goLiveError(engineerId, finalCodes, clauseRates, name);
+    if (err) return NextResponse.json({ error: err.error, code: err.code }, { status: 400 });
+  }
+
   const existing = await prisma.planTier.count({ where: { engineerId } });
   const tier = await prisma.planTier.create({
     data: {
@@ -118,6 +132,7 @@ export async function POST(req: Request) {
       status: publishNow ? "LIVE" : "DRAFT",
       providerAttestedAt: publishNow ? new Date() : null,
       customLabels: labels,
+      clauseRates,
       clauses: { create: finalCodes.map((code) => ({ clauseId: byCode.get(code)! })) },
     },
   });

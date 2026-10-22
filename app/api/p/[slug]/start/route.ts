@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { isLandlordPlan } from "@/lib/clauses";
 import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { sendSms } from "@/lib/sms";
@@ -169,6 +170,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       publishableKey: publishableKey(),
       confirmedUrl: `${base}/confirmed`,
       signupToken: plan.signupToken,
+      // R9 — a Landlord plan asks the customer to confirm the property is let.
+      landlord: isLandlordPlan(tier.clauses.map((tc) => tc.clause.code)),
     });
   } catch (err) {
     console.error("[p/start] embedded subscription failed:", err);

@@ -4,6 +4,10 @@ import {
   DEFAULT_ON_CLAUSE_CODES,
   TIER_PRESETS,
   TIER_PRICE_MIN_PENCE,
+  appFeePence,
+  clauseLine,
+  isLandlordPlan,
+  missingRateError,
   serviceRuleError,
   suggestedPricePence,
   withRequiredClauses,
@@ -78,12 +82,38 @@ describe("plan service library", () => {
       expect(withRequiredClauses([])).not.toContain("ANNUAL_SERVICE");
     });
 
-    it("allows a priority-only plan once another option is ticked", () => {
-      expect(serviceRuleError(withRequiredClauses(["NO_CALLOUT_FEE"]))).toBeNull();
+    it("allows a plan without the annual service once another Core servicing item is on (R2)", () => {
+      expect(serviceRuleError(withRequiredClauses(["GAS_FIRE_SERVICE"]))).toBeNull();
     });
 
-    it("rejects a plan with no service and nothing beyond the required lines", () => {
-      expect(serviceRuleError(withRequiredClauses([]))).toMatch(/at least one other option/);
+    it("rejects a plan with no service and only non-maintenance options (R2/R3)", () => {
+      expect(serviceRuleError(withRequiredClauses(["NO_CALLOUT_FEE"]))).toMatch(/Core gas servicing/);
+      expect(serviceRuleError(withRequiredClauses([]))).toMatch(/Core gas servicing/);
+    });
+
+    it("needs the engineer's rate for 'you set the rate' options (R6)", () => {
+      expect(missingRateError(["MULTI_APPLIANCE"], {})).toMatch(/Multi-appliance/);
+      expect(missingRateError(["MULTI_APPLIANCE"], { MULTI_APPLIANCE: "10% off" })).toBeNull();
+      expect(clauseLine({ code: "MULTI_APPLIANCE", title: "Multi-appliance discount" }, { MULTI_APPLIANCE: "10% off" })).toBe(
+        "Multi-appliance discount: 10% off",
+      );
+    });
+
+    it("treats any Landlord pack item as a Landlord plan (R9)", () => {
+      expect(isLandlordPlan(["ANNUAL_SERVICE", "CP12"])).toBe(true);
+      expect(isLandlordPlan(["ANNUAL_SERVICE"])).toBe(false);
+    });
+
+    it("rounds our 20% down to the penny (£15.99 → £3.19)", () => {
+      expect(appFeePence(1599)).toBe(319);
+      expect(appFeePence(1200)).toBe(240);
+    });
+
+    it("priority booking promises no attendance time (R1/R7)", () => {
+      const p = CLAUSE_TEMPLATES.find((c) => c.code === "PRIORITY_48H")!;
+      expect(p.title).toBe("Priority booking");
+      expect(`${p.title} ${p.bodyText}`).not.toMatch(/48|hours|same-day/i);
+      expect(CLAUSE_TEMPLATES.filter((c) => c.status === "SAFE").map((c) => c.code)).not.toContain("SAMEDAY_PRIORITY");
     });
 
     it("never blocks a plan that includes the service", () => {
