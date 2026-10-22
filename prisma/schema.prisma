@@ -129,6 +129,18 @@ model Engineer {
   websiteHost        String?
   // First time the engineer shared their invite link from the app.
   inviteSharedAt     DateTime?
+  // Build Review 3. Legal name from Companies House (Ltd/partnership) — a
+  // blank trading name falls back to it, and customer pages say "X is a
+  // trading name of Y" when they differ.
+  legalName          String?
+  // "Are you the only owner of the company?" — yes sends the representative
+  // to Stripe as owner and director, so those steps disappear.
+  soleOwner          Boolean?
+  // R5 — prices are shown "including VAT" on customer pages when set.
+  vatRegistered      Boolean    @default(false)
+  // R12 — { CLAUSE_CODE: ISO date } for options needing a qualification the
+  // engineer confirmed they hold. Shown in the admin verification queue.
+  qualificationConfirmations Json?
   // E10 — who brought this engineer in, and whether their £50 bounty is paid.
   referrerId           String?
   referrer             Engineer?  @relation("Referrals", fields: [referrerId], references: [id])
@@ -231,6 +243,9 @@ model PlanTier {
   // Builder Step 4: "I'll provide everything in this plan to every customer
   // on it" — ticked before the plan could go live.
   providerAttestedAt DateTime?
+  // R6 — the engineer's rate for "you set the rate" options, { CODE: "10%" }.
+  // Required before the plan can go live; shown on the customer's plan page.
+  clauseRates       Json?
   clauses           TierClause[]
   plans             Plan[]
 }
@@ -268,6 +283,8 @@ model Plan {
   paymentFailedAt        DateTime? // S2 — set on invoice.payment_failed, cleared on recovery
   termsVersion           String? // review #18 — which CURRENT_TERMS_VERSION (lib/terms.ts) they agreed to
   termsAgreedAt          DateTime?
+  // R9 — a Landlord plan: the customer confirmed at checkout the property is let.
+  propertyLetConfirmedAt DateTime?
   // LAW (plan wording is locked) — the tier as the customer agreed it,
   // snapshotted at tier-selection. Reads of the agreed contract (plan
   // document, portal "what's included", CP12 reminder logic) resolve through

@@ -200,7 +200,8 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     code: "WARRANTY_ADMIN",
     title: "Warranty claim admin — we book the manufacturer engineer for you",
     kind: "ADD",
-    status: "SAFE",
+    // Review 3 R7 — hidden until James vets the wording.
+    status: "CARE",
     category: CAT_WARRANTY,
     upliftPence: 150,
     bodyText:
@@ -232,20 +233,23 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
   // ---------- Priority & access ----------
   {
     code: "PRIORITY_48H",
-    title: "Priority booking within 48 hours",
+    // Review 3 R1/R7 — in every plan, locked on, no attendance time. The
+    // code keeps its old name so existing tiers and plans still resolve.
+    title: "Priority booking",
     kind: "CORE",
     status: "SAFE",
     category: CAT_PRIORITY,
     upliftPence: null,
     pricingLabel: "core — in every tier",
     bodyText:
-      "As a plan member you receive priority when booking appointments. We aim to attend within 48 hours of your request during normal working hours.",
+      "You go to the front of the queue when you need us. Subject to availability, no set attendance time.",
   },
   {
     code: "SAMEDAY_PRIORITY",
     title: "Same-day priority",
     kind: "ADD",
-    status: "SAFE",
+    // Review 3 R7 — hidden until James vets the wording.
+    status: "CARE",
     category: CAT_PRIORITY,
     upliftPence: 400,
     bodyText:
@@ -289,7 +293,8 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     category: CAT_PRIORITY,
     upliftPence: 200,
     bodyText:
-      "No call-out or attendance charge applies to visits requested under this plan. Labour and parts for any work carried out during a visit remain chargeable at the rates shown in your plan.",
+      "When we attend a visit you request under this plan, our usual attendance charge is waived. This is not a promise to attend at any particular time. Labour and parts for any work carried out remain chargeable at the rates shown in your plan.",
+    engineerNote: "your attendance charge is waived when you attend",
   },
 
   // ---------- Discounts ----------
