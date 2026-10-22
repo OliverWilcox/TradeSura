@@ -20,6 +20,20 @@ describe("wording blocklist", () => {
     "Guaranteed to keep you warm",
     "24-hour emergency response",
     "emergency call-outs included",
+    // Review 3 P0 — the bypasses
+    "BoilerCover",
+    "Boiler-Cover",
+    "B.o.i.l.e.r C.o.v.e.r",
+    "B0iler C0ver",
+    "Boiler Covers",
+    "Total Kover",
+    "Home Insurence",
+    "Brakedown Plan",
+    "Emergancy Care",
+    "Gu@ranteed Care",
+    "In$urance",
+    "1nsurance",
+    "Emergency Plan",
   ];
   for (const text of blocked) {
     it(`blocks: "${text}"`, () => {
@@ -40,6 +54,12 @@ describe("wording blocklist", () => {
     "We aim to attend quickly",
     "Fixed monthly price", // "fixed" is not "we will fix"
     "Landlord gas safety record",
+    "Discover Care",
+    "Recovery Plan",
+    "Boiler Care",
+    "Service + Priority",
+    "Landlord Care",
+    "Make sure your boiler is serviced",
   ];
   for (const text of allowed) {
     it(`allows: "${text}"`, () => {
