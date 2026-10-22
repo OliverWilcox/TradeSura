@@ -2,8 +2,7 @@ import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { notifyEngineer } from "@/lib/sms";
 import { sendPushNotification } from "@/lib/push";
-import { payReferralCommission, stripeConfigured } from "@/lib/stripe";
-import { TRADESURA_FEE_RATE } from "@/lib/clauses";
+import { computeApplicationFeePence, payReferralCommission, stripeConfigured } from "@/lib/stripe";
 
 // Build Review 2, ruling 4 — every installer is an affiliate. They earn a
 // share of TradeSura's fee on plans sold by engineers they bring in: 25% for
@@ -19,9 +18,9 @@ export function referralRatePercent(inviteeJoinedAt: Date, at: Date = new Date()
   return at < cutoff ? REFERRAL_FIRST_YEAR_PERCENT : REFERRAL_LIFETIME_PERCENT;
 }
 
-// Commission is on TradeSura's 20%, not the Bacs processing pass-through.
+// Commission is on TradeSura's 20% fee exactly as Stripe took it.
 export function referralCommission(invoicePaidPence: number, ratePercent: number) {
-  const feePence = Math.round(invoicePaidPence * TRADESURA_FEE_RATE);
+  const feePence = computeApplicationFeePence(invoicePaidPence);
   return { feePence, amountPence: Math.round((feePence * ratePercent) / 100) };
 }
 

@@ -74,7 +74,7 @@ export async function GET() {
     // with the exact deduction Stripe took — reconciles to the penny.
     month,
     // Part 6.3 — NEXT PAYOUT before Stripe reports one: this payout week's
-    // cleared collections × 80% less processing, never the monthly total.
+    // cleared collections × 80% (fee rounded down), never the monthly total.
     week,
     referralBonusPence,
     bankLast4: stripe?.bankLast4 ?? null,

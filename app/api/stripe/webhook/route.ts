@@ -95,8 +95,8 @@ async function handleEvent(event: Stripe.Event) {
       return;
     }
 
-    // Build Spec v1 S1/Q2: set the real per-invoice fee (20% + ~32p Bacs
-    // processing) on every invoice for our plan subscriptions, including the
+    // Build Review 3: set the real per-invoice fee (20% rounded down;
+    // TradeSura pays Stripe's processing) on every invoice for our plan subscriptions, including the
     // first one — this only works while the invoice is still a draft, before
     // Stripe auto-finalizes it, so a late/already-finalized invoice is
     // logged and left alone rather than failing the webhook.

@@ -3,7 +3,7 @@ import { View, Text, ScrollView, RefreshControl } from "react-native";
 import { useFocusEffect, useLocalSearchParams, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
-import { AppHeader, Card, Pill, Tick, Button } from "@/components/ui";
+import { AppHeader, Card, Pill, Tick, Button, ScreenTitle } from "@/components/ui";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 
 type Tier = {
@@ -17,8 +17,8 @@ type Tier = {
 
 const FEE_RATE = 0.2;
 
-const STATUS_PILL: Record<Tier["status"], { tone: "ok" | "off"; label: (n: number) => string }> = {
-  LIVE: { tone: "ok", label: (n) => `Live · ${n} customer${n === 1 ? "" : "s"}` },
+const STATUS_PILL: Record<Tier["status"], { tone: "info" | "off"; label: (n: number) => string }> = {
+  LIVE: { tone: "info", label: (n) => `Live · ${n} customer${n === 1 ? "" : "s"}` },
   STOPPED: { tone: "off", label: (n) => `Stopped · ${n} still on this plan` },
   DRAFT: { tone: "off", label: () => "Draft" },
 };
@@ -116,9 +116,7 @@ export default function PlansHub() {
         contentContainerClassName="gap-3.5 px-4 pb-8 pt-4"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Text className="font-sans text-sm text-muted">
-          Your active plans — ready to offer to your customers.
-        </Text>
+        <ScreenTitle title="My plans" intro="Your plans, ready to offer to your customers." />
 
         {/* The builder's Step 1 starter chips replace the old quick-start
             picker that used to open here. */}
@@ -128,25 +126,25 @@ export default function PlansHub() {
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
         {tiers.map((t) => {
-          const fee = Math.round(t.priceMonthlyPence * FEE_RATE);
+          const fee = Math.floor(t.priceMonthlyPence * FEE_RATE); // rounded down, engineer's favour
           const pill = STATUS_PILL[t.status];
           return (
             <Card key={t.id}>
               <View className="flex-row items-baseline justify-between">
-                <Text className="font-bold text-base text-ink">{t.name}</Text>
-                <Text className="font-mono font-extrabold text-ok">
+                <Text className="font-bold text-[17px] text-ink">{t.name}</Text>
+                <Text className="tabular-nums font-extrabold text-ok">
                   £{(t.priceMonthlyPence / 100).toFixed(0)}
                   <Text className="text-xs font-bold text-muted">/month</Text>
                 </Text>
               </View>
-              <Text className="mt-0.5 font-mono text-[11px] text-muted">
+              <Text className="mt-0.5 tabular-nums text-[13px] text-muted">
                 You keep £{((t.priceMonthlyPence - fee) / 100).toFixed(2)} a month per customer.
               </Text>
               <View className="mt-2.5 gap-1">
                 {t.clauseTitles.map((line) => (
                   <View key={line} className="flex-row items-start gap-2">
                     <Tick size={12} />
-                    <Text className="flex-1 text-xs text-ink">{line}</Text>
+                    <Text className="flex-1 text-[14px] text-ink">{line}</Text>
                   </View>
                 ))}
               </View>

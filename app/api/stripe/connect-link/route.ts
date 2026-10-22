@@ -7,6 +7,7 @@ import {
   createAccountOnboardingLink,
   ensureRecipientConfiguration,
   getOrCreateConnectAccount,
+  prefillConnectAccount,
   stripeConfigured,
 } from "@/lib/stripe";
 import { appUrl } from "@/lib/app-url";
@@ -56,6 +57,11 @@ export async function GET() {
       data: { stripeAccountId: accountId },
     });
     await track("stripe_account_created", { type: "ENGINEER", id: engineerId }, { accountId });
+  } else if (!engineer.stripeChargesEnabled) {
+    // Build Review 3 — never reset: the same account carries on where the
+    // engineer stopped. Accounts made before the pre-fill get whatever we
+    // know filled in now (best-effort; never overwrites their answers).
+    await prefillConnectAccount(accountId, engineer);
   }
 
   // Stripe's Account Links API only accepts http(s) return/refresh URLs, not

@@ -20,8 +20,8 @@ import { KEEP_PENCE_PER_CUSTOMER, formatPounds } from "@/lib/earnings";
 // How It Works page — full rebuild to the 30 Sept build notes. This is where
 // engineers decide to sign up, so it sells: why join, how it works, what
 // they earn, what they get, and a button to start. Never gated (Part 6.5).
-// Money here is always the clean 80% — processing pennies only ever appear
-// in the Payouts breakdown.
+// Money here is always the clean 80% — TradeSura pays Stripe's processing
+// (Build Review 3).
 
 const BLUE = "#5FA3F0";
 

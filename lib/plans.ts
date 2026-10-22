@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { prisma } from "@/lib/db";
-import { BACS_PROCESSING_FEE_PENCE, TRADESURA_FEE_RATE } from "@/lib/clauses";
+import { computeApplicationFeePence } from "@/lib/stripe";
 
 export function newToken() {
   return crypto.randomBytes(12).toString("base64url");
@@ -25,7 +25,8 @@ export async function activeMonthlyPence(engineerId: string) {
 // Build Guide v2 Parts 6.3 + 12 — payout maths from what actually cleared,
 // never from the monthly plan total. Each confirmed collection loses exactly
 // what Stripe's application_fee_amount takes (lib/stripe.ts
-// computeApplicationFeePence: 20% rounded, plus the flat Bacs processing), so
+// computeApplicationFeePence: 20% rounded down; TradeSura pays Stripe's
+// processing, Build Review 3), so
 // summing per collection reconciles to Stripe's records to the penny.
 export async function collectionsSince(engineerId: string, since: Date) {
   const events = await prisma.event.findMany({
@@ -41,15 +42,13 @@ export async function collectionsSince(engineerId: string, since: Date) {
   for (const e of events) {
     const amount = (e.meta as { amountPence?: number } | null)?.amountPence ?? 0;
     collectedPence += amount;
-    feePence += Math.round(amount * TRADESURA_FEE_RATE);
+    feePence += computeApplicationFeePence(amount);
   }
-  const processingPence = events.length * BACS_PROCESSING_FEE_PENCE;
   return {
     count: events.length,
     collectedPence,
     feePence,
-    processingPence,
-    toBankPence: collectedPence - feePence - processingPence,
+    toBankPence: collectedPence - feePence,
   };
 }
 

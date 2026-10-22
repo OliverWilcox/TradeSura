@@ -21,7 +21,6 @@ type Collections = {
   count: number;
   collectedPence: number;
   feePence: number;
-  processingPence: number;
   toBankPence: number;
 };
 type PayoutsData = {
@@ -247,16 +246,6 @@ export default function Payouts() {
                   }
                 />
               )}
-              <RowLine
-                left={`Direct Debit processing (${data.month.count} × 32p)`}
-                right={
-                  // Part 12 — costs render neutral, never red; costs aren't errors.
-                  <Text className="font-mono text-ink">
-                    {data.month.processingPence > 0 ? "−" : ""}
-                    {pounds(data.month.processingPence)}
-                  </Text>
-                }
-              />
               <RowLine
                 left={<Text className="font-bold text-sm text-ink">To your bank</Text>}
                 right={

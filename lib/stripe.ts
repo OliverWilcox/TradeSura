@@ -10,7 +10,7 @@
 //   docs.stripe.com/billing/subscriptions/bacs-debit (Bacs mandate + delayed settlement)
 //   docs.stripe.com/connect/express-accounts (account links onboarding)
 import Stripe from "stripe";
-import { TRADESURA_FEE_RATE, BACS_PROCESSING_FEE_PENCE } from "@/lib/clauses";
+import { TRADESURA_FEE_RATE } from "@/lib/clauses";
 import { profileUrl } from "@/lib/public-url";
 
 // CLAUDE.md: test/sandbox only. Go-live is a human sign-off — a hard stop,
@@ -106,24 +106,179 @@ export function belongsToAnotherPlatform(err: unknown): boolean {
   );
 }
 
-// Creates the connected account on first call, returns the existing id after.
-export async function getOrCreateConnectAccount(engineer: {
+// What we already know about the engineer from sign-up (Build Review 3,
+// section 7): Stripe's hosted onboarding opens with it filled in, so a
+// one-person limited company only checks the business details, types a date
+// of birth and home address, and adds bank details.
+export type ConnectEngineer = {
   id: string;
   email: string;
   slug: string;
   businessType: string | null;
   tradingName: string | null;
+  legalName?: string | null;
+  companyNumber?: string | null;
+  soleOwner?: boolean | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+  postcode?: string | null;
+  // "line1\ntown\npostcode" from sign-up's address step — the Companies House
+  // registered office for a limited company (pre-filled, editable), the
+  // engineer's own address for a sole trader.
+  packAddress?: string | null;
+  gasSafeCompany?: string | null;
   stripeAccountId: string | null;
-}): Promise<string> {
-  if (engineer.stripeAccountId) return engineer.stripeAccountId;
-  const stripe = getStripe();
-  const account = await stripe.v2.core.accounts.create({
-    contact_email: engineer.email,
-    display_name: engineer.tradingName?.trim() || undefined,
+};
+
+// Stripe's statement descriptor rules: 5–22 characters, latin letters,
+// numbers and spaces only (no < > \ ' " *), at least one letter. The engineer
+// is the seller, so this is their trading name, e.g. "MW HEATING".
+export function statementDescriptor(...names: (string | null | undefined)[]): string | undefined {
+  for (const name of names) {
+    const s = (name ?? "")
+      .toUpperCase()
+      .replace(/&/g, " AND ")
+      .normalize("NFKD")
+      .replace(/[^A-Z0-9 ]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 22)
+      .trim();
+    if (s.length >= 5 && /[A-Z]/.test(s)) return s;
+  }
+  return undefined;
+}
+
+type GbAddress = { line1?: string; city?: string; postal_code?: string; country: string };
+
+function addressFrom(e: ConnectEngineer): GbAddress | undefined {
+  const lines = (e.packAddress ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const postcode = e.postcode?.trim() || undefined;
+  if (lines.length === 0) return postcode ? { country: "GB", postal_code: postcode } : undefined;
+  const last = lines[lines.length - 1];
+  const lastIsPostcode = /^[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}$/i.test(last);
+  const body = lastIsPostcode ? lines.slice(0, -1) : lines;
+  return {
+    country: "GB",
+    line1: body[0]?.slice(0, 200),
+    city: body.length > 1 ? body[body.length - 1].slice(0, 100) : undefined,
+    postal_code: lastIsPostcode ? last.toUpperCase() : postcode,
+  };
+}
+
+// The person params type isn't re-exported under Stripe.V2.Core.
+type PersonCreateParams = NonNullable<Parameters<Stripe["v2"]["core"]["accounts"]["persons"]["create"]>[1]>;
+
+const MCC = "1711"; // Heating, plumbing, air-conditioning contractors
+
+// Everything we can send, verified against the installed SDK's v2 types
+// (stripe@22.6.0, V2/Core/Accounts.d.ts AccountCreateParams). Fields we
+// don't know stay unset so Stripe asks for them.
+function prefillParams(e: ConnectEngineer) {
+  const isIndividual = e.businessType === "sole_trader";
+  const entityType = e.businessType ? IDENTITY_ENTITY_TYPE[e.businessType] : undefined;
+  const phone = e.phone || undefined;
+  const address = addressFrom(e);
+  const legalName = e.legalName?.trim() || (isIndividual ? undefined : e.gasSafeCompany?.trim()) || undefined;
+  const descriptor = statementDescriptor(e.tradingName, legalName);
+
+  const businessDetails: Stripe.V2.Core.AccountCreateParams.Identity.BusinessDetails = {
+    phone,
+    // Sole traders have no registered name; their trading name goes on the
+    // profile as doing_business_as instead.
+    registered_name: isIndividual ? undefined : legalName,
+    id_numbers:
+      e.businessType === "ltd" && e.companyNumber
+        ? [{ type: "gb_crn", value: e.companyNumber }]
+        : undefined,
+    // Registered office for a company. A sole trader's business address is
+    // their home address, which goes on the individual below.
+    address: isIndividual ? undefined : address,
+  };
+
+  const person = {
+    given_name: e.firstName?.trim() || undefined,
+    surname: e.lastName?.trim() || undefined,
+    email: e.email,
+    phone,
+  };
+  // A sole trader IS the account's individual; their home address is the
+  // business address.
+  const individual: Stripe.V2.Core.AccountCreateParams.Identity.Individual | undefined = isIndividual
+    ? { ...person, address }
+    : undefined;
+  // A company's representative is a Person on the account. "Are you the only
+  // owner of the company?" yes → they're also the owner and director, so
+  // those steps disappear. Anyone else lists their co-owners/directors in
+  // Stripe.
+  const soleOwnerOfCompany = !isIndividual && e.soleOwner === true;
+  const representative: PersonCreateParams | undefined = isIndividual
+    ? undefined
+    : {
+        ...person,
+        relationship: soleOwnerOfCompany
+          ? {
+              representative: true,
+              owner: true,
+              director: true,
+              executive: true,
+              percent_ownership: Stripe.Decimal.from("100"),
+              title: "Director",
+            }
+          : { representative: true },
+      };
+
+  return {
+    representative,
+    contact_email: e.email,
+    contact_phone: phone,
+    display_name: e.tradingName?.trim() || legalName || undefined,
+    identity: {
+      country: "gb",
+      entity_type: entityType,
+      business_details: businessDetails,
+      individual,
+      attestations: soleOwnerOfCompany
+        ? { persons_provided: { owners: true, directors: true, executives: true } }
+        : undefined,
+    },
+    profile: {
+      // "Get paid" runs before the engineer has a live plan, so this page can
+      // 404 for a little while — still the correct URL to have on file, and
+      // it's what Stripe otherwise flags as "provide a business website".
+      business_url: profileUrl(e.slug),
+      doing_business_as: e.tradingName?.trim() || undefined,
+      product_description: "Monthly gas boiler care plans sold to the engineer's own customers.",
+    },
+    merchant: {
+      mcc: MCC,
+      statement_descriptor: descriptor ? { descriptor } : undefined,
+      // Customer-facing support details are the engineer's own, not TradeSura's.
+      support: { email: e.email, phone },
+    },
+  } satisfies {
+    representative?: PersonCreateParams;
+    contact_email: string;
+    contact_phone?: string;
+    display_name?: string;
+    identity: Stripe.V2.Core.AccountCreateParams.Identity;
+    profile: Stripe.V2.Core.AccountCreateParams.Defaults.Profile;
+    merchant: Stripe.V2.Core.AccountCreateParams.Configuration.Merchant;
+  };
+}
+
+function baseCreateParams(e: ConnectEngineer): Stripe.V2.Core.AccountCreateParams {
+  return {
+    contact_email: e.email,
+    display_name: e.tradingName?.trim() || undefined,
     dashboard: "express",
     identity: {
       country: "gb",
-      entity_type: engineer.businessType ? IDENTITY_ENTITY_TYPE[engineer.businessType] : undefined,
+      entity_type: e.businessType ? IDENTITY_ENTITY_TYPE[e.businessType] : undefined,
     },
     defaults: {
       // Express dashboard requires both collectors set to "application" —
@@ -131,17 +286,13 @@ export async function getOrCreateConnectAccount(engineer: {
       // (account_controller_express_dash_without_application_losses_or_fees).
       responsibilities: { fees_collector: "application", losses_collector: "application" },
       profile: {
-        // "Get paid" runs before the engineer has a live plan (onboarding
-        // step 1 of 4), so this page can 404 for a little while — still the
-        // correct URL to have on file, and it's what Stripe otherwise flags
-        // as an "Overdue: provide a business website" requirement.
-        business_url: profileUrl(engineer.slug),
+        business_url: profileUrl(e.slug),
         product_description: "Monthly gas boiler care plans sold to the engineer's own customers.",
       },
     },
     configuration: {
       merchant: {
-        mcc: "1711", // Heating, plumbing, air-conditioning contractors
+        mcc: MCC,
         capabilities: {
           // card_payments is a platform-level prerequisite for the merchant
           // configuration even though this integration only charges Bacs —
@@ -152,9 +303,109 @@ export async function getOrCreateConnectAccount(engineer: {
       },
       recipient: RECIPIENT_CONFIGURATION,
     },
-    metadata: { engineerId: engineer.id },
-  });
-  return account.id;
+    metadata: { engineerId: e.id },
+  };
+}
+
+// Creates the connected account on first call, returns the existing id after.
+// One account per engineer, always: an accidental "Return to TradeSura"
+// leaves this id saved and the next link carries on where they stopped.
+export async function getOrCreateConnectAccount(engineer: ConnectEngineer): Promise<string> {
+  if (engineer.stripeAccountId) return engineer.stripeAccountId;
+  const stripe = getStripe();
+  const base = baseCreateParams(engineer);
+  const p = prefillParams(engineer);
+  try {
+    const account = await stripe.v2.core.accounts.create({
+      ...base,
+      contact_phone: p.contact_phone,
+      display_name: p.display_name,
+      identity: p.identity,
+      defaults: { ...base.defaults, profile: p.profile },
+      configuration: {
+        ...base.configuration,
+        merchant: { ...base.configuration!.merchant, ...p.merchant },
+      },
+    });
+    if (p.representative) await addRepresentative(account.id, p.representative);
+    return account.id;
+  } catch (err) {
+    // A pre-filled value Stripe won't accept (an odd address, a descriptor it
+    // dislikes) must never block payment setup — fall back to the bare
+    // account and let the hosted form ask for it.
+    if (!(err instanceof Stripe.errors.StripeInvalidRequestError)) throw err;
+    console.error("[stripe] pre-filled account create rejected, creating bare:", err.message, err.param);
+    const account = await stripe.v2.core.accounts.create(base);
+    return account.id;
+  }
+}
+
+// Best-effort: the account is already usable without it — Stripe's form
+// asks for the representative itself if this didn't land.
+async function addRepresentative(
+  accountId: string,
+  rep: PersonCreateParams,
+): Promise<void> {
+  try {
+    await getStripe().v2.core.accounts.persons.create(accountId, rep);
+  } catch (err) {
+    console.error("[stripe] pre-filled representative rejected:", err);
+  }
+}
+
+// Keeps only the parts of `want` the account doesn't already have, so a
+// best-effort fill never overwrites something the engineer typed in Stripe.
+function missingOnly(want: unknown, have: unknown): unknown {
+  if (want === undefined) return undefined;
+  const isPlain = (v: unknown): v is Record<string, unknown> =>
+    v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype;
+  const empty =
+    have === undefined || have === null || have === "" || (Array.isArray(have) && have.length === 0);
+  if (empty) return want;
+  if (!isPlain(want) || !isPlain(have)) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(want)) {
+    const m = missingOnly(v, have[k]);
+    if (m !== undefined && !(isPlain(m) && Object.keys(m).length === 0)) out[k] = m;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+// Accounts created before Build Review 3 went out bare. Before each new link,
+// fill in whatever is still missing, best-effort: never once the engineer has
+// accepted Stripe's terms (their submitted details are theirs), never fatal.
+export async function prefillConnectAccount(accountId: string, engineer: ConnectEngineer): Promise<void> {
+  const stripe = getStripe();
+  try {
+    const a = await stripe.v2.core.accounts.retrieve(accountId, {
+      include: ["identity", "defaults", "configuration.merchant"],
+    });
+    if (a.identity?.attestations?.terms_of_service?.account?.date) return;
+    const p = prefillParams(engineer);
+    // A different entity type means the engineer chose it in Stripe — leave
+    // identity alone rather than send details for the wrong kind of business.
+    const entityMismatch =
+      a.identity?.entity_type && p.identity.entity_type && a.identity.entity_type !== p.identity.entity_type;
+    const patch = {
+      contact_phone: missingOnly(p.contact_phone, a.contact_phone),
+      display_name: missingOnly(p.display_name, a.display_name),
+      identity: entityMismatch ? undefined : missingOnly(p.identity, a.identity),
+      defaults: missingOnly({ profile: p.profile }, a.defaults),
+      configuration: missingOnly({ merchant: p.merchant }, a.configuration),
+    };
+    const update = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+    if (Object.keys(update).length > 0) {
+      await stripe.v2.core.accounts.update(accountId, update as Stripe.V2.Core.AccountUpdateParams);
+    }
+    if (p.representative && !entityMismatch) {
+      const people = await stripe.v2.core.accounts.persons.list(accountId);
+      if (!people.data.some((x) => x.relationship?.representative)) {
+        await addRepresentative(accountId, p.representative);
+      }
+    }
+  } catch (err) {
+    console.error("[stripe] best-effort account pre-fill failed:", err);
+  }
 }
 
 export async function createAccountOnboardingLink(
@@ -168,6 +419,9 @@ export async function createAccountOnboardingLink(
       type: "account_onboarding",
       account_onboarding: {
         configurations: ["merchant", "recipient"],
+        // Build Review 3: ask only for what's due now, not everything Stripe
+        // might want later (that's also the default — stated so it stays).
+        collection_options: { fields: "currently_due", future_requirements: "omit" },
         return_url: opts.returnUrl,
         refresh_url: opts.refreshUrl,
       },
@@ -180,6 +434,8 @@ export type ConnectAccountStatus = {
   detailsSubmitted: boolean;
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
+  // Stripe is waiting on the engineer for something right now.
+  requirementsDue: boolean;
 };
 
 function statusFromV2Account(a: Stripe.V2.Core.Account): ConnectAccountStatus {
@@ -191,14 +447,55 @@ function statusFromV2Account(a: Stripe.V2.Core.Account): ConnectAccountStatus {
     a.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status === "active";
   const chargesEnabled = caps?.card_payments?.status === "active" && transfersActive;
   const payoutsEnabled = caps?.stripe_balance?.payouts?.status === "active";
-  // v2 has no single "details_submitted" boolean like v1 did — the nearest
-  // analog is whether anything is blocking right now.
-  const currentlyDue = a.requirements?.summary?.minimum_deadline?.status === "currently_due";
+  const deadline = a.requirements?.summary?.minimum_deadline?.status;
+  const requirementsDue =
+    deadline === "currently_due" ||
+    deadline === "past_due" ||
+    (a.requirements?.entries ?? []).some(
+      (r) =>
+        r.awaiting_action_from === "user" &&
+        (r.minimum_deadline.status === "currently_due" || r.minimum_deadline.status === "past_due"),
+    );
+  // v2 has no v1-style details_submitted. Hosted onboarding records the
+  // terms-of-service acceptance on its final "Submit" step, so that's the
+  // "they got to the end" signal; an accidental "Return to TradeSura" before
+  // it leaves the account half set up.
+  const tosAccepted = Boolean(a.identity?.attestations?.terms_of_service?.account?.date);
   return {
-    detailsSubmitted: !currentlyDue && (chargesEnabled || payoutsEnabled),
+    detailsSubmitted: tosAccepted || (!requirementsDue && (chargesEnabled || payoutsEnabled)),
     chargesEnabled,
     payoutsEnabled,
+    requirementsDue,
   };
+}
+
+// Build Review 3 — what the hub and Home show about payment setup.
+//   none        no Stripe account yet
+//   half        account exists, onboarding not finished (e.g. an accidental
+//               "Return to TradeSura") — "Continue (about 1 minute left)"
+//   needs_more  finished, but Stripe wants something else before payments
+//               can start — "Stripe needs one more thing"
+//   checking    finished, nothing due from the engineer, Stripe still
+//               verifying — no action to take
+//   ready       customers can pay and payouts are on
+export type StripeSetupState = "none" | "half" | "needs_more" | "checking" | "ready";
+
+export function stripeSetupState(
+  e: {
+    stripeAccountId: string | null;
+    stripeDetailsSubmitted: boolean;
+    stripeChargesEnabled: boolean;
+    stripePayoutsEnabled: boolean;
+  },
+  // Live status when we just fetched it; without it, anything unfinished
+  // after submission reads as needs_more (the safe prompt).
+  live?: ConnectAccountStatus | null,
+): StripeSetupState {
+  if (!e.stripeAccountId) return "none";
+  if (e.stripeChargesEnabled && e.stripePayoutsEnabled) return "ready";
+  if (!e.stripeDetailsSubmitted) return "half";
+  if (live && !live.requirementsDue) return "checking";
+  return "needs_more";
 }
 
 // Used both by the /api/me poll and by the account.updated webhook handler —
@@ -207,7 +504,7 @@ function statusFromV2Account(a: Stripe.V2.Core.Account): ConnectAccountStatus {
 export async function getConnectAccountStatus(accountId: string): Promise<ConnectAccountStatus> {
   const stripe = getStripe();
   const a = await stripe.v2.core.accounts.retrieve(accountId, {
-    include: ["configuration.merchant", "configuration.recipient", "requirements"],
+    include: ["configuration.merchant", "configuration.recipient", "requirements", "identity"],
   });
   return statusFromV2Account(a);
 }
@@ -216,12 +513,15 @@ export async function getConnectAccountStatus(accountId: string): Promise<Connec
 // Customer plan — Bacs Direct Debit subscription as a destination charge
 // ---------------------------------------------------------------------------
 
-// Build Spec v1 S1/Q2: 20% + ~32p Bacs processing, borne by the engineer.
+// Build Review 3: TradeSura pays Stripe's ~32p processing out of its own
+// share, so the fee is exactly 20% rounded DOWN to the penny, in the
+// engineer's favour (£15.99 → fee £3.19, engineer keeps £12.80). Payouts and
+// statements use this same function so every figure reconciles to Stripe.
 // Applied per invoice (not as a flat subscription-level percent) via the
 // invoice.created webhook handler, which can still edit a draft invoice
 // before Stripe finalizes it — see app/api/stripe/webhook/route.ts.
 export function computeApplicationFeePence(invoiceTotalPence: number): number {
-  return Math.round(invoiceTotalPence * TRADESURA_FEE_RATE) + BACS_PROCESSING_FEE_PENCE;
+  return Math.floor(invoiceTotalPence * TRADESURA_FEE_RATE);
 }
 
 export function publishableKey(): string {
@@ -272,7 +572,7 @@ export async function createEmbeddedSubscription(opts: {
       save_default_payment_method: "on_subscription",
     },
     // No flat application_fee_percent here — the invoice.created webhook sets
-    // application_fee_amount per invoice (20% + Bacs processing), so every
+    // application_fee_amount per invoice (20%, rounded down), so every
     // month's invoice (including this first one) gets it before finalization.
     transfer_data: { destination: opts.engineerAccountId },
     on_behalf_of: opts.engineerAccountId,
