@@ -17,12 +17,12 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 export default async function PlanLinkPage({
   params,
   searchParams,
-}: Params & { searchParams: Promise<{ src?: string; demo?: string; tier?: string; by?: string }> }) {
+}: Params & { searchParams: Promise<{ src?: string; demo?: string; tier?: string; by?: string; rejoin?: string }> }) {
   const { slug } = await params;
   const query = await searchParams;
   const data = await loadEngineerPage(slug);
   if (!data) notFound();
   return (
-    <EngineerPage data={data} slug={slug} src={query.src} demo={query.demo} tier={query.tier} by={query.by} />
+    <EngineerPage data={data} slug={slug} src={query.src} demo={query.demo} tier={query.tier} by={query.by} rejoin={query.rejoin} />
   );
 }

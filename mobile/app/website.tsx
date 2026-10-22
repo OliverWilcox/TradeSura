@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, ScrollView, Pressable, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, TextInput, ScrollView, Pressable, KeyboardAvoidingView, Platform, Image, Share } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
@@ -14,7 +14,16 @@ import { copyText } from "@/lib/clipboard";
 // web-person option. The step ticks itself off the first time the embed
 // loads on a real site.
 
-type Website = { snippet: string; link: string; connected: boolean; host: string | null };
+type Website = {
+  snippet: string;
+  link: string;
+  connected: boolean;
+  host: string | null;
+  live: boolean;
+  disabled: boolean;
+  soldThisMonth: number;
+};
+type PlanLink = { url: string; display: string; qrDataUrl: string };
 
 export default function WebsiteScreen() {
   const [data, setData] = useState<Website | null>(null);
@@ -23,9 +32,11 @@ export default function WebsiteScreen() {
   const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
-  const [copied, setCopied] = useState<"code" | "link" | null>(null);
+  const [copied, setCopied] = useState<"code" | "link" | "share" | null>(null);
+  const [planLink, setPlanLink] = useState<PlanLink | null>(null);
+  const [noSite, setNoSite] = useState(false);
 
-  async function copy(what: "code" | "link", text: string) {
+  async function copy(what: "code" | "link" | "share", text: string) {
     if ((await copyText(text)) === "copied") {
       setCopied(what);
       setTimeout(() => setCopied(null), 2000);
@@ -37,6 +48,7 @@ export default function WebsiteScreen() {
       api<Website>("/api/me/website")
         .then(setData)
         .catch((e) => setError(e instanceof ApiError ? e.message : "Couldn't load this."));
+      api<PlanLink>("/api/me/plan-link").then(setPlanLink).catch(() => {});
     }, []),
   );
 
@@ -81,13 +93,32 @@ export default function WebsiteScreen() {
               </Text>
             </View>
 
-            {data.connected && (
+            {data.connected && !data.disabled && (
               <View className="flex-row items-center gap-2.5 rounded-2xl border border-line-strong px-4 py-3">
                 <Tick size={14} />
                 <Text className="flex-1 text-[14px] text-ink">
                   Connected{data.host ? ` — seen on ${data.host}` : ""}
                 </Text>
               </View>
+            )}
+            {data.disabled && (
+              <View className="rounded-2xl border border-warn-tint bg-warn-tint px-4 py-3">
+                <Text className="text-[14px] text-warn">
+                  Your website plans are switched off by TradeSura. Get in touch with us to turn them back on.
+                </Text>
+              </View>
+            )}
+            {/* Section 7 — "Your website sold 3 plans this month". */}
+            {data.live && (
+              <Card>
+                <Text className="text-[13px] font-bold uppercase tracking-[0.1em] text-flame">This month</Text>
+                <Text className="mt-1.5 text-[19px] font-bold text-ink">
+                  Your website sold {data.soldThisMonth} plan{data.soldThisMonth === 1 ? "" : "s"} this month
+                </Text>
+                <Text className="mt-1 text-[13px] text-muted">
+                  You&apos;re a website partner: a badge on your profile and higher on your town page.
+                </Text>
+              </Card>
             )}
 
             <Card>
@@ -156,6 +187,42 @@ export default function WebsiteScreen() {
                 </Text>
               </Pressable>
             </Card>
+
+            {/* Section 8 — no website: the share link and QR code instead. */}
+            <Pressable onPress={() => setNoSite((v) => !v)} className="items-center py-2">
+              <Text className="text-[14px] font-semibold text-flame">
+                No website? Use your share link and QR code instead.
+              </Text>
+            </Pressable>
+            {noSite && planLink && (
+              <Card>
+                <View className="flex-row items-center gap-2">
+                  <Icon name="qr" size={18} color="#5fa3f0" />
+                  <Text className="text-[13px] font-bold uppercase tracking-[0.1em] text-flame">Your share link</Text>
+                </View>
+                <Text selectable className="mt-1.5 tabular-nums text-[14px] text-ink">
+                  {planLink.display}
+                </Text>
+                <View className="mt-3 items-center rounded-xl bg-white p-3">
+                  <Image source={{ uri: planLink.qrDataUrl }} style={{ width: 200, height: 200 }} accessibilityLabel="QR code for your plans" />
+                </View>
+                <Text className="mt-2 text-[12.5px] text-muted">
+                  Put it on your van, invoices, Facebook page or Google profile.
+                </Text>
+                <View className="mt-3 flex-row gap-2.5">
+                  <Button variant="ghost" className="flex-1" onPress={() => copy("share", planLink.url)}>
+                    {copied === "share" ? "Copied" : "Copy link"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="flex-1"
+                    onPress={() => Share.share({ message: planLink.url }).catch(() => {})}
+                  >
+                    Share
+                  </Button>
+                </View>
+              </Card>
+            )}
           </ScrollView>
         </KeyboardAvoidingView>
       )}

@@ -3,10 +3,20 @@ import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { verifyGasSafe } from "@/lib/gas-safe";
 import { clauseLine } from "@/lib/clauses";
-import { profileUrl } from "@/lib/public-url";
+import { canonicalProfileUrl, profileUrl } from "@/lib/public-url";
 import { tradingNameOf } from "@/lib/engineer";
+import type { PublicRating } from "@/lib/ratings";
 import { CustomerShell } from "@/components/shells";
 import { PublicSignup } from "@/components/public-signup";
+import { ProfileContact } from "@/components/profile-contact";
+import { rejoinFreeMonth } from "@/lib/rejoin-offer";
+import {
+  ProfileHeader,
+  ProfilePhotos,
+  RatingsList,
+  RecruitBanner,
+  type RatingSummary,
+} from "@/components/engineer-profile";
 
 // The engineer's public page — tradesura.com/{slug}. One page is both the
 // plan link (customers pick a plan and join) and, once published from the
@@ -26,11 +36,24 @@ export async function loadEngineerPage(slug: string) {
 
 type Loaded = NonNullable<Awaited<ReturnType<typeof loadEngineerPage>>>;
 
-export function engineerPageMetadata(data: Loaded | null): Metadata {
+export function engineerPageMetadata(data: Loaded | null, opts: { profile?: boolean } = {}): Metadata {
   if (!data) return { title: "Care plans" };
   const { engineer } = data;
   const area = engineer.serviceArea?.trim();
   const published = Boolean(engineer.profilePublishedAt);
+  const town = engineer.town?.trim();
+  if (opts.profile && town) {
+    // Section 6 — "Dave's Heating: Gas Engineer in Huddersfield | TradeSura".
+    return {
+      title: { absolute: `${engineer.tradingName}: Gas Engineer in ${town} | TradeSura` },
+      description: (
+        engineer.profileBio?.trim() ||
+        `${engineer.tradingName} is a Gas Safe registered engineer in ${town}${area ? ` covering ${area}` : ""}. Boiler care plans paid monthly by Direct Debit, ratings from verified customers, call or message direct.`
+      ).slice(0, 160),
+      alternates: { canonical: canonicalProfileUrl(engineer) },
+      robots: published ? { index: true, follow: true } : { index: false, follow: false },
+    };
+  }
   return {
     title: area
       ? `${engineer.tradingName} — boiler care plans in ${area}`
@@ -38,7 +61,7 @@ export function engineerPageMetadata(data: Loaded | null): Metadata {
     description:
       engineer.profileBio?.trim().slice(0, 160) ||
       `Monthly boiler care plans from ${engineer.tradingName}, a Gas Safe registered engineer${area ? ` covering ${area}` : ""}.`,
-    alternates: { canonical: profileUrl(engineer.slug) },
+    alternates: { canonical: canonicalProfileUrl(engineer) },
     // Plan links work from day one; search engines only see a profile the
     // engineer has chosen to publish.
     robots: published ? { index: true, follow: true } : { index: false, follow: false },
@@ -68,6 +91,14 @@ const FAQS: { q: string; a: string }[] = [
   },
 ];
 
+// Section 6 — what the Google-facing profile at
+// /gas-engineers/{town}/{slug} adds on top of the plan page.
+export type ProfileExtras = {
+  rating: RatingSummary;
+  ratings: PublicRating[];
+  partner: boolean;
+};
+
 export async function EngineerPage({
   data,
   slug,
@@ -75,6 +106,8 @@ export async function EngineerPage({
   demo,
   tier,
   by,
+  profile,
+  rejoin,
 }: {
   data: Loaded;
   slug: string;
@@ -83,6 +116,9 @@ export async function EngineerPage({
   tier?: string;
   /** Staff engineer handing over their phone (team accounts, demo only). */
   by?: string;
+  profile?: ProfileExtras;
+  /** Retention §9 — a win-back rejoin link's token. */
+  rejoin?: string;
 }) {
   const { engineer, tiers } = data;
   const brand = engineer.tradingName!;
@@ -116,19 +152,41 @@ export async function EngineerPage({
   await track("page_visit", { type: "CUSTOMER" }, {
     engineerId: engineer.id,
     slug,
-    source: demo ? "demo" : (src ?? "direct"),
+    source: demo ? "demo" : (src ?? (profile ? "profile" : "direct")),
   });
 
+  const rated = profile && profile.rating.average !== null && profile.rating.count > 0 ? profile.rating : null;
   const jsonLd = published
     ? {
         "@context": "https://schema.org",
-        "@type": "HVACBusiness",
+        "@type": profile ? ["LocalBusiness", "HVACBusiness"] : "HVACBusiness",
         name: brand,
-        url: profileUrl(engineer.slug),
+        url: profile ? canonicalProfileUrl(engineer) : profileUrl(engineer.slug),
         ...(engineer.legalName?.trim() ? { legalName: engineer.legalName.trim() } : {}),
         ...(engineer.logoUrl ? { image: engineer.logoUrl } : {}),
         ...(bio ? { description: bio } : {}),
         ...(area ? { areaServed: area } : {}),
+        ...(profile && engineer.town ? { address: { "@type": "PostalAddress", addressLocality: engineer.town, addressCountry: "GB" } } : {}),
+        ...(profile && engineer.profilePhotos.length ? { photo: engineer.profilePhotos } : {}),
+        // Only when ratings exist — Google ignores (and can penalise) empty ones.
+        ...(rated
+          ? {
+              aggregateRating: {
+                "@type": "AggregateRating",
+                ratingValue: rated.average!.toFixed(1),
+                reviewCount: rated.count,
+                bestRating: 5,
+                worstRating: 1,
+              },
+              review: profile!.ratings.slice(0, 5).map((r) => ({
+                "@type": "Review",
+                reviewRating: { "@type": "Rating", ratingValue: r.stars, bestRating: 5, worstRating: 1 },
+                author: { "@type": "Person", name: r.customerName ?? "Verified TradeSura customer" },
+                datePublished: r.ratedAt.toISOString().slice(0, 10),
+                ...(r.comment ? { reviewBody: r.comment } : {}),
+              })),
+            }
+          : {}),
         makesOffer: tiers.map((t) => ({
           "@type": "Offer",
           name: t.name,
@@ -159,7 +217,32 @@ export async function EngineerPage({
         />
       )}
 
-      {(bio || area) && (
+      {profile && (
+        <>
+          <ProfileHeader
+            brand={brand}
+            logoUrl={engineer.logoUrl}
+            town={engineer.town}
+            verified={Boolean(gasSafe)}
+            partner={profile.partner}
+            rating={profile.rating}
+          />
+          {!engineer.leftAt && (
+            <ProfileContact
+              slug={engineer.slug}
+              firstName={engineer.firstName?.trim() || brand}
+              brand={brand}
+              tel={engineer.enquiryPhone || engineer.phone}
+              showCall={engineer.showCallButton}
+              showMessage={engineer.showMessageButton}
+            />
+          )}
+          {bio && <p className="text-[13.5px] text-muted whitespace-pre-line px-0.5">{bio}</p>}
+          <ProfilePhotos photos={engineer.profilePhotos} brand={brand} />
+        </>
+      )}
+
+      {!profile && (bio || area) && (
         <div className="bg-paper border border-line rounded-xl p-3.5">
           <h1 className="font-sans font-semibold text-sm mb-1">About {brand}</h1>
           {bio && <p className="text-[13px] text-muted whitespace-pre-line">{bio}</p>}
@@ -182,6 +265,8 @@ export async function EngineerPage({
         engineerName={brand}
         vatRegistered={engineer.vatRegistered}
         initialTierId={tier}
+        rejoin={rejoin}
+        firstMonthFree={await rejoinFreeMonth(engineer.id, rejoin)}
         soldById={demo ? by : undefined}
         channel={
           demo ? "demo" : src === "blast" ? "blast" : src === "referral" ? "referral" : src === "website" ? "website" : "web"
@@ -199,6 +284,17 @@ export async function EngineerPage({
           ],
         }))}
       />
+
+      {profile && area && (
+        <div className="bg-paper border border-line rounded-xl p-3.5">
+          <h2 className="font-sans font-semibold text-sm mb-1">Areas covered</h2>
+          <p className="text-[13px] text-muted">{area}</p>
+        </div>
+      )}
+
+      {profile && (
+        <RatingsList ratings={profile.ratings} firstName={engineer.firstName?.trim() || brand} />
+      )}
 
       <div className="bg-paper border border-line rounded-xl p-3.5">
         <h2 className="font-sans font-semibold text-sm mb-1.5">How it works</h2>
@@ -224,6 +320,13 @@ export async function EngineerPage({
       <p className="font-mono text-[10px] text-faint text-center pt-1">
         Direct Debit Guarantee protected · 14-day cooling-off · cancel anytime
       </p>
+
+      {profile && (
+        <RecruitBanner
+          href={`/join/${engineer.slug}?src=profile`}
+          text="Are you a gas engineer? Get your free profile"
+        />
+      )}
     </CustomerShell>
   );
 }

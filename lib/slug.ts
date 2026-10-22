@@ -3,8 +3,8 @@ import { prisma } from "@/lib/db";
 // Top-level paths the app already owns. Engineer slugs now sit at the root
 // (tradesura.com/{slug}), so a business can't be given one of these.
 export const RESERVED_SLUGS = new Set([
-  "admin", "api", "brand", "claim", "customer-terms", "embed", "embed-js", "favicon-ico",
-  "join", "manifest-json", "p", "portal", "privacy", "r", "robots-txt", "sitemap-xml", "terms",
+  "admin", "api", "brand", "gas-engineers", "claim", "customer-terms", "embed", "embed-js", "favicon-ico",
+  "join", "manifest-json", "p", "passport", "portal", "privacy", "r", "rate", "robots-txt", "s", "sitemap-xml", "terms",
   "about", "help", "login", "signin", "signup", "support", "tradesura", "www",
 ]);
 

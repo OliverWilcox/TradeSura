@@ -14,6 +14,7 @@ import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 import { setupSteps } from "@/lib/setup-steps";
 import { offerLock } from "@/lib/offer-lock";
 import { StripeStatusCard } from "@/components/stripe-status-card";
+import { GrowthCard } from "@/components/growth-card";
 
 type DueItem = {
   customerId: string;
@@ -460,6 +461,8 @@ function OwnerHome() {
                 </Text>
               )}
             </Card>
+
+            <GrowthCard />
 
             {/* Part 6.5 — the 2×2 quick-action row: My plans · Invite an
                 engineer · How it works · Membership Shop. My plans and

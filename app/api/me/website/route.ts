@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
-import { embedSnippet, profileUrl } from "@/lib/public-url";
+import { embedSnippet, planLinkUrl } from "@/lib/public-url";
+import { websiteSales } from "@/lib/website-sales";
+import { startOfMonth } from "@/lib/enquiries";
 import { sendEmail } from "@/lib/email";
 import { EMAIL, emailShell, escapeHtml } from "@/lib/email-layout";
 
@@ -15,9 +17,13 @@ export async function GET() {
   if (!e) return NextResponse.json({ error: "Not found." }, { status: 404 });
   return NextResponse.json({
     snippet: embedSnippet(e.slug),
-    link: `${profileUrl(e.slug)}?src=website`,
+    link: `${planLinkUrl(e.slug)}?src=website`,
     connected: Boolean(e.websiteConnectedAt),
     host: e.websiteHost,
+    // Section 7 — live = seen on their site and not switched off by admin.
+    live: Boolean(e.websiteConnectedAt) && !e.widgetDisabledAt,
+    disabled: Boolean(e.widgetDisabledAt),
+    soldThisMonth: await websiteSales(e.id, startOfMonth()),
   });
 }
 
@@ -34,7 +40,7 @@ export async function POST(req: Request) {
 
   const brand = escapeHtml(e.tradingName?.trim() || "Your client");
   const snippet = escapeHtml(embedSnippet(e.slug));
-  const link = escapeHtml(`${profileUrl(e.slug)}?src=website`);
+  const link = escapeHtml(`${planLinkUrl(e.slug)}?src=website`);
   const rows = `
   <tr><td style="padding:26px 30px 8px;font-size:16px;line-height:24px;">
     ${brand} would like their care plans on their website. Paste this where the plans should appear:
@@ -45,6 +51,11 @@ export async function POST(req: Request) {
   <tr><td style="padding:12px 30px 6px;font-size:14px;line-height:21px;color:${EMAIL.body};">
     It shows their live plans and resizes to fit. Joining opens their plan page in a new tab, so no
     payment details ever pass through the website.
+  </td></tr>
+  <tr><td style="padding:6px 30px;font-size:14px;line-height:21px;color:${EMAIL.body};">
+    <b>WordPress:</b> add a Custom HTML block and paste the code.<br>
+    <b>Wix:</b> Add → Embed code → Embed HTML, then paste the code.<br>
+    <b>Squarespace:</b> add a Code block and paste the code.
   </td></tr>
   <tr><td style="padding:6px 30px 26px;font-size:14px;line-height:21px;color:${EMAIL.body};">
     Prefer a plain link or button? Point it at <a href="${link}" style="color:${EMAIL.link};">${link}</a>
