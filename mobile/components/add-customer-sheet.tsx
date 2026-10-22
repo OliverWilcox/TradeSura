@@ -54,41 +54,32 @@ export function AddCustomerSheet({
     router.push(path);
   }
 
-  function needsPayments() {
+  // Review 3 — the offer lock, with the same words as everywhere else and a
+  // way to try the flow in demo mode while it's locked.
+  function locked(title: string, reason: string, cta: string, href: Parameters<typeof router.push>[0] | null) {
     onClose();
-    if (me?.role === "staff") {
-      Alert.alert(
-        "Payments aren't set up yet",
-        "Customers can't join until the business owner finishes payment setup — ask them to do it from their app.",
-      );
-      return;
-    }
-    Alert.alert(
-      "Finish your payment setup first",
-      "Customers pay you by Direct Debit through Stripe — until your payment setup is done, they can't join a plan.",
-      [
-        { text: "Not now", style: "cancel" },
-        { text: "Set up payments", onPress: () => router.push("/onboarding") },
-      ],
-    );
+    Alert.alert(title, reason, [
+      { text: "Not now", style: "cancel" },
+      { text: "Try it in demo mode", onPress: () => router.push("/demo") },
+      ...(href ? [{ text: cta, onPress: () => router.push(href) }] : []),
+    ]);
   }
 
   function customerFacing(path: Parameters<typeof router.push>[0]) {
-    if (!badgeGranted) return needsBadge();
-    if (!paymentsReady) return needsPayments();
+    if (!badgeGranted) {
+      return locked(
+        "Offers are locked for now",
+        "Unlocks when your Gas Safe check is done (usually within 24 hours).",
+        "Check my status",
+        "/more",
+      );
+    }
+    if (!paymentsReady) {
+      return me?.role === "staff"
+        ? locked("Set up payments first", "Ask the business owner to finish payment setup from their app.", "", null)
+        : locked("Set up payments first", "Customers pay you by Direct Debit through Stripe, so payments need setting up before you can offer a plan.", "Set up payments", "/get-paid");
+    }
     go(path);
-  }
-
-  function needsBadge() {
-    onClose();
-    Alert.alert(
-      "You need your Gas Safe badge first",
-      "This route puts a plan straight in front of a customer — finish verification first.",
-      [
-        { text: "Not now", style: "cancel" },
-        { text: "Check status", onPress: () => router.push("/more") },
-      ],
-    );
   }
 
   return (

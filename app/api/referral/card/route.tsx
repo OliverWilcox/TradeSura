@@ -45,7 +45,7 @@ export async function GET(req: Request) {
           locked in with care plans
         </div>
         <div style={{ fontSize: 26, color: "#9FB6D0", marginTop: 40 }}>
-          {`Free account · you keep 80% · paid weekly · tradesura.com/r/${slug}`}
+          {`Free account · you keep 80% · paid weekly · tradesura.com/join/${slug}`}
         </div>
       </div>
     ),

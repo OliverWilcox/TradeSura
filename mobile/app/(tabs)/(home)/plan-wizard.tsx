@@ -558,7 +558,8 @@ export default function PlanWizard() {
           <Text className="flex-1 text-[19px] font-bold text-ink" numberOfLines={1}>
             {stepTitle}
           </Text>
-          {!isEdit && savedOnce && !dirty && (
+          {/* Saved at every Next, so it stays on while they edit the step. */}
+          {!isEdit && savedOnce && (
             <View className="flex-row items-center gap-1.5 rounded-full border border-line-strong px-3 py-1.5">
               <Icon name="saved" size={14} />
               <Text className="text-[12.5px] text-ink">Draft saved</Text>
@@ -667,8 +668,9 @@ export default function PlanWizard() {
                     return (
                       <View key={t.code} className="flex-row items-center gap-3 py-2.5">
                         <View className="flex-1">
-                          <View className="flex-row flex-wrap items-center gap-2">
-                            <Text className="text-[16px] text-ink">{t.title}</Text>
+                          {/* The (i) stays beside the name when a long name wraps. */}
+                          <View className="flex-row items-center gap-2">
+                            <Text className="shrink text-[16px] text-ink">{t.title}</Text>
                             {locked ? (
                               <Icon name="lock" size={15} color="#c9d6e6" />
                             ) : (
@@ -746,13 +748,17 @@ export default function PlanWizard() {
                     onSubmitEditing={commitTypedPrice}
                     keyboardType="decimal-pad"
                     autoFocus
+                    // Starts empty (the current price shows as the hint), so
+                    // typing replaces the price instead of adding to it.
+                    placeholder={(price / 100).toFixed(2)}
+                    placeholderTextColor="#6e86a3"
                     returnKeyType="done"
                     className="min-w-[150px] text-center text-[44px] font-extrabold text-ink"
                   />
                 ) : (
                   <Pressable
                     onPress={() => {
-                      setPriceText((price / 100).toFixed(2));
+                      setPriceText("");
                       setTypingPrice(true);
                     }}
                     accessibilityLabel={`Monthly price ${pounds(price, true)}. Tap to type a price.`}
@@ -799,7 +805,7 @@ export default function PlanWizard() {
               <Slider
                 value={customers}
                 min={1}
-                max={100}
+                max={20}
                 onChange={setCustomers}
                 accessibilityLabel="Number of customers on this plan"
               />
@@ -1023,21 +1029,31 @@ export default function PlanWizard() {
 
         {error && <Text className="px-1 text-sm text-danger">{error}</Text>}
 
-        {/* Step 1's guide price lives in the sticky footer instead. */}
-        {(isEdit || step !== 1) &&
-          (isEdit ? (
-            <Button
-              onPress={saveSingleStep}
-              disabled={busy || (step === 3 && Boolean(blocked)) || (step === 1 && Boolean(serviceRuleError))}
-            >
-              {busy ? "Saving…" : "Save changes"}
-            </Button>
-          ) : (
-            <Button onPress={goNext} disabled={busy || (step === 3 && Boolean(blocked))}>
-              {nextLabel}
-            </Button>
-          ))}
       </ScrollView>
+
+      {/* Review 3 §3 — inside flows the main button sits in a sticky footer. */}
+      {(isEdit || step !== 1) && (
+        <SafeAreaView edges={["bottom"]} className="border-t border-line-strong bg-bg">
+          <View className="px-4 py-3">
+            {isEdit ? (
+              <Button
+                onPress={saveSingleStep}
+                disabled={busy || (step === 3 && Boolean(blocked)) || (step === 1 && Boolean(serviceRuleError))}
+              >
+                {busy ? "Saving…" : "Save changes"}
+              </Button>
+            ) : (
+              <Button
+                onPress={goNext}
+                // Review 3 — "Make this plan live" stays greyed out until ticked.
+                disabled={busy || (step === 3 && Boolean(blocked)) || (step === 4 && !attested)}
+              >
+                {nextLabel}
+              </Button>
+            )}
+          </View>
+        </SafeAreaView>
+      )}
 
       {step === 1 && !isEdit && (
         <SafeAreaView edges={["bottom"]} className="border-t border-line-strong bg-bg">

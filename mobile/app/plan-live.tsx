@@ -161,7 +161,9 @@ export default function PlanLive() {
             {name} is live!
           </Text>
           <Text className="mt-2 text-center text-[15px] text-muted">
-            Nice one, {brand}. Customers can join from today.
+            {lock
+              ? `Nice one, ${brand}. Customers can join once payments are set up and your Gas Safe check is done.`
+              : `Nice one, ${brand}. Customers can join from today.`}
           </Text>
 
           {lock ? (
@@ -171,7 +173,9 @@ export default function PlanLive() {
             >
               <Icon name="warning" size={17} color="#F5B544" />
               <View className="flex-1">
-                <Text className="text-[15px] font-semibold text-warn">Set up payments to start taking customers</Text>
+                <Text className="text-[15px] font-semibold text-warn">
+                  {lock.href === "/more" ? "Waiting for your Gas Safe check" : "Set up payments to start taking customers"}
+                </Text>
                 <Text className="mt-0.5 text-[13px] text-warn">{lock.reason}</Text>
               </View>
               <Icon name="chevron" size={14} color="#F5B544" weight="semibold" />
@@ -188,7 +192,13 @@ export default function PlanLive() {
 
           <View className="mt-3 rounded-2xl border border-line-strong p-4">
             <Text className="text-[13px] font-bold uppercase tracking-[0.1em] text-flame">Your plan link</Text>
-            <Text selectable className="mt-1.5 text-[22px] font-bold text-ink">
+            <Text
+              selectable
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+              className="mt-1.5 text-[22px] font-bold text-ink"
+            >
               {display}
             </Text>
             <View className="mt-3 flex-row gap-2">
@@ -236,9 +246,6 @@ export default function PlanLive() {
           <View className="mt-4 gap-2.5">
             {lock ? (
               <>
-                <View className="rounded-2xl border border-warn/50 bg-warn-tint px-4 py-3">
-                  <Text className="text-center text-[14px] text-warn">{lock.reason}</Text>
-                </View>
                 <Button onPress={() => router.push(lock.href)}>{lock.cta}</Button>
                 <Button variant="ghost" onPress={() => router.push("/demo")}>
                   Try it in demo mode

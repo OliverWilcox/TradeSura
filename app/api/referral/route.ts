@@ -48,7 +48,7 @@ export async function GET() {
     }),
   );
 
-  const link = `${appUrl()}/r/${engineer.slug}`;
+  const link = `${appUrl()}/join/${engineer.slug}`;
   const qrDataUrl = await QRCode.toDataURL(link, { width: 280, margin: 1 });
 
   // Part 14 — "Share my income card... soft-gated ('Unlocks with your first

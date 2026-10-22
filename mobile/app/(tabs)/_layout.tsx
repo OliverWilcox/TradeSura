@@ -1,4 +1,4 @@
-import { Redirect, Tabs, router } from "expo-router";
+import { Redirect, Tabs, router, useGlobalSearchParams, useSegments } from "expo-router";
 import { useCallback, useEffect, useState, type ComponentProps } from "react";
 import { View, Text, Pressable, AppState } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -45,6 +45,8 @@ const FLOW_ROUTES = new Set([
   "customers/blast",
   "customers/import-contacts",
 ]);
+
+const SETUP_STEP_ROUTES = new Set(["referral", "plans"]);
 
 const ACTIVE = "#5FA3F0";
 const IDLE = "#6E86A3";
@@ -103,6 +105,8 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
   const navKey = `${activeName}:${nested?.index ?? 0}:${nested?.routes?.length ?? 0}`;
   const due = useRemindersBadge(navKey);
   const focusedNested = nested?.routes?.[nested.index ?? 0]?.name;
+  const segments = useSegments() as string[];
+  const params = useGlobalSearchParams<{ from?: string }>();
   const leftTabs = routes.slice(0, 2);
   const rightTabs = routes.slice(2);
 
@@ -147,7 +151,13 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
   }
 
   // After every hook above, so hiding never changes the hook order.
-  if (focusedNested && FLOW_ROUTES.has(focusedNested)) return null;
+  // The router's path is the reliable signal: nested navigator state isn't
+  // populated yet when a flow is opened straight from another stack (e.g.
+  // the hub's "Build my plan"), which left the bar covering the footer.
+  const flowLeaf = segments.slice(2).join("/");
+  // Pages that are also setup steps hide the bar only when opened from setup.
+  const setupStep = params.from === "setup" && SETUP_STEP_ROUTES.has(flowLeaf);
+  if (setupStep || FLOW_ROUTES.has(flowLeaf) || (focusedNested && FLOW_ROUTES.has(focusedNested))) return null;
 
   return (
     <View

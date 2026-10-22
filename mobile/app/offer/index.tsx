@@ -165,7 +165,7 @@ export default function OfferStart() {
       ? customers?.find((c) => c.id === customerId)?.firstName ?? "there"
       : form.firstName || "there";
   const brandLabel = me?.tradingName ?? "your engineer";
-  const linkPreview = me?.slug ? `tradesura.com/${me.slug}` : "your plan link";
+  const linkPreview = me?.slug ? `tradesura.com/p/${me.slug}` : "your plan link";
   const selectedTier = tiers?.find((t) => t.id === tierId) ?? null;
 
   const shown = customers ? (showAll ? customers : customers.slice(0, 8)) : [];
@@ -425,7 +425,7 @@ export default function OfferStart() {
                   Hi {previewName} — {me?.firstName ?? brandLabel} from {brandLabel}. My{" "}
                   {selectedTier?.name ?? "plan"} plan is £
                   {selectedTier ? (selectedTier.priceMonthlyPence / 100).toFixed(2).replace(/\.00$/, "") : "—"}{" "}
-                  a month: {selectedTier?.lines.map((l) => l.toLowerCase()).join(", ") ?? ""}. Sign up
+                  a month: {selectedTier?.lines.map(lowerFirst).join(", ") ?? ""}. Sign up
                   here — takes a minute:{" "}
                   <Text className="font-semibold text-flame-deep">{linkPreview}</Text>
                 </Text>
@@ -458,4 +458,11 @@ export default function OfferStart() {
       )}
     </View>
   );
+}
+
+// Mirrors app/api/offer's message: the opening word lower-cased only, so
+// "CO alarm" and "TRVs" survive.
+function lowerFirst(line: string): string {
+  const first = line.split(/\s/)[0] ?? "";
+  return /^[A-Z0-9]{2,}/.test(first) ? line : line.charAt(0).toLowerCase() + line.slice(1);
 }

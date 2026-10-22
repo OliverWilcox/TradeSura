@@ -184,7 +184,7 @@ export default function Referral() {
         <AppHeader
           title="Getting started · Invite engineers"
           right={
-            <Pressable onPress={later} hitSlop={10}>
+            <Pressable onPress={later} hitSlop={10} className="ml-3">
               <Text className="text-[14px] text-muted">Skip for now</Text>
             </Pressable>
           }

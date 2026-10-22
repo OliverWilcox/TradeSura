@@ -114,7 +114,7 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${EMAIL.wash};border-radius:12px;"><tr><td style="padding:16px;font-size:14px;line-height:20px;color:${EMAIL.ink};">
             <div style="font-weight:700;font-size:15px;padding-bottom:4px;">Know another engineer?</div>
             Earn <b>${REFERRAL_FIRST_YEAR_PERCENT}% of our fee</b> on every plan they sell for their first year, then <b>${REFERRAL_LIFETIME_PERCENT}% for life</b>.
-            <div style="padding-top:8px;"><a href="${base}/r/${escapeHtml(e.slug)}" style="color:${EMAIL.link};font-weight:700;text-decoration:none;">Share your invite link &rarr;</a></div>
+            <div style="padding-top:8px;"><a href="${base}/join/${escapeHtml(e.slug)}" style="color:${EMAIL.link};font-weight:700;text-decoration:none;">Share your invite link &rarr;</a></div>
           </td></tr></table>
         </td>
       </tr>

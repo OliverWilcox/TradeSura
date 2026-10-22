@@ -284,7 +284,9 @@ function OwnerHome() {
                     {!awake
                       ? "Your first plan changes this"
                       : data.count === 0 && data.offersOut === 0
-                        ? "Your plan is live — offer it at your next job"
+                        ? lock
+                          ? "Plan ready — offers unlock once your Gas Safe check and payments are done"
+                          : "Your plan is live — offer it at your next job"
                         : `${data.count} plan${data.count === 1 ? "" : "s"} live · ${data.offersOut} offer${data.offersOut === 1 ? "" : "s"} out`}
                   </Text>
                 </View>

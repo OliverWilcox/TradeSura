@@ -73,10 +73,13 @@ export default function Onboarding() {
       <SafeAreaView edges={["top"]} className="flex-1">
         <ScrollView contentContainerClassName="gap-3 px-4 pb-8 pt-4">
           <View className="flex-row items-start justify-between">
-            <Text className="flex-1 pt-3 text-[36px] font-extrabold leading-[42px] text-ink">Getting started</Text>
-            <View className="items-center justify-center" style={{ width: 112, height: 112 }}>
-              <RingProgress size={112} strokeWidth={14} progress={done / steps.length} />
-              <Text className="absolute text-[20px] font-semibold text-ink">
+            {/* One line on a 6.1" phone, as on the target. */}
+            <Text className="flex-1 pt-6 text-[30px] font-extrabold leading-[36px] text-ink" numberOfLines={1} adjustsFontSizeToFit>
+              Getting started
+            </Text>
+            <View className="items-center justify-center" style={{ width: 96, height: 96 }}>
+              <RingProgress size={96} strokeWidth={12} progress={done / steps.length} />
+              <Text className="absolute text-[18px] font-semibold text-ink">
                 {done} of {steps.length}
               </Text>
             </View>

@@ -169,7 +169,9 @@ export async function POST(req: Request) {
   const brand = brandName(engineer);
   const benefits = tier.clauses
     .sort((a, b2) => a.clause.sortOrder - b2.clause.sortOrder)
-    .map((tc) => tc.clause.title.toLowerCase())
+    // Lower-case the opening word only, so "CO alarm" and "TRVs" survive;
+    // the engineer's rates (R6) are part of the line.
+    .map((tc) => lowerFirst(clauseLine(tc.clause, tier.clauseRates)))
     .join(", ");
   const pricePounds = (tier.priceMonthlyPence / 100).toFixed(2).replace(/\.00$/, "");
 
@@ -231,4 +233,9 @@ export async function POST(req: Request) {
     message: messageBody,
     customerFirstName: customer.firstName,
   });
+}
+
+function lowerFirst(line: string): string {
+  const first = line.split(/\s/)[0] ?? "";
+  return /^[A-Z0-9]{2,}/.test(first) ? line : line.charAt(0).toLowerCase() + line.slice(1);
 }

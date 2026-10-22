@@ -83,7 +83,8 @@ export function setupSteps(me: Me | null): SetupStep[] {
       sub: "Earn 25% of our fee on their plans",
       done: Boolean(me?.inviteSharedAt) || (me?.referralCount ?? 0) > 0,
       cta: "Share invite",
-      href: "/referral",
+      // Opened as a setup step: no tab bar (Review 3 §3).
+      href: { pathname: "/referral", params: { from: "setup" } },
     },
     {
       key: "pack",

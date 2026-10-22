@@ -5,7 +5,10 @@
 // exposes a per-deployment hostname as VERCEL_URL; fall back to that, then to
 // localhost for local dev.
 export function appUrl(): string {
-  if (process.env.APP_URL) return process.env.APP_URL;
+  // Whitespace stripped anywhere: a stray line break pasted into the env
+  // value ("http⏎s://…") otherwise ends up inside every link and QR code.
+  const configured = process.env.APP_URL?.replace(/\s+/g, "").replace(/\/$/, "");
+  if (configured) return configured;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   return "http://localhost:3000";
 }
