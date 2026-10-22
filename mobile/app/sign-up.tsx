@@ -335,6 +335,7 @@ export default function SignUp() {
   useEffect(() => { api<{smsAvailable: boolean}>("/api/auth/options").then(d => setSmsAvailable(d.smsAvailable)).catch(() => {}); }, []);
   useEffect(() => { if (resendIn <= 0) return; const t = setTimeout(() => setResendIn(s => s - 1), 1000); return () => clearTimeout(t); }, [resendIn]);
   const [otpCode, setOtpCode] = useState("");
+  const verifyingRef = useRef(false);
   const [phoneToken, setPhoneToken] = useState<string | null>(null);
   const [otpBusy, setOtpBusy] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
@@ -682,7 +683,7 @@ export default function SignUp() {
       // Only while no SMS provider is configured on the backend (see
       // lib/sms.ts sendVerificationCode) — then the screen says plainly that
       // nothing was texted, and fills the test code in.
-      setResendIn(30);
+      setResendIn(60);
       setOtpCode(data.devCode ?? "");
       return true;
     } catch (e) {
@@ -708,7 +709,9 @@ export default function SignUp() {
   }
 
   async function verifyOtp(code: string): Promise<boolean> {
-    if (!otpRequestToken) return false;
+    // Autofill and a Continue tap can both fire — one check at a time.
+    if (!otpRequestToken || verifyingRef.current) return false;
+    verifyingRef.current = true;
     setOtpBusy(true);
     setOtpError(null);
     try {
@@ -727,6 +730,7 @@ export default function SignUp() {
       setOtpError(e instanceof ApiError ? e.message : "Couldn't check that code — try again.");
       return false;
     } finally {
+      verifyingRef.current = false;
       setOtpBusy(false);
     }
   }

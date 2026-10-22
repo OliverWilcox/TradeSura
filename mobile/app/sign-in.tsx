@@ -22,7 +22,7 @@ import { checkEmail, checkUkMobile } from "@/lib/validate";
 import { AppleSignInButton, type AppleResult } from "@/components/apple-sign-in";
 
 const BLUE = "#5FA3F0";
-const RESEND_AFTER_S = 30;
+const RESEND_AFTER_S = 60;
 const SUPPORT_EMAIL = "info@tradesura.com";
 
 type CodeStep = { requestToken: string; maskedEmail: string; devCode?: string };

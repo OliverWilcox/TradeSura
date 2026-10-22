@@ -18,6 +18,17 @@ export async function POST(req: Request) {
     ? await prisma.signInCode.findUnique({ where: { id: payload.signInCodeId } })
     : null;
   const now = new Date();
+  if (row?.usedAt && row.expiresAt > now) {
+    const newer = await prisma.signInCode.findFirst({
+      where: { engineerId: row.engineerId, createdAt: { gt: row.createdAt } },
+    });
+    if (newer) {
+      return NextResponse.json(
+        { error: "We sent you a newer code — use the one in the latest email." },
+        { status: 400 },
+      );
+    }
+  }
   if (!row || row.expiresAt < now || row.usedAt) {
     return NextResponse.json(
       { error: "That code has expired — tap Resend code for a new one." },

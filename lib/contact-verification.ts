@@ -4,11 +4,12 @@ import { signToken, verifyToken } from "@/lib/auth";
 import { sendEmail, emailConfigured } from "@/lib/email";
 import { codeEmail } from "@/lib/code-email";
 import { sendVerificationCode } from "@/lib/sms";
-import { hashCode } from "@/lib/sign-in-code";
+import { CODE_TTL_MS, RESEND_AFTER_MS, hashCode } from "@/lib/sign-in-code";
 
 export function smsAvailable() {
   return Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_NUMBER);
 }
+export const SUPERSEDED_MESSAGE = "We sent you a newer code — use the one in the latest email.";
 export class VerificationError extends Error {
   constructor(message: string, public status = 400) { super(message); }
 }
@@ -25,15 +26,15 @@ export async function requestContactCode(purpose: Purpose, destination: string, 
     const locked = await tx.signInCode.findFirst({ where: { engineerId: scope, lockedUntil: { gt: now } } });
     if (locked) throw new VerificationError("Too many wrong codes — try again in 15 minutes.", 429);
     const last = await tx.signInCode.findFirst({ where: { engineerId: scope }, orderBy: { createdAt: "desc" } });
-    if (last && now.getTime() - last.createdAt.getTime() < 30_000) throw new VerificationError("Wait 30 seconds before requesting another code.", 429);
+    if (last && now.getTime() - last.createdAt.getTime() < RESEND_AFTER_MS) throw new VerificationError("We've just sent a code — you can ask for another after a minute.", 429);
     // Preserve the wrong-attempt budget when resending within the current window.
     const attempts = last && now.getTime() - last.createdAt.getTime() < 900_000 ? last.attempts : 0;
     await tx.signInCode.updateMany({ where: { engineerId: scope, usedAt: null }, data: { usedAt: now } });
-    return tx.signInCode.create({ data: { engineerId: scope, channel: purpose, codeHash: hashCode(code), attempts, expiresAt: new Date(now.getTime() + 600_000) } });
+    return tx.signInCode.create({ data: { engineerId: scope, channel: purpose, codeHash: hashCode(code), attempts, expiresAt: new Date(now.getTime() + CODE_TTL_MS) } });
   });
   try {
     if (sms) await sendVerificationCode(destination, code);
-    else await sendEmail({ to: destination, ...codeEmail({ code, expiresAt: new Date(Date.now() + 10 * 60 * 1000) }) });
+    else await sendEmail({ to: destination, ...codeEmail({ code, expiresAt: row.expiresAt }) });
   } catch {
     await prisma.signInCode.delete({ where: { id: row.id } });
     throw new VerificationError("We couldn't send your code — please try again.", 503);
@@ -50,7 +51,16 @@ export async function verifyContactCode(requestToken: string, code: string, purp
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${initial.engineerId}))`;
     const row = await tx.signInCode.findUnique({ where: { id: initial.id } });
     const now = new Date();
-    if (!row || row.usedAt || row.expiresAt <= now) return "expired";
+    if (!row || row.expiresAt <= now) return "expired";
+    if (row.usedAt) {
+      // Review 3 P0 — a resend cancels the old code; say so rather than
+      // "expired" when the email in hand is simply the older one.
+      const newer = await tx.signInCode.findFirst({ where: { engineerId: row.engineerId, createdAt: { gt: row.createdAt } } });
+      if (newer) return "superseded";
+      // Same code sent twice (autofill and a Continue tap racing): the first
+      // already passed, so this one is the same proof, not a new guess.
+      return row.codeHash === hashCode(code) ? "ok" : "expired";
+    }
     if (await tx.signInCode.findFirst({ where: { engineerId: row.engineerId, lockedUntil: { gt: now } } })) return "locked";
     if (row.codeHash !== hashCode(code)) {
       const attempts = row.attempts + 1;
@@ -60,6 +70,6 @@ export async function verifyContactCode(requestToken: string, code: string, purp
     await tx.signInCode.update({ where: { id: row.id }, data: { usedAt: now } });
     return "ok";
   });
-  if (outcome !== "ok") throw new VerificationError(outcome === "locked" ? "Too many wrong codes — try again in 15 minutes." : outcome === "expired" ? "That code has expired — request a new one." : "That code doesn't match — try again.", outcome === "locked" ? 429 : 400);
+  if (outcome !== "ok") throw new VerificationError(outcome === "locked" ? "Too many wrong codes — try again in 15 minutes." : outcome === "superseded" ? SUPERSEDED_MESSAGE : outcome === "expired" ? "That code has expired — request a new one." : "That code doesn't match — try again.", outcome === "locked" ? 429 : 400);
   return payload;
 }

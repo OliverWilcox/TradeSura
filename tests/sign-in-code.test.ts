@@ -70,10 +70,27 @@ describe("four-digit email sign-in", () => {
     expect((await verify("1234")).status).toBe(400);
     expect(mocks.signToken).not.toHaveBeenCalled();
   });
-  it("blocks resending within thirty seconds", async () => {
-    mocks.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ createdAt: new Date() });
+  it("blocks resending within a minute", async () => {
+    mocks.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ createdAt: new Date(Date.now() - 45_000) });
     expect(await issueSignInCode({ id: "test-engineer", email: "test@example.com" })).toMatchObject({ ok: false, status: 429 });
     expect(mocks.sendEmail).not.toHaveBeenCalled();
+  });
+  it("a resend cancels the old code, keeps the guess count and lasts the full 10 minutes", async () => {
+    mocks.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ createdAt: new Date(Date.now() - 61_000), attempts: 3 });
+    const start = Date.now();
+    await issueSignInCode({ id: "test-engineer", email: "test@example.com" });
+    expect(mocks.updateMany.mock.calls[0][0]).toMatchObject({ where: { engineerId: "test-engineer", usedAt: null } });
+    const data = mocks.create.mock.calls[0][0].data;
+    expect(data.attempts).toBe(3);
+    expect(data.expiresAt.getTime()).toBeGreaterThanOrEqual(start + 600_000);
+  });
+  it("says a newer code was sent when the older email's code is used", async () => {
+    const row = await mocks.findUnique();
+    mocks.findUnique.mockResolvedValue({ ...row, usedAt: new Date(), createdAt: new Date(Date.now() - 70_000) });
+    mocks.findFirst.mockResolvedValue({ id: "newer" });
+    const res = await verify("1234");
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/newer code/);
   });
 });
 

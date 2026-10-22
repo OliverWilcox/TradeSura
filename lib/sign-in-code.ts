@@ -8,7 +8,9 @@ import { emailConfigured, sendEmail } from "@/lib/email";
 import { codeEmail } from "@/lib/code-email";
 
 export const CODE_TTL_MS = 10 * 60 * 1000;
-export const RESEND_AFTER_MS = 30 * 1000;
+// Review 3 P0 — "Resend code" after 60 seconds, and a resend cancels the
+// old code (the newest email is always the one that works).
+export const RESEND_AFTER_MS = 60 * 1000;
 export const MAX_ATTEMPTS = 5;
 export const LOCK_MS = 15 * 60 * 1000;
 // "Stay signed in" — a code is only needed on a new device or after sign-out.
@@ -66,16 +68,24 @@ export async function issueSignInCode(engineer: {
     orderBy: { createdAt: "desc" },
   });
   if (last && now.getTime() - last.createdAt.getTime() < RESEND_AFTER_MS) {
-    return { ok: false, status: 429, error: "We've just sent a code — wait a few seconds before asking for another." };
+    return { ok: false, status: 429, error: "We've just sent a code — you can ask for another after a minute." };
   }
 
   const code = String(randomInt(1000, 10000));
+  // The email states the same expiry the row holds — one clock, no drift.
+  const expiresAt = new Date(now.getTime() + CODE_TTL_MS);
+  await prisma.signInCode.updateMany({
+    where: { engineerId: engineer.id, usedAt: null },
+    data: { usedAt: now },
+  });
   const row = await prisma.signInCode.create({
     data: {
       engineerId: engineer.id,
       channel: "email",
       codeHash: hashCode(code),
-      expiresAt: new Date(now.getTime() + CODE_TTL_MS),
+      // A resend keeps the wrong-guess count, so resending can't reset the lock.
+      attempts: last && now.getTime() - last.createdAt.getTime() < LOCK_MS ? last.attempts : 0,
+      expiresAt,
     },
   });
 
@@ -84,7 +94,7 @@ export async function issueSignInCode(engineer: {
     const { subject, html } = codeEmail({
       code,
       firstName: engineer.firstName,
-      expiresAt: new Date(Date.now() + CODE_TTL_MS),
+      expiresAt,
       purpose: "sign in",
     });
     await sendEmail({ to: engineer.email, subject, html });
