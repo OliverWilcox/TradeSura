@@ -24,6 +24,12 @@ anything above — e.g. the customer's Join is blue, done ticks and "80%" are
 green, the welcome email keeps its blue button and emoji. Always follow the
 newest guide. Referrals are the 25% / 10% affiliate deal (Build Review 2,
 ruling 4), as the invite target shows.
+[DECISION 2026-10-22, human] **Build Review 3** (Matt's 15 Oct walk) is in
+scope in full. TradeSura pays Stripe's processing (~32p): the fee is 20%
+rounded DOWN to the penny, so the engineer keeps exactly 80%. Same-day
+priority and warranty claim admin are hidden (CARE) until James approves the
+wording. Stripe stays hosted onboarding, pre-filled; embedded onboarding waits
+for the Stripe technical review. Offers need the Gas Safe check AND payments.
 
 Care-plan platform for UK gas engineers. Engineers build tiered maintenance plans,
 sell them on the doorstep via a link/QR, customers pay by Direct Debit (Stripe
