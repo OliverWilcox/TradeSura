@@ -181,14 +181,8 @@ export default function Referral() {
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader
-          title="Getting started · Invite engineers"
-          right={
-            <Pressable onPress={later} hitSlop={10} className="ml-3">
-              <Text className="text-[14px] text-muted">Skip for now</Text>
-            </Pressable>
-          }
-        />
+        {/* Review 3 — one way out: "I'll do this later" under Share. */}
+        <AppHeader title="Getting started · Invite engineers" />
       </SafeAreaView>
       <ScrollView className="flex-1" contentContainerClassName="gap-3.5 px-4 pb-8 pt-4">
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
