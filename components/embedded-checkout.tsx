@@ -7,11 +7,23 @@ import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-
 import { AddressLookup, type AddressValue } from "@/components/address-lookup";
 import { Card, btnClass } from "@/components/ui";
 import { perMonth } from "@/lib/engineer";
+import { FIRST_PAYMENT_LINE, type BillingInterval } from "@/lib/billing-interval";
+
+// "£12 a month" / "£132 a year" — priceLabel is already the full amount of
+// one collection for the chosen interval.
+function priceFor(priceLabel: string, interval: BillingInterval | undefined, vat?: boolean, monthlyPlain?: string) {
+  if (interval === "year") return `${priceLabel} a year${vat ? " including VAT" : ""}`;
+  return perMonth(priceLabel, vat, monthlyPlain);
+}
 
 // C2 — the embedded Bacs Direct Debit form. Stays on the engineer's
 // white-label page; the Payment Element collects name / sort code / account
-// number and the mandate, then the first collection processes async.
+// number and the mandate. Retention spec §1: the client secret is normally a
+// SetupIntent's (the subscription starts with a 14-day cooling-off trial), so
+// confirming sets up the mandate and takes nothing.
 function CheckoutForm({
+  clientSecret,
+  billingInterval,
   signupToken,
   confirmedUrl,
   planName,
@@ -20,6 +32,8 @@ function CheckoutForm({
   vatRegistered,
   landlord,
 }: {
+  clientSecret: string;
+  billingInterval?: BillingInterval;
   signupToken: string;
   confirmedUrl: string;
   planName: string;
@@ -80,11 +94,10 @@ function CheckoutForm({
       return;
     }
 
-    const { error: confirmError } = await stripe.confirmPayment({
-      elements,
-      confirmParams: { return_url: confirmedUrl },
-      redirect: "if_required",
-    });
+    const confirmParams = { return_url: confirmedUrl };
+    const { error: confirmError } = clientSecret.startsWith("seti_")
+      ? await stripe.confirmSetup({ elements, confirmParams, redirect: "if_required" })
+      : await stripe.confirmPayment({ elements, confirmParams, redirect: "if_required" });
 
     if (confirmError) {
       setBusy(false);
@@ -102,7 +115,7 @@ function CheckoutForm({
       <div>
         <h2 className="font-sans font-semibold text-lg">Set up your plan</h2>
         <p className="text-sm text-muted">
-          {planName} · {perMonth(priceLabel, vatRegistered)} · with {engineerName}
+          {planName} · {priceFor(priceLabel, billingInterval, vatRegistered)} · with {engineerName}
         </p>
       </div>
       <AddressLookup signupToken={signupToken} value={address} onChange={setAddress} />
@@ -112,8 +125,7 @@ function CheckoutForm({
       <Card className="bg-flame-tint border-flame-tint text-[12.5px]">
         <b>Protected by the Direct Debit Guarantee.</b>{" "}
         {/* Part 18 pending line, verbatim. */}
-        Your Direct Debit takes 2–3 days to set up. First payment as soon as your Direct Debit is
-        live — we&apos;ll text you before it&apos;s taken.
+        Your Direct Debit takes 2–3 days to set up. {FIRST_PAYMENT_LINE}
       </Card>
 
       <Card className="text-[12.5px]">
@@ -125,7 +137,7 @@ function CheckoutForm({
         </div>
         <div className="flex justify-between">
           <span className="text-muted">You pay</span>
-          <b className="font-mono">{perMonth(priceLabel, vatRegistered, " monthly")}</b>
+          <b className="font-mono">{priceFor(priceLabel, billingInterval, vatRegistered, " monthly")}</b>
         </div>
       </Card>
 
@@ -183,6 +195,7 @@ export function EmbeddedCheckout(props: {
   signupToken: string;
   vatRegistered?: boolean;
   landlord?: boolean;
+  billingInterval?: BillingInterval;
 }) {
   const stripePromise = useMemo(
     () => loadStripe(props.publishableKey),
@@ -211,6 +224,8 @@ export function EmbeddedCheckout(props: {
       }}
     >
       <CheckoutForm
+        clientSecret={props.clientSecret}
+        billingInterval={props.billingInterval}
         signupToken={props.signupToken}
         confirmedUrl={props.confirmedUrl}
         planName={props.planName}

@@ -1,19 +1,24 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { prisma } from "@/lib/db";
-import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { recordReferralEarning } from "@/lib/referral";
 import { activatePlan } from "@/lib/activate";
-import { sendSms, notifyEngineer } from "@/lib/sms";
 import { sendPushNotification } from "@/lib/push";
+import {
+  completePaymentRescue,
+  confirmSignupMandate,
+  recordClearedPayment,
+  settleEndedSubscription,
+  startPaymentRescue,
+  syncPauseFromStripe,
+} from "@/lib/plan-billing";
 import {
   constructWebhookEvent,
   getConnectAccountStatus,
   getStripe,
   computeApplicationFeePence,
 } from "@/lib/stripe";
-import { appUrl } from "@/lib/app-url";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 // One URL for both platform events (checkout, invoices, subscriptions) and
@@ -103,6 +108,9 @@ async function handleEvent(event: Stripe.Event) {
     case "invoice.created": {
       const invoice = event.data.object as Stripe.Invoice;
       if (!invoice.id) return;
+      // Section 1 — the £0 cooling-off trial invoice has no fee to set (and
+      // is already paid by the time this arrives).
+      if (invoice.total === 0) return;
       const subscriptionId = subscriptionIdFromInvoice(invoice);
       if (!subscriptionId) return;
       const sub = await getStripe().subscriptions.retrieve(subscriptionId);
@@ -131,6 +139,9 @@ async function handleEvent(event: Stripe.Event) {
     // first collection actually clears.
     case "invoice.paid": {
       const invoice = event.data.object as Stripe.Invoice;
+      // Section 1 — the £0 trial invoice "pays" the moment the subscription
+      // is created, before any mandate exists. Only real money counts.
+      if (invoice.amount_paid <= 0) return;
       const subscriptionId = subscriptionIdFromInvoice(invoice);
       if (!subscriptionId) return;
       // checkout.session.completed sets stripeSubscriptionId, but Stripe
@@ -146,12 +157,16 @@ async function handleEvent(event: Stripe.Event) {
       }
       if (!plan) return;
       const wasFailed = Boolean(plan.paymentFailedAt);
+      // Normally already ACTIVE from the mandate (setup_intent.succeeded);
+      // this covers plans from before the cooling-off trial.
       await activatePlan(plan.id, {
         subscriptionId,
         customerId: typeof invoice.customer === "string" ? invoice.customer : null,
       });
+      // Service start date, paymentsCleared (annual service at 3), and the
+      // rescue outcome (payment_rescued) when this clears a failure.
+      await recordClearedPayment(plan.id, invoice.amount_paid);
       if (wasFailed) {
-        await prisma.plan.update({ where: { id: plan.id }, data: { paymentFailedAt: null } });
         await track("payment_recovered", { type: "SYSTEM" }, {
           planId: plan.id,
           engineerId: plan.engineerId,
@@ -186,32 +201,40 @@ async function handleEvent(event: Stripe.Event) {
         engineerId: plan?.engineerId,
         invoiceId: invoice.id,
       });
-      if (plan && !plan.paymentFailedAt) {
-        await prisma.plan.update({
-          where: { id: plan.id },
-          data: { paymentFailedAt: new Date() },
-        });
-        // S2 — one plain nudge to the customer; Stripe Smart Retries do the rest.
-        const brand = brandName(plan.engineer);
-        const portal = `${appUrl()}/portal/${plan.portalToken}`;
-        await sendSms({
-          engineerId: plan.engineerId,
-          to: plan.customer.phone,
-          body: `Hi ${plan.customer.firstName} — this month's payment for your care plan with ${brand} didn't go through. Check your details: ${portal}. Nothing to do if you've already fixed it.`,
-          messageClass: "TRANSACTIONAL",
-          consentBasis: "plan-member-transactional",
-        });
-        await notifyEngineer(
-          plan.engineerId,
-          `⚠ ${plan.customer.firstName} ${plan.customer.lastName}'s payment failed — Stripe is retrying automatically. No action needed yet.`,
-        );
-        await sendPushNotification(
-          plan.engineerId,
-          "Payment failed",
-          `${plan.customer.firstName} ${plan.customer.lastName}'s payment didn't go through — Stripe is retrying automatically.`,
-          { url: `/customer/${plan.customerId}` },
-        );
+      // Section 3 — the rescue: a one-tap link to a new Direct Debit from the
+      // engineer, an installer alert, reminders on day 3 and 7, and the plan
+      // only ends if it's still unpaid after the grace period.
+      if (plan && invoice.amount_due > 0) {
+        await startPaymentRescue(plan.id, invoice.amount_due);
       }
+      return;
+    }
+
+    // A Bacs mandate was confirmed on one of our SetupIntents: the sign-up
+    // (cooling-off starts now; nothing is collected until it ends) or a
+    // rescue (new bank details — retry what's owed).
+    case "setup_intent.succeeded": {
+      const si = event.data.object as Stripe.SetupIntent;
+      const planId = si.metadata?.planId;
+      const paymentMethodId = typeof si.payment_method === "string" ? si.payment_method : si.payment_method?.id;
+      if (!planId || !paymentMethodId) return;
+      if (si.metadata?.purpose === "rescue") {
+        await completePaymentRescue(planId, {
+          paymentMethodId,
+          mandateId: typeof si.mandate === "string" ? si.mandate : si.mandate?.id,
+        });
+      } else if (si.metadata?.purpose === "signup") {
+        await confirmSignupMandate(planId, {
+          paymentMethodId,
+          customerId: typeof si.customer === "string" ? si.customer : si.customer?.id,
+        });
+      }
+      return;
+    }
+
+    // Section 2 — a pause has lifted at Stripe (resumes_at passed, or resumed).
+    case "customer.subscription.updated": {
+      await syncPauseFromStripe(event.data.object as Stripe.Subscription);
       return;
     }
 
@@ -228,16 +251,30 @@ async function handleEvent(event: Stripe.Event) {
     case "customer.subscription.deleted": {
       const sub = event.data.object as Stripe.Subscription;
       const plan = await prisma.plan.findFirst({ where: { stripeSubscriptionId: sub.id } });
-      if (plan && plan.status !== "CANCELLED") {
+      if (!plan) return;
+      // A checkout abandoned before the mandate: Stripe cancels the trial at
+      // its end. Nothing was ever live, so just detach it — a fresh link
+      // starts a new subscription.
+      if (plan.status === "PENDING") {
+        await prisma.plan.update({
+          where: { id: plan.id },
+          data: { stripeSubscriptionId: null, mandateStatus: "inactive" },
+        });
+        return;
+      }
+      if (plan.status !== "CANCELLED") {
         await prisma.plan.update({
           where: { id: plan.id },
           data: { status: "CANCELLED", cancelledAt: new Date(), mandateStatus: "inactive" },
         });
         await track("plan_cancelled", { type: "SYSTEM" }, {
           planId: plan.id,
-          reason: "subscription_deleted",
+          // A scheduled cancellation reaching its end date.
+          reason: plan.cancelRequestedAt ? "end_of_paid_period" : "subscription_deleted",
         });
       }
+      // Yearly plans: refund the unused whole months; reminders stop.
+      await settleEndedSubscription(plan.id, sub);
       return;
     }
 

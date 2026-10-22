@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { Card, btnClass } from "@/components/ui";
-import { perMonth } from "@/lib/engineer";
+import { FIRST_PAYMENT_LINE, priceLine } from "@/lib/billing-interval";
 
 export function SignupConfirmed(props: {
   token: string;
   tierName: string;
   priceMonthlyPence: number;
   vatRegistered?: boolean;
+  billingInterval?: string;
   initialStatus: string;
   portalToken: string | null;
 }) {
@@ -47,20 +48,22 @@ export function SignupConfirmed(props: {
         </p>
         <p className="text-xs text-muted mt-1">
           {mandatePending
-            ? "This takes 2–3 working days. Your engineer has been told, and we'll text you when your first payment clears. You can close this page."
+            ? `This takes 2–3 working days. Your engineer has been told. ${FIRST_PAYMENT_LINE} You can close this page.`
             : "This usually takes a few seconds. Keep this page open."}
         </p>
       </Card>
     );
   }
 
-  const price = (props.priceMonthlyPence / 100).toFixed(2);
   return (
     <>
       <Card className="bg-ok-tint border-ok-tint text-center py-6">
         <div className="text-3xl">✓</div>
         <p className="font-semibold mt-1">You&apos;re on the {props.tierName} plan</p>
-        <p className="text-xs text-muted mt-1">{perMonth(`£${price}`, props.vatRegistered, "/mo")} by Direct Debit</p>
+        <p className="text-xs text-muted mt-1">
+          {priceLine(props.priceMonthlyPence, props.billingInterval, props.vatRegistered)} by Direct Debit
+        </p>
+        <p className="text-xs text-muted mt-1">{FIRST_PAYMENT_LINE}</p>
       </Card>
       <Card>
         <p className="text-sm">

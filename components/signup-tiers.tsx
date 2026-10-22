@@ -4,7 +4,8 @@ import { useState } from "react";
 import { NotIncluded } from "@/components/ui";
 import { EmbeddedCheckout } from "@/components/embedded-checkout";
 import { JOIN_BTN, PlanTierCard } from "@/components/plan-tier-card";
-import { perMonth } from "@/lib/engineer";
+import { BillingChoice } from "@/components/billing-choice";
+import { chargePence, priceLine, type BillingInterval } from "@/lib/billing-interval";
 
 type Tier = {
   id: string;
@@ -53,6 +54,7 @@ export function SignupTiers({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [started, setStarted] = useState<Started | null>(null);
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
   const selected = tiers.find((t) => t.id === selectedId);
 
   async function choose() {
@@ -62,7 +64,7 @@ export function SignupTiers({
     const res = await fetch(`/api/signup/${token}/choose`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tierId: selected.id }),
+      body: JSON.stringify({ tierId: selected.id, billingInterval }),
     });
     const data = await res.json();
     setBusy(false);
@@ -91,7 +93,8 @@ export function SignupTiers({
           landlord={started.landlord}
           signupToken={started.signupToken}
           planName={selected.name}
-          priceLabel={pounds(selected.priceMonthlyPence)}
+          priceLabel={pounds(chargePence(selected.priceMonthlyPence, billingInterval))}
+          billingInterval={billingInterval}
           engineerName={engineerName}
           vatRegistered={vatRegistered}
         />
@@ -126,13 +129,22 @@ export function SignupTiers({
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
-      {/* Price before mandate: the full monthly price is restated on the
-          button itself, the last thing seen before the Payment Element. */}
+      {selected && (
+        <BillingChoice
+          priceMonthlyPence={selected.priceMonthlyPence}
+          value={billingInterval}
+          onChange={setBillingInterval}
+          vatRegistered={vatRegistered}
+        />
+      )}
+
+      {/* Price before mandate: the full price (monthly or yearly) is restated
+          on the button itself, the last thing seen before the Payment Element. */}
       {selected && (
         <button onClick={choose} disabled={busy} className={JOIN_BTN}>
           {busy
             ? "Opening secure Direct Debit setup…"
-            : `Choose ${selected.name} — ${perMonth(pounds(selected.priceMonthlyPence), vatRegistered, "/month")} by Direct Debit`}
+            : `Choose ${selected.name} — ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)} by Direct Debit`}
         </button>
       )}
     </>

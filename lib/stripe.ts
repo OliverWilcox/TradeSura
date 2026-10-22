@@ -12,6 +12,7 @@
 import Stripe from "stripe";
 import { TRADESURA_FEE_RATE } from "@/lib/clauses";
 import { profileUrl } from "@/lib/public-url";
+import { addMonths, billingIntervalOf, chargePence, coolingOffEnd, type BillingInterval } from "@/lib/billing-interval";
 
 // CLAUDE.md: test/sandbox only. Go-live is a human sign-off — a hard stop,
 // not a config toggle. Mirrors the old assertSandbox() guard.
@@ -528,13 +529,24 @@ export function publishableKey(): string {
   return process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 }
 
-// Embedded Bacs checkout (C2). Creates the platform Customer and an
-// incomplete monthly Subscription as a destination charge, and returns the
-// confirmation secret the Payment Element needs — the customer never leaves
-// the white-label page.
+// Embedded Bacs checkout (C2). Creates the platform Customer and a
+// Subscription as a destination charge, and returns the client secret the
+// Payment Element needs — the customer never leaves the white-label page.
+//
+// Section 1 — cooling-off: no collection until 14 days after sign-up. The
+// subscription starts with a trial ending then, so the first real invoice
+// (the first collection) is created at trial_end. With a trial and
+// default_incomplete, Stripe returns a pending_setup_intent instead of a
+// payment: the Payment Element confirms that SetupIntent (stripe.confirmSetup),
+// which sets up the Bacs mandate up front without taking anything. Verified
+// against stripe@22.6.0 SubscriptionCreateParams (trial_end,
+// trial_settings.end_behavior.missing_payment_method, pending_setup_intent).
+// A checkout abandoned before the mandate is cancelled by Stripe at trial
+// end rather than invoicing someone who never signed up.
 export async function createEmbeddedSubscription(opts: {
   engineerAccountId: string;
   priceMonthlyPence: number;
+  billingInterval?: BillingInterval;
   productName: string;
   customerName: string;
   customerEmail?: string;
@@ -542,8 +554,11 @@ export async function createEmbeddedSubscription(opts: {
   existingStripeCustomerId?: string | null;
   planId: string;
   planRef: string;
-}): Promise<{ subscriptionId: string; customerId: string; clientSecret: string }> {
+  /** Win-back "first month free": extra months before the first collection. */
+  extraFreeMonths?: number;
+}): Promise<{ subscriptionId: string; customerId: string; clientSecret: string; trialEnd: Date }> {
   const stripe = getStripe();
+  const interval = billingIntervalOf(opts.billingInterval);
 
   const customerId =
     opts.existingStripeCustomerId ??
@@ -558,11 +573,13 @@ export async function createEmbeddedSubscription(opts: {
 
   const price = await stripe.prices.create({
     currency: "gbp",
-    unit_amount: opts.priceMonthlyPence,
-    recurring: { interval: "month" },
+    // Yearly = 12 months for the price of 11, charged in one collection.
+    unit_amount: chargePence(opts.priceMonthlyPence, interval),
+    recurring: { interval },
     product_data: { name: opts.productName },
   });
 
+  const trialEnd = addMonths(coolingOffEnd(new Date()), opts.extraFreeMonths ?? 0);
   const subscription = await stripe.subscriptions.create({
     customer: customerId,
     items: [{ price: price.id }],
@@ -571,24 +588,38 @@ export async function createEmbeddedSubscription(opts: {
       payment_method_types: ["bacs_debit"],
       save_default_payment_method: "on_subscription",
     },
+    trial_end: Math.floor(trialEnd.getTime() / 1000),
+    trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
     // No flat application_fee_percent here — the invoice.created webhook sets
     // application_fee_amount per invoice (20%, rounded down), so every
-    // month's invoice (including this first one) gets it before finalization.
+    // collection (monthly or yearly) gets it before finalization.
     transfer_data: { destination: opts.engineerAccountId },
     on_behalf_of: opts.engineerAccountId,
-    metadata: { planId: opts.planId, planRef: opts.planRef },
-    expand: ["latest_invoice.confirmation_secret"],
+    metadata: { planId: opts.planId, planRef: opts.planRef, billingInterval: interval },
+    expand: ["pending_setup_intent", "latest_invoice.confirmation_secret"],
   });
 
-  const invoice = subscription.latest_invoice;
-  const secret =
-    invoice && typeof invoice !== "string"
-      ? (invoice as unknown as { confirmation_secret?: { client_secret?: string } })
-          .confirmation_secret?.client_secret
-      : undefined;
+  let secret: string | undefined;
+  const setup = subscription.pending_setup_intent;
+  if (setup && typeof setup !== "string") {
+    secret = setup.client_secret ?? undefined;
+    // Lets the setup_intent.succeeded webhook find the plan without a lookup.
+    await stripe.setupIntents.update(setup.id, {
+      metadata: { planId: opts.planId, purpose: "signup" },
+    });
+  } else {
+    // Defensive: a subscription that came back without a trial still wants
+    // its first payment confirmed the old way.
+    const invoice = subscription.latest_invoice;
+    secret =
+      invoice && typeof invoice !== "string"
+        ? (invoice as unknown as { confirmation_secret?: { client_secret?: string } }).confirmation_secret
+            ?.client_secret
+        : undefined;
+  }
   if (!secret) throw new Error("Stripe did not return a confirmation secret");
 
-  return { subscriptionId: subscription.id, customerId, clientSecret: secret };
+  return { subscriptionId: subscription.id, customerId, clientSecret: secret, trialEnd };
 }
 
 // Poll fallback for local dev without a webhook tunnel. Returns whether the
@@ -601,8 +632,43 @@ export async function subscriptionPaid(
     expand: ["latest_invoice"],
   });
   const invoice = sub.latest_invoice;
-  const paid = invoice != null && typeof invoice !== "string" && invoice.status === "paid";
+  const paid =
+    invoice != null && typeof invoice !== "string" && invoice.status === "paid" && invoice.amount_paid > 0;
   return { paid, customerId: typeof sub.customer === "string" ? sub.customer : null };
+}
+
+// Poll fallback for the cooling-off signup: has the customer confirmed the
+// Bacs mandate (the SetupIntent we tagged with this plan) yet?
+export async function signupMandateConfirmed(
+  customerId: string,
+  planId: string,
+): Promise<{ confirmed: boolean; paymentMethodId: string | null; mandateId: string | null }> {
+  const list = await getStripe().setupIntents.list({ customer: customerId, limit: 10 });
+  const si = list.data.find((s) => s.metadata?.planId === planId && s.status === "succeeded");
+  if (!si) return { confirmed: false, paymentMethodId: null, mandateId: null };
+  return {
+    confirmed: true,
+    paymentMethodId: typeof si.payment_method === "string" ? si.payment_method : (si.payment_method?.id ?? null),
+    mandateId: typeof si.mandate === "string" ? si.mandate : (si.mandate?.id ?? null),
+  };
+}
+
+// Section 3 — failed payment rescue: a fresh Bacs mandate on the same
+// platform customer, on behalf of the engineer as the original mandate was.
+export async function createRescueSetupIntent(opts: {
+  customerId: string;
+  engineerAccountId: string;
+  planId: string;
+}): Promise<{ id: string; clientSecret: string }> {
+  const si = await getStripe().setupIntents.create({
+    customer: opts.customerId,
+    payment_method_types: ["bacs_debit"],
+    usage: "off_session",
+    on_behalf_of: opts.engineerAccountId,
+    metadata: { planId: opts.planId, purpose: "rescue" },
+  });
+  if (!si.client_secret) throw new Error("Stripe did not return a setup secret");
+  return { id: si.id, clientSecret: si.client_secret };
 }
 
 export async function cancelStripeSubscription(subscriptionId: string) {
@@ -619,10 +685,12 @@ export async function updateSubscriptionPrice(subscriptionId: string, newPricePe
   const item = sub.items.data[0];
   if (!item) throw new Error(`Subscription ${subscriptionId} has no items`);
   const productId = typeof item.price.product === "string" ? item.price.product : item.price.product.id;
+  // A yearly plan stays yearly: 12 months at the new price of 11.
+  const interval = billingIntervalOf(item.price.recurring?.interval);
   const price = await stripe.prices.create({
     currency: "gbp",
-    unit_amount: newPricePence,
-    recurring: { interval: "month" },
+    unit_amount: chargePence(newPricePence, interval),
+    recurring: { interval },
     product: productId,
   });
   return stripe.subscriptions.update(subscriptionId, {

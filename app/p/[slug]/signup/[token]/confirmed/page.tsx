@@ -38,6 +38,7 @@ export default async function ConfirmedPage({
         tierName={plan.tier?.name ?? "your"}
         priceMonthlyPence={plan.priceMonthlyPence ?? 0}
         vatRegistered={plan.engineer.vatRegistered}
+        billingInterval={plan.billingInterval}
         initialStatus={plan.status}
         portalToken={plan.status === "ACTIVE" ? plan.portalToken : null}
       />

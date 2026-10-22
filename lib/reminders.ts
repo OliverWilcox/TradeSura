@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { brandName } from "@/lib/engineer";
 import { sendSms } from "@/lib/sms";
 import { resolvePlanTier } from "@/lib/plan-tier";
+import { paymentOutstanding } from "@/lib/plan-billing";
 
 export const REMINDER_OFFSETS_DAYS = [30, 14, 3] as const;
 
@@ -43,7 +44,7 @@ export async function dueServices(engineerId: string, opts: { addedById?: string
     return {
       customerId: p.customerId,
       customerName: `${p.customer.firstName} ${p.customer.lastName}`,
-      dueDate: nextServiceDate(p.activatedAt!),
+      dueDate: nextServiceDate(p.serviceStartsAt ?? p.activatedAt!),
       onPlan: true,
       tierName: tier?.name,
       hasCp12: (tier?.clauses ?? []).some((c) => c.code === "CP12"),
@@ -89,7 +90,13 @@ export async function queueServiceReminders(): Promise<number> {
   });
   let queued = 0;
   for (const plan of plans) {
-    const due = nextServiceDate(plan.activatedAt!);
+    // Retention spec §3 — service booking holds while a payment is
+    // outstanding (startPaymentRescue cancels anything already queued; the
+    // reminders come back once it clears).
+    if (paymentOutstanding(plan)) continue;
+    // §1 — benefits run from the service start date (the first cleared
+    // payment after cooling-off), not the sign-up date.
+    const due = nextServiceDate(plan.serviceStartsAt ?? plan.activatedAt!);
     const brand = brandName(plan.engineer);
     for (const offset of REMINDER_OFFSETS_DAYS) {
       const sendAfter = new Date(due);
@@ -97,7 +104,8 @@ export async function queueServiceReminders(): Promise<number> {
       sendAfter.setHours(10, 0, 0, 0);
       if (sendAfter <= now) continue;
       const cancelKey = `svc:${plan.id}:${offset}`;
-      const exists = await prisma.outboundSms.findFirst({ where: { cancelKey } });
+      // A reminder cancelled during a payment hold is queued again.
+      const exists = await prisma.outboundSms.findFirst({ where: { cancelKey, status: { not: "CANCELLED" } } });
       if (exists) continue;
       await sendSms({
         engineerId: plan.engineerId,

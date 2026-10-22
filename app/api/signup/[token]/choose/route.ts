@@ -9,7 +9,11 @@ import { snapshotTier } from "@/lib/plan-tier";
 import { appUrl } from "@/lib/app-url";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
-const Body = z.object({ tierId: z.string().min(1) });
+const Body = z.object({
+  tierId: z.string().min(1),
+  // Section 1 — monthly, or yearly at 12 months for the price of 11.
+  billingInterval: z.enum(["month", "year"]).default("month"),
+});
 
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
@@ -45,6 +49,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     data: {
       tierId: tier.id,
       priceMonthlyPence: tier.priceMonthlyPence,
+      billingInterval: parsed.data.billingInterval,
       // LAW (plan wording is locked) — freeze the tier as agreed; a later
       // edit to the live tier must not rewrite this customer's plan document.
       agreedTier: snapshotTier(tier) as unknown as Prisma.InputJsonValue,
@@ -55,6 +60,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     tierId: tier.id,
     name: tier.name,
     priceMonthlyPence: tier.priceMonthlyPence,
+    billingInterval: parsed.data.billingInterval,
     channel: "doorstep",
   });
 
@@ -65,6 +71,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     const sub = await createEmbeddedSubscription({
       engineerAccountId: plan.engineer.stripeAccountId,
       priceMonthlyPence: tier.priceMonthlyPence,
+      billingInterval: parsed.data.billingInterval,
       productName: `${brand} — ${tier.name} care plan`,
       customerName: `${plan.customer.firstName} ${plan.customer.lastName}`,
       customerEmail: plan.customer.email ?? undefined,
@@ -79,6 +86,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
         stripeSubscriptionId: sub.subscriptionId,
         stripeCustomerId: sub.customerId,
         mandateStatus: "pending",
+        // Provisional: confirmSignupMandate restarts it when the mandate lands.
+        coolingOffEndsAt: sub.trialEnd,
       },
     });
     await prisma.customer.update({
