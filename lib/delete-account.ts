@@ -2,6 +2,7 @@ import { del } from "@vercel/blob";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { cancelScheduledSms } from "@/lib/sms";
+import { offerNearbyEngineers } from "@/lib/installer-leaves";
 
 // Build Review 2, section 10 — "Delete my account inside the app" (App Store
 // rule 5.1.1). The Engineer row is anonymised rather than hard-deleted: plans,
@@ -54,8 +55,10 @@ export async function deleteOwnerAccount(engineerId: string): Promise<DeleteResu
   // "Live plans need handling first: the owner is told to end or hand over
   // plans." Customers are paying them by Direct Debit — that can't vanish
   // with the account.
+  // A plan already ended from the customer's page runs out its paid month
+  // (Retention spec §2) with no more collections, so it doesn't block.
   const livePlans = await prisma.plan.count({
-    where: { engineerId, status: { in: ["ACTIVE", "PAUSED"] } },
+    where: { engineerId, status: { in: ["ACTIVE", "PAUSED"] }, cancelRequestedAt: null },
   });
   if (livePlans > 0) {
     return {
@@ -75,6 +78,12 @@ export async function deleteOwnerAccount(engineerId: string): Promise<DeleteResu
     where: { engineerId, status: "PENDING" },
     data: { status: "CANCELLED", cancelledAt: new Date() },
   });
+
+  // Retention spec §9 — customers still running out a paid month are
+  // offered a nearby engineer before their details are scrubbed below.
+  await offerNearbyEngineers(engineerId).catch((err) =>
+    console.error("[delete-account] nearby-engineer offer failed:", err),
+  );
 
   // Customers: addresses deleted; names and numbers scrubbed. Plan and
   // payment records stay, attached to an anonymous customer.

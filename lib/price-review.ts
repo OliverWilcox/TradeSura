@@ -6,6 +6,8 @@ import { sendEmail } from "@/lib/email";
 import { sendSms } from "@/lib/sms";
 import { stripeConfigured, updateSubscriptionPrice } from "@/lib/stripe";
 import { TIER_PRICE_MIN_PENCE } from "@/lib/clauses";
+import { monthsBetween, valueSummary } from "@/lib/retention";
+import { planServiceUsed } from "@/lib/cancel-plan";
 
 // Build Review 2, ruling 3 — "Annual price review. At most once a year. The
 // customer gets 30 days' notice by text and email showing the old price, the
@@ -113,10 +115,18 @@ export async function sendPriceReview(opts: {
     const brand = brandName(plan.engineer);
     const manage = `${appUrl()}/portal/${plan.portalToken}`;
     const lines = `${pounds(c.oldPence)} to ${pounds(opts.newPence)} a month from ${longDate(effectiveAt)}`;
+    // Retention spec §9 — the notice also shows what they've had for their money.
+    const records = await prisma.serviceRecord.count({ where: { planId: plan.id, kind: "service" } });
+    // Older services were only stamped on the appliance.
+    const servicesDone = records || ((await planServiceUsed(plan)) ? 1 : 0);
+    const value = valueSummary({
+      monthsOnPlan: monthsBetween(plan.activatedAt ?? plan.createdAt, now),
+      servicesDone,
+    });
     await sendSms({
       engineerId: plan.engineerId,
       to: plan.customer.phone,
-      body: `Hi ${plan.customer.firstName} — ${brand}'s annual price review: your care plan changes from ${lines}. Nothing to do if you're happy. To cancel free of charge before then: ${manage}`,
+      body: `Hi ${plan.customer.firstName} — ${brand}'s annual price review: your care plan changes from ${lines}. ${value} Nothing to do if you're happy. To cancel free of charge before then: ${manage}`,
       messageClass: "TRANSACTIONAL",
       consentBasis: "plan-member-transactional",
     });
@@ -128,6 +138,7 @@ export async function sendPriceReview(opts: {
         html: `<p>Hi ${plan.customer.firstName},</p>
 <p>${brand} has reviewed their care plan prices. Your ${plan.tier?.name ?? ""} plan (${plan.ref}) will change:</p>
 <p><b>Old price:</b> ${pounds(c.oldPence)} a month<br><b>New price:</b> ${pounds(opts.newPence)} a month<br><b>Starts:</b> ${longDate(effectiveAt)}</p>
+<p>${value}</p>
 <p>What your plan includes stays the same. If you're happy, there's nothing to do — the new amount is collected by Direct Debit from that date.</p>
 <p>If you'd rather not continue, you can cancel free of charge at any time before then: <a href="${manage}">manage your plan</a>.</p>`,
       }).catch((err) => console.error("[price-review] notice email failed:", err));

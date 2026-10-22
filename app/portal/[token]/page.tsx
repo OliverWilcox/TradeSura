@@ -15,6 +15,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
       engineer: true,
       customer: { include: { properties: { include: { appliances: true } } } },
       tier: { include: { clauses: { include: { clause: true } } } },
+      passport: { select: { viewToken: true } },
     },
   });
   if (!plan) notFound();
@@ -48,12 +49,31 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
           </div>
           <div className="h-px bg-line-strong my-2.5" />
           <RowLine left="Direct Debit" right={<span className="text-ok font-semibold">Active</span>} />
+          {/* Retention spec §2 — a cancellation runs to the end of the paid month. */}
+          {plan.cancelRequestedAt && plan.cancelEffectiveAt && (
+            <RowLine
+              left="Plan ends"
+              right={plan.cancelEffectiveAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+            />
+          )}
           {nextService && (
             <RowLine
               left="Annual service"
               right={nextService.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
             />
           )}
+        </Card>
+      ) : plan.status === "PAUSED" ? (
+        // Retention spec §2 — pause = no collections, no benefits, restarts on its own.
+        <Card className="text-center py-5">
+          <p className="font-semibold">
+            {plan.pausedUntil
+              ? `Paused until ${plan.pausedUntil.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`
+              : "Your plan is paused"}
+          </p>
+          <p className="text-xs text-muted mt-1">
+            No payments are taken and plan benefits are on hold. It restarts on its own.
+          </p>
         </Card>
       ) : plan.status === "CANCELLED" ? (
         <Card className="text-center py-5">
@@ -97,13 +117,22 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
 
       {clauses.length > 0 && <NotIncluded />}
 
-      {plan.status === "ACTIVE" && (
+      {(plan.status === "ACTIVE" || plan.status === "PAUSED") && (
         <Card>
           <Link href={`/portal/${token}/report`} className="block">
             <RowLine left="Report a problem" right={<Pill tone="info">START</Pill>} />
           </Link>
           <Link href={`/portal/${token}/manage`} className="block">
             <RowLine left="Manage or cancel plan" right={<Pill tone="off">SETTINGS</Pill>} />
+          </Link>
+        </Card>
+      )}
+
+      {/* Section 4 — the home's service history, kept even after a plan ends. */}
+      {plan.passport && (
+        <Card>
+          <Link href={`/passport/${plan.passport.viewToken}`} className="block">
+            <RowLine left="Your Home Passport" right={<Pill tone="info">VIEW</Pill>} />
           </Link>
         </Card>
       )}
