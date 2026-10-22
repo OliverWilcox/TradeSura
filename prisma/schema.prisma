@@ -54,159 +54,181 @@ enum SmsStatus {
 }
 
 model Engineer {
-  id                String     @id @default(cuid())
-  email             String     @unique
-  slug              String     @unique
-  firstName         String?
-  lastName          String?
-  phone             String?    @unique // E.164, verified by SMS OTP at signup
-  emailVerifiedAt DateTime?
-  smsSignInEnabled Boolean @default(false)
-  phoneVerifiedAt   DateTime?
+  id                         String            @id @default(cuid())
+  email                      String            @unique
+  slug                       String            @unique
+  firstName                  String?
+  lastName                   String?
+  phone                      String?           @unique // E.164, verified by SMS OTP at signup
+  emailVerifiedAt            DateTime?
+  smsSignInEnabled           Boolean           @default(false)
+  phoneVerifiedAt            DateTime?
   // Sign in with Apple's stable user id (the identity token's `sub`), set
   // when the engineer signs up with "Continue with Apple" (30 Sept build
   // notes, step 1 item 5). Apple only sends name/email the first time, so
   // this is what recognises them on every later Apple sign-in.
-  appleSub          String?    @unique
-  tradingName       String?
-  logoUrl           String?
-  businessType      String? // sole_trader | ltd | partnership
-  companyNumber     String?
+  appleSub                   String?           @unique
+  tradingName                String?
+  logoUrl                    String?
+  businessType               String? // sole_trader | ltd | partnership
+  companyNumber              String?
   // Companies House company_status at signup (active, dissolved, liquidation…).
   // Flagged, never blocking, in the admin verification queue.
-  companyStatus     String?
-  postcode          String? // business postcode, not shown to customers
-  marketingConsent  Boolean    @default(false)
-  gasSafeNo                String?    @unique // review #13 — one licence, one account
-  gasSafeName              String?
-  gasSafeCompany           String?
-  gasSafeCategories        String?
-  gasSafeVerifiedAt        DateTime?
+  companyStatus              String?
+  postcode                   String? // business postcode, not shown to customers
+  marketingConsent           Boolean           @default(false)
+  gasSafeNo                  String?           @unique // review #13 — one licence, one account
+  gasSafeName                String?
+  gasSafeCompany             String?
+  gasSafeCategories          String?
+  gasSafeVerifiedAt          DateTime?
   // review #11 — set instead of gasSafeVerifiedAt when the number the
   // engineer entered didn't match our register on signup, so they can
   // continue (manual-review escape hatch) rather than being dead-ended.
-  gasSafeReviewRequestedAt DateTime?
+  gasSafeReviewRequestedAt   DateTime?
   // 29 Sept review — verification is a human decision, not a register
   // auto-match: signup submits the number + ID-card photo into the admin
   // queue (app/admin/verifications), which sets gasSafeVerifiedAt or
   // gasSafeRejectedAt. Card photo lives in Blob under an unguessable path.
-  gasSafeCardUrl           String?
-  gasSafeRejectedAt        DateTime?
-  gasSafeRejectReason      String?
+  gasSafeCardUrl             String?
+  gasSafeRejectedAt          DateTime?
+  gasSafeRejectReason        String?
   // Build Guide v2 Part 11 — push notifications. Set once the app has asked
   // permission (after the first plan goes live, per spec) and registered a
   // real device token via POST /api/me/push-token. Null means either the
   // engineer hasn't reached that point yet or denied permission — either
   // way, sendPushNotification (lib/push.ts) no-ops rather than erroring, so
   // nothing that fires a push needs to check this first.
-  expoPushToken          String?
-  stripeAccountId        String?  @unique // Connect Express account (acct_…)
-  stripeDetailsSubmitted Boolean  @default(false)
-  stripeChargesEnabled   Boolean  @default(false)
-  stripePayoutsEnabled   Boolean  @default(false)
+  expoPushToken              String?
+  stripeAccountId            String?           @unique // Connect Express account (acct_…)
+  stripeDetailsSubmitted     Boolean           @default(false)
+  stripeChargesEnabled       Boolean           @default(false)
+  stripePayoutsEnabled       Boolean           @default(false)
   // Build Guide v2 Part 6.4 — the standing-strip state machine's two states
   // with no trigger UI yet (no admin tool exists to set these; a human sets
   // them directly for now). The mechanism ships so the priority ladder
   // (banned > paused > ...) is real; ship-now, policy-later per Part 19.
-  pausedAt   DateTime?
-  pauseReason String?
-  bannedAt   DateTime?
-  banReason  String?
+  pausedAt                   DateTime?
+  pauseReason                String?
+  bannedAt                   DateTime?
+  banReason                  String?
   // How the engineer arrived: { heardVia, referralCode?, letterBatch?, variantCell? }
-  attribution      Json?
-  packAddress      String? // founding-member pack postal address
-  packRequestedAt  DateTime?
+  attribution                Json?
+  packAddress                String? // founding-member pack postal address
+  packRequestedAt            DateTime?
   // Part 17.4 — the pack queues on request but only ships once the badge is
   // live; set from the admin queue's "Packs to post" list when it's posted.
-  packShippedAt     DateTime?
+  packShippedAt              DateTime?
   // 2026 Build Guide getting-started steps. Public profile at
   // tradesura.com/{slug}: indexable by search engines once published.
-  profileBio         String?
-  serviceArea        String?
-  profilePublishedAt DateTime?
+  profileBio                 String?
+  serviceArea                String?
+  profilePublishedAt         DateTime?
   // Set the first time the website embed loads on a site that isn't ours.
-  websiteConnectedAt DateTime?
-  websiteHost        String?
+  websiteConnectedAt         DateTime?
+  websiteHost                String?
   // First time the engineer shared their invite link from the app.
-  inviteSharedAt     DateTime?
+  inviteSharedAt             DateTime?
   // Build Review 3. Legal name from Companies House (Ltd/partnership) — a
   // blank trading name falls back to it, and customer pages say "X is a
   // trading name of Y" when they differ.
-  legalName          String?
+  legalName                  String?
   // "Are you the only owner of the company?" — yes sends the representative
   // to Stripe as owner and director, so those steps disappear.
-  soleOwner          Boolean?
+  soleOwner                  Boolean?
   // R5 — prices are shown "including VAT" on customer pages when set.
-  vatRegistered      Boolean    @default(false)
+  vatRegistered              Boolean           @default(false)
   // R12 — { CLAUSE_CODE: ISO date } for options needing a qualification the
   // engineer confirmed they hold. Shown in the admin verification queue.
   qualificationConfirmations Json?
+  // Retention, Home Passport & Growth spec (15 Oct). Public profile at
+  // tradesura.com/gas-engineers/{townSlug}/{slug}.
+  town                       String?
+  townSlug                   String?
+  profilePhotos              String[]          @default([])
+  showCallButton             Boolean           @default(true)
+  showMessageButton          Boolean           @default(true)
+  enquiryPhone               String? // the number the profile's Call button rings (E.164)
+  widgetDisabledAt           DateTime? // admin switch-off for the website widget
+  leftAt                     DateTime? // installer exited TradeSura — customers offered a nearby engineer
+  enquiries                  Enquiry[]
+  ratings                    Rating[]
+  serviceRecords             ServiceRecord[]
+  stickers                   Sticker[]         @relation("StickerAllocated")
   // E10 — who brought this engineer in, and whether their £50 bounty is paid.
-  referrerId           String?
-  referrer             Engineer?  @relation("Referrals", fields: [referrerId], references: [id])
-  referrals            Engineer[] @relation("Referrals")
-  referralBountyPaidAt DateTime? // retired flat-£50 scheme; kept for history
+  referrerId                 String?
+  referrer                   Engineer?         @relation("Referrals", fields: [referrerId], references: [id])
+  referrals                  Engineer[]        @relation("Referrals")
+  referralBountyPaidAt       DateTime? // retired flat-£50 scheme; kept for history
   // Build Review 2, section 8 — team accounts. A staff engineer is an Engineer
   // row with ownerId set to the business owner. Staff sign in to their own
   // account but act inside the owner's business: customers, plans and money
   // stay on the owner's row. Removing staff sets staffRemovedAt; access stops
   // on the next request (lib/auth.ts getActor).
-  ownerId              String?
-  owner                Engineer?  @relation("Team", fields: [ownerId], references: [id])
-  staff                Engineer[] @relation("Team")
-  staffRemovedAt       DateTime?
-  customersAdded       Customer[] @relation("CustomerAddedBy")
-  plansSold            Plan[]     @relation("PlanSoldBy")
-  deletedAt            DateTime? // in-app account deletion (App Store 5.1.1); row anonymised
-  referralEarnings     ReferralEarning[] @relation("ReferralEarnings")
-  referredEarnings     ReferralEarning[] @relation("ReferredEarnings")
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-  customers         Customer[]
-  tiers             PlanTier[]
-  plans             Plan[]
+  ownerId                    String?
+  owner                      Engineer?         @relation("Team", fields: [ownerId], references: [id])
+  staff                      Engineer[]        @relation("Team")
+  staffRemovedAt             DateTime?
+  customersAdded             Customer[]        @relation("CustomerAddedBy")
+  plansSold                  Plan[]            @relation("PlanSoldBy")
+  deletedAt                  DateTime? // in-app account deletion (App Store 5.1.1); row anonymised
+  referralEarnings           ReferralEarning[] @relation("ReferralEarnings")
+  referredEarnings           ReferralEarning[] @relation("ReferredEarnings")
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+  customers                  Customer[]
+  tiers                      PlanTier[]
+  plans                      Plan[]
 }
 
 model Customer {
-  id           String     @id @default(cuid())
-  engineerId   String
-  engineer     Engineer   @relation(fields: [engineerId], references: [id])
-  firstName    String
-  lastName     String
-  phone        String // normalised E.164
-  email        String?
-  smsOptOut    Boolean    @default(false)
+  id               String     @id @default(cuid())
+  engineerId       String
+  engineer         Engineer   @relation(fields: [engineerId], references: [id])
+  firstName        String
+  lastName         String
+  phone            String // normalised E.164
+  email            String?
+  smsOptOut        Boolean    @default(false)
   stripeCustomerId String?
-  source       String     @default("added") // added | doorstep | web | import | contacts
+  source           String     @default("added") // added | doorstep | web | import | contacts
   // Section 8 — the staff engineer who added them (null = the owner).
-  addedById    String?
-  addedBy      Engineer?  @relation("CustomerAddedBy", fields: [addedById], references: [id])
-  createdAt    DateTime   @default(now())
-  properties   Property[]
-  plans        Plan[]
+  addedById        String?
+  addedBy          Engineer?  @relation("CustomerAddedBy", fields: [addedById], references: [id])
+  createdAt        DateTime   @default(now())
+  properties       Property[]
+  plans            Plan[]
 
   @@unique([engineerId, phone])
 }
 
 model Property {
-  id           String      @id @default(cuid())
+  id           String        @id @default(cuid())
   customerId   String
-  customer     Customer    @relation(fields: [customerId], references: [id])
+  customer     Customer      @relation(fields: [customerId], references: [id])
   addressLine1 String
   addressLine2 String?
   town         String?
   postcode     String
   appliances   Appliance[]
+  // Section 4 — the home's passport (shared by every plan at this address).
+  passportId   String?
+  passport     HomePassport? @relation(fields: [passportId], references: [id])
 }
 
 model Appliance {
-  id             String    @id @default(cuid())
+  id             String          @id @default(cuid())
   propertyId     String
-  property       Property  @relation(fields: [propertyId], references: [id])
+  property       Property        @relation(fields: [propertyId], references: [id])
   make           String?
   model          String?
   type           String?
   lastServicedAt DateTime?
+  installedAt    DateTime?
+  photoUrls      String[]        @default([])
+  passportId     String?
+  passport       HomePassport?   @relation(fields: [passportId], references: [id])
+  records        ServiceRecord[]
 }
 
 // Solicitor-approved wording. Seeded; read-only in the app.
@@ -230,24 +252,24 @@ model ClauseTemplate {
 }
 
 model PlanTier {
-  id                String       @id @default(cuid())
-  engineerId        String
-  engineer          Engineer     @relation(fields: [engineerId], references: [id])
-  name              String
-  priceMonthlyPence Int
-  isRecommended     Boolean      @default(false)
-  sortOrder         Int
-  status            PlanTierStatus @default(DRAFT)
+  id                 String         @id @default(cuid())
+  engineerId         String
+  engineer           Engineer       @relation(fields: [engineerId], references: [id])
+  name               String
+  priceMonthlyPence  Int
+  isRecommended      Boolean        @default(false)
+  sortOrder          Int
+  status             PlanTierStatus @default(DRAFT)
   // Display-only extras; blocklist-checked; never enter the plan document.
-  customLabels      String[]     @default([])
+  customLabels       String[]       @default([])
   // Builder Step 4: "I'll provide everything in this plan to every customer
   // on it" — ticked before the plan could go live.
   providerAttestedAt DateTime?
   // R6 — the engineer's rate for "you set the rate" options, { CODE: "10%" }.
   // Required before the plan can go live; shown on the customer's plan page.
-  clauseRates       Json?
-  clauses           TierClause[]
-  plans             Plan[]
+  clauseRates        Json?
+  clauses            TierClause[]
+  plans              Plan[]
 }
 
 model TierClause {
@@ -260,43 +282,62 @@ model TierClause {
 }
 
 model Plan {
-  id                     String     @id @default(cuid())
-  ref                    String     @unique
-  engineerId             String
-  engineer               Engineer   @relation(fields: [engineerId], references: [id])
-  customerId             String
-  customer               Customer   @relation(fields: [customerId], references: [id])
-  tierId                 String?
-  tier                   PlanTier?  @relation(fields: [tierId], references: [id])
-  status                 PlanStatus @default(PENDING)
-  priceMonthlyPence      Int?
-  signupToken            String     @unique
-  portalToken            String     @unique
-  linkOpenedAt           DateTime?
+  id                      String          @id @default(cuid())
+  ref                     String          @unique
+  engineerId              String
+  engineer                Engineer        @relation(fields: [engineerId], references: [id])
+  customerId              String
+  customer                Customer        @relation(fields: [customerId], references: [id])
+  tierId                  String?
+  tier                    PlanTier?       @relation(fields: [tierId], references: [id])
+  status                  PlanStatus      @default(PENDING)
+  priceMonthlyPence       Int?
+  signupToken             String          @unique
+  portalToken             String          @unique
+  linkOpenedAt            DateTime?
   stripeCheckoutSessionId String?
   stripeSubscriptionId    String?
   stripeCustomerId        String?
   mandateStatus           String? // pending | active | inactive
-  coolingOffEndsAt       DateTime?
-  activatedAt            DateTime?
-  cancelledAt            DateTime?
-  paymentFailedAt        DateTime? // S2 — set on invoice.payment_failed, cleared on recovery
-  termsVersion           String? // review #18 — which CURRENT_TERMS_VERSION (lib/terms.ts) they agreed to
-  termsAgreedAt          DateTime?
+  coolingOffEndsAt        DateTime?
+  activatedAt             DateTime?
+  cancelledAt             DateTime?
+  paymentFailedAt         DateTime? // S2 — set on invoice.payment_failed, cleared on recovery
+  termsVersion            String? // review #18 — which CURRENT_TERMS_VERSION (lib/terms.ts) they agreed to
+  termsAgreedAt           DateTime?
   // R9 — a Landlord plan: the customer confirmed at checkout the property is let.
-  propertyLetConfirmedAt DateTime?
+  propertyLetConfirmedAt  DateTime?
+  // Section 1 — "month" | "year" (12 months for the price of 11).
+  billingInterval         String          @default("month")
+  // First collection and all benefits wait for cooling-off; the service
+  // start date is the first cleared payment after it.
+  serviceStartsAt         DateTime?
+  paymentsCleared         Int             @default(0) // the annual service unlocks at 3
+  // Section 2 — cancellation at the end of the paid month; pause = no
+  // collections, no benefits, restarts automatically.
+  cancelRequestedAt       DateTime?
+  cancelEffectiveAt       DateTime?
+  pausedUntil             DateTime?
+  rejoinToken             String?         @unique
+  // Section 3 — failed payment rescue.
+  rescueCode              String?         @unique // tradesura.com/u/{code}
+  paymentRecoveredAt      DateTime?
+  passportId              String?
+  passport                HomePassport?   @relation(fields: [passportId], references: [id])
+  cancellations           CancelRequest[]
+  ratings                 Rating[]
   // LAW (plan wording is locked) — the tier as the customer agreed it,
   // snapshotted at tier-selection. Reads of the agreed contract (plan
   // document, portal "what's included", CP12 reminder logic) resolve through
   // lib/plan-tier.ts and prefer this, so editing the live tier never rewrites
   // an existing agreement. Null for plans created before this column.
-  agreedTier             Json?
-  priceReviews           PriceReview[]
+  agreedTier              Json?
+  priceReviews            PriceReview[]
   // Section 8 — staff engineer who made the sale ("signed up by"); null = owner.
-  soldById               String?
-  soldBy                 Engineer?  @relation("PlanSoldBy", fields: [soldById], references: [id])
-  createdAt              DateTime   @default(now())
-  updatedAt              DateTime   @updatedAt
+  soldById                String?
+  soldBy                  Engineer?       @relation("PlanSoldBy", fields: [soldById], references: [id])
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
 }
 
 // Signup phone codes (30 Sept build notes, step 1 item 15): a code works
@@ -384,15 +425,15 @@ model Suppression {
 // Letter-campaign claim codes (C5). One row per letter recipient; the split
 // test's variant cell is the attribution that must survive to the account.
 model ClaimCode {
-  code                String    @id // e.g. TS-48217 (normalised: upper, no spaces)
-  firstName           String
-  businessName        String
-  letterBatch         String
-  variantCell         String // A | B | C | D
-  suppressedAt        DateTime? // opted out — resolve to the generic path
-  redeemedByEngineerId String?  @unique
-  redeemedAt          DateTime?
-  createdAt           DateTime  @default(now())
+  code                 String    @id // e.g. TS-48217 (normalised: upper, no spaces)
+  firstName            String
+  businessName         String
+  letterBatch          String
+  variantCell          String // A | B | C | D
+  suppressedAt         DateTime? // opted out — resolve to the generic path
+  redeemedByEngineerId String?   @unique
+  redeemedAt           DateTime?
+  createdAt            DateTime  @default(now())
 }
 
 // Stripe webhook idempotency guard.
@@ -440,4 +481,146 @@ model PriceReview {
 
   @@index([planId])
   @@index([effectiveAt])
+}
+
+// ---------------------------------------------------------------------------
+// Retention, Home Passport & Growth (Matt Wood, 15 Oct 2026)
+// ---------------------------------------------------------------------------
+
+// Section 2 — every cancel attempt, its reason, the offer shown and how it
+// ended. Feeds the installer and admin dashboards.
+model CancelRequest {
+  id              String    @id @default(cuid())
+  planId          String
+  plan            Plan      @relation(fields: [planId], references: [id])
+  engineerId      String
+  // too_expensive | moving | not_using | unhappy | other
+  reason          String
+  detail          String?
+  offer           String? // cheaper_plan | move_plan | show_value | pause
+  // pending | saved | paused | downgraded | cancelled
+  outcome         String    @default("pending")
+  source          String    @default("customer") // customer | engineer_logged
+  // Moving house: date, and consent to pass the passport to the next owner.
+  moveDate        DateTime?
+  passportConsent Boolean?
+  createdAt       DateTime  @default(now())
+  resolvedAt      DateTime?
+
+  @@index([engineerId, createdAt])
+}
+
+// Section 4 — one passport per address; belongs to the home, not the person.
+model HomePassport {
+  id               String          @id @default(cuid())
+  // Normalised postcode + first address line — how a second plan at the
+  // same address finds the same passport.
+  addressKey       String          @unique
+  uprn             String?
+  addressLine1     String
+  town             String?
+  postcode         String
+  // Homeowner's private link to view/download the whole history.
+  viewToken        String          @unique
+  // Consent to be contacted about leads from the passport (privacy notice).
+  contactConsentAt DateTime?
+  createdAt        DateTime        @default(now())
+  properties       Property[]
+  appliances       Appliance[]
+  records          ServiceRecord[]
+  plans            Plan[]
+  stickers         Sticker[]
+}
+
+// A dated entry on a passport: a service, certificate, install or note.
+// Engineers see only their own; the homeowner sees everything.
+model ServiceRecord {
+  id          String       @id @default(cuid())
+  passportId  String
+  passport    HomePassport @relation(fields: [passportId], references: [id])
+  applianceId String?
+  appliance   Appliance?   @relation(fields: [applianceId], references: [id])
+  engineerId  String
+  engineer    Engineer     @relation(fields: [engineerId], references: [id])
+  planId      String?
+  kind        String // service | certificate | install | note
+  doneAt      DateTime
+  notes       String?
+  photoUrls   String[]     @default([])
+  nextDueAt   DateTime?
+  createdAt   DateTime     @default(now())
+  rating      Rating?
+
+  @@index([passportId, doneAt])
+}
+
+// Pre-printed boiler stickers: unique code, no address. Allocated to an
+// engineer in the member pack; linked to a passport at the job.
+model Sticker {
+  code       String        @id // e.g. HX4K-7Q
+  engineerId String?
+  engineer   Engineer?     @relation("StickerAllocated", fields: [engineerId], references: [id])
+  passportId String?
+  passport   HomePassport? @relation(fields: [passportId], references: [id])
+  linkedAt   DateTime?
+  scans      Int           @default(0)
+  createdAt  DateTime      @default(now())
+}
+
+// Section 5 — one rating per logged service, plan holders only. Never
+// filtered; removed only for clear abuse with a logged reason.
+model Rating {
+  id              String        @id @default(cuid())
+  engineerId      String
+  engineer        Engineer      @relation(fields: [engineerId], references: [id])
+  planId          String
+  plan            Plan          @relation(fields: [planId], references: [id])
+  serviceRecordId String        @unique
+  serviceRecord   ServiceRecord @relation(fields: [serviceRecordId], references: [id])
+  requestToken    String        @unique
+  stars           Int?
+  comment         String?
+  customerName    String? // first name + initial, shown publicly
+  ratedAt         DateTime?
+  reply           String?
+  repliedAt       DateTime?
+  removedAt       DateTime?
+  removedReason   String?
+  createdAt       DateTime      @default(now())
+
+  @@index([engineerId, ratedAt])
+}
+
+// Section 6 — Call taps and Message forms from public profiles.
+model Enquiry {
+  id         String   @id @default(cuid())
+  engineerId String
+  engineer   Engineer @relation(fields: [engineerId], references: [id])
+  kind       String // call | message
+  name       String?
+  phone      String?
+  email      String?
+  message    String?
+  source     String? // profile | town | widget
+  createdAt  DateTime @default(now())
+
+  @@index([engineerId, createdAt])
+}
+
+// Section 6 — a town page publishes only once it has real engineers; admin
+// can hold one back.
+model TownPage {
+  slug        String    @id // huddersfield
+  name        String
+  heldAt      DateTime?
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+// Section 10 — admin-set numbers (e.g. "New to TradeSura" rating count,
+// cancel-rate flag threshold, sticker low-stock level).
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }

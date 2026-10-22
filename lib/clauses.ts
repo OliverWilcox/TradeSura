@@ -457,6 +457,18 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
 
   // ---------- CARE: hidden until solicitor sign-off ----------
   {
+    // Retention spec §1 — loyalty perk option. Wording from James pending.
+    code: "LOYALTY_REPAIRS_DISCOUNT",
+    title: "10% off repairs, rising to 15% after 12 months",
+    kind: "ADD",
+    status: "CARE",
+    category: CAT_CARE,
+    upliftPence: null,
+    pricingLabel: "awaiting legal sign-off",
+    bodyText:
+      "A 10% discount applies to our standard labour rates for repair work, rising to 15% once you have been a plan member for 12 months. Parts and labour remain chargeable at the discounted rates.",
+  },
+  {
     code: "CARE_FIRST_HOUR_LABOUR",
     title: "First hour of labour at no charge",
     kind: "ADD",
