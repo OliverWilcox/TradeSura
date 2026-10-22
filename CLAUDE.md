@@ -30,6 +30,15 @@ rounded DOWN to the penny, so the engineer keeps exactly 80%. Same-day
 priority and warranty claim admin are hidden (CARE) until James approves the
 wording. Stripe stays hosted onboarding, pre-filled; embedded onboarding waits
 for the Stripe technical review. Offers need the Gas Safe check AND payments.
+[DECISION 2026-10-23, human] **Retention, Home Passport & Growth** spec
+(`app/assets/guide-new/TradeSura_Build_Spec_Retention_Passport_Growth.pdf`,
+Matt, 15 Oct) is in scope in full — this lifts the earlier "cancel/save flow"
+and "campaigns" stubs for the parts it covers. Yearly payment = 12 months for
+the price of 11 (pro rata refund on cancel). Stickers link by camera scan with
+typing as backup. Profiles live at tradesura.com/gas-engineers/{town}/{name}
+(old /{name} redirects; /p/{name} stays the plan link). Loyalty perk ships
+hidden until James approves its wording; "New to TradeSura" until 3 ratings
+(admin setting).
 
 Care-plan platform for UK gas engineers. Engineers build tiered maintenance plans,
 sell them on the doorstep via a link/QR, customers pay by Direct Debit (Stripe
