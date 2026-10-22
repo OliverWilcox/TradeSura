@@ -12,6 +12,9 @@ import {
   setToken,
 } from "./api";
 
+// Mirrors ../lib/stripe.ts stripeSetupState.
+export type StripeState = "none" | "half" | "needs_more" | "checking" | "ready";
+
 export type Me = {
   // Build Review 2, section 8 — staff get a cut-down app inside their
   // owner's business; money and settings fields are absent for them.
@@ -27,6 +30,11 @@ export type Me = {
   phoneVerifiedAt: string | null;
   businessType: string | null;
   companyNumber: string | null;
+  // Build Review 3 — Companies House name, "only owner?" answer, and R5's
+  // VAT setting. Owner-only; absent for staff.
+  legalName?: string | null;
+  soleOwner?: boolean | null;
+  vatRegistered?: boolean;
   postcode: string | null;
   tradingName: string | null;
   logoUrl: string | null;
@@ -41,6 +49,8 @@ export type Me = {
   stripeConnected: boolean;
   stripeDetailsSubmitted: boolean;
   stripePayoutsEnabled: boolean;
+  // Build Review 3 — payment setup progress (owners only; absent for staff).
+  stripeState?: StripeState;
   hasPlan: boolean;
   customerCount: number;
   activePlans: number;
@@ -50,6 +60,7 @@ export type Me = {
   inviteSharedAt: string | null;
   referralCount: number;
   firstPlan: { name: string; priceMonthlyPence: number } | null;
+  draftPlan?: { id: string; name: string } | null;
 };
 
 type AuthState = {
@@ -60,7 +71,8 @@ type AuthState = {
   meError: string | null;
   stripeSkipped: boolean;
   skipStripe: () => Promise<void>;
-  refreshMe: () => Promise<void>;
+  // Resolves with the fresh profile (null if it failed to load).
+  refreshMe: () => Promise<Me | null>;
   signIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -82,15 +94,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getStripeSkipped().then(setStripeSkippedState);
   }, []);
 
-  const refreshMe = useCallback(async () => {
+  const refreshMe = useCallback(async (): Promise<Me | null> => {
     setMeLoading(true);
     setMeError(null);
     try {
       const data = await api<Me>("/api/me");
       setMe(data);
+      return data;
     } catch {
       setMe(null);
       setMeError("Couldn't load your profile.");
+      return null;
     } finally {
       setMeLoading(false);
     }

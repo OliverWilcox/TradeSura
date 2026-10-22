@@ -65,8 +65,8 @@ export async function activatePlan(
   // referral check, and Stripe's retry returns early on ACTIVE.
   if (plan.customer.email) {
     try {
-      const { subject, html } = await planDocumentEmailHtml(plan.id);
-      await sendEmail({ to: plan.customer.email, subject, html });
+      const { subject, html, replyTo } = await planDocumentEmailHtml(plan.id);
+      await sendEmail({ to: plan.customer.email, subject, html, replyTo });
     } catch (err) {
       console.error("[activate] plan document email failed:", err);
     }

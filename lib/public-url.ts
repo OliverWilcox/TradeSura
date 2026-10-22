@@ -12,6 +12,17 @@ export function profileDisplay(slug: string): string {
   return profileUrl(slug).replace(/^https?:\/\/(www\.)?/, "");
 }
 
+// Review 3 — the plan link the engineer shares reads tradesura.com/p/{slug}
+// (the plans page); tradesura.com/{slug} is their profile. Both render the
+// same engineer page.
+export function planLinkUrl(slug: string): string {
+  return `${appUrl()}/p/${slug}`;
+}
+
+export function planLinkDisplay(slug: string): string {
+  return planLinkUrl(slug).replace(/^https?:\/\/(www\.)?/, "");
+}
+
 // What the engineer (or whoever runs their website) pastes to show their
 // plans there — see public/embed.js.
 export function embedSnippet(slug: string): string {

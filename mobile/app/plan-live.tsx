@@ -21,6 +21,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icon";
 import { RingMark } from "@/components/ring-mark";
+import { offerLock } from "@/lib/offer-lock";
 
 // 2026 Build Guide TARGET_plan_live — the celebration after "Make this plan
 // live": the ring, a moment of confetti, what each customer is worth, the
@@ -126,9 +127,12 @@ export default function PlanLive() {
   );
 
   const price = Number(pricePence) || 0;
-  const yearly = Math.round(((price - Math.round(price * FEE_RATE)) * 12) / 100);
+  const yearly = Math.round(((price - Math.floor(price * FEE_RATE)) * 12) / 100);
   const brand = me?.tradingName?.trim() || "you";
-  const display = link?.display ?? (me?.slug ? `tradesura.com/${me.slug}` : "your plan link");
+  const display = link?.display ?? (me?.slug ? `tradesura.com/p/${me.slug}` : "your plan link");
+  // Review 3 — offers (and sharing the plan link) wait for the Gas Safe check
+  // and payments; until then the money strip becomes an amber bar.
+  const lock = offerLock(me ? { ...me, hasPlan: true } : me);
   const shareText = `Here are my care plans — pick one and pay monthly by Direct Debit: ${link?.url ?? ""}`;
 
   const [copied, setCopied] = useState(false);
@@ -160,12 +164,26 @@ export default function PlanLive() {
             Nice one, {brand}. Customers can join from today.
           </Text>
 
-          {price > 0 && (
-            <View className="mt-5 items-center rounded-2xl border border-line-strong px-4 py-3.5">
-              <Text className="text-center text-[16px] font-semibold text-ok">
-                Every customer on this plan = £{yearly} a year to you
-              </Text>
-            </View>
+          {lock ? (
+            <Pressable
+              onPress={() => router.push(lock.href)}
+              className="mt-5 flex-row items-center gap-2.5 rounded-2xl border border-warn/50 bg-warn-tint px-4 py-3.5"
+            >
+              <Icon name="warning" size={17} color="#F5B544" />
+              <View className="flex-1">
+                <Text className="text-[15px] font-semibold text-warn">Set up payments to start taking customers</Text>
+                <Text className="mt-0.5 text-[13px] text-warn">{lock.reason}</Text>
+              </View>
+              <Icon name="chevron" size={14} color="#F5B544" weight="semibold" />
+            </Pressable>
+          ) : (
+            price > 0 && (
+              <View className="mt-5 items-center rounded-2xl border border-line-strong px-4 py-3.5">
+                <Text className="text-center text-[16px] font-semibold text-ok">
+                  Every customer on this plan = £{yearly} a year to you
+                </Text>
+              </View>
+            )
           )}
 
           <View className="mt-3 rounded-2xl border border-line-strong p-4">
@@ -182,8 +200,8 @@ export default function PlanLive() {
                 <Pressable
                   key={b.label}
                   onPress={b.onPress}
-                  disabled={!link}
-                  className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-line-strong py-3 ${link ? "" : "opacity-50"}`}
+                  disabled={!link || Boolean(lock)}
+                  className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-line-strong py-3 ${link && !lock ? "" : "opacity-50"}`}
                 >
                   <Icon name={b.icon} size={17} />
                   <Text className="text-[14px] text-ink">{b.label}</Text>
@@ -195,12 +213,6 @@ export default function PlanLive() {
           <View className="mt-3 rounded-2xl border border-line-strong px-4 pt-3">
             <Text className="text-[13px] font-bold uppercase tracking-[0.1em] text-flame">What&apos;s next</Text>
             <NextRow
-              icon="addCustomer"
-              title="Offer it to a customer"
-              sub="Show your plans on your phone or send a link"
-              onPress={() => router.replace("/offer")}
-            />
-            <NextRow
               icon="search"
               title="Get found on Google"
               sub="Your free profile page"
@@ -211,12 +223,30 @@ export default function PlanLive() {
               title="Add your plans to your website"
               sub="Sell plans there too"
               onPress={() => router.push("/website")}
+            />
+            <NextRow
+              icon="customers"
+              title="Invite engineers you know"
+              sub="Earn 25% of our fee on their plans"
+              onPress={() => router.push("/referral")}
               last
             />
           </View>
 
           <View className="mt-4 gap-2.5">
-            <Button onPress={() => router.replace("/offer")}>Offer it to a customer now</Button>
+            {lock ? (
+              <>
+                <View className="rounded-2xl border border-warn/50 bg-warn-tint px-4 py-3">
+                  <Text className="text-center text-[14px] text-warn">{lock.reason}</Text>
+                </View>
+                <Button onPress={() => router.push(lock.href)}>{lock.cta}</Button>
+                <Button variant="ghost" onPress={() => router.push("/demo")}>
+                  Try it in demo mode
+                </Button>
+              </>
+            ) : (
+              <Button onPress={() => router.replace("/offer")}>Offer it to a customer now</Button>
+            )}
             <Button variant="ghost" onPress={() => router.replace("/plan-wizard")}>
               Add another plan
             </Button>

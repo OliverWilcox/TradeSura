@@ -141,7 +141,7 @@ export default function ImportContacts() {
             }`}
           >
             <Text className="font-sans text-sm text-ink">{item.name}</Text>
-            <Text className="font-mono text-xs text-muted">{item.phone}</Text>
+            <Text className="tabular-nums text-xs text-muted">{item.phone}</Text>
           </Pressable>
         )}
       />

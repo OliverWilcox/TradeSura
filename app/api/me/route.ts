@@ -3,7 +3,12 @@ import { prisma } from "@/lib/db";
 import { getActor } from "@/lib/auth";
 import { brandName } from "@/lib/engineer";
 import { deleteOwnerAccount, deleteStaffAccount } from "@/lib/delete-account";
-import { getConnectAccountStatus, stripeConfigured } from "@/lib/stripe";
+import {
+  getConnectAccountStatus,
+  stripeConfigured,
+  stripeSetupState,
+  type ConnectAccountStatus,
+} from "@/lib/stripe";
 
 // Engineer profile — used by the mobile app to gate onboarding vs. the tab
 // shell, and to pre-fill the onboarding form. When a Stripe account exists
@@ -18,6 +23,7 @@ export async function GET() {
   let engineer = await prisma.engineer.findUnique({ where: { id: engineerId } });
   if (!engineer) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
+  let liveStripe: ConnectAccountStatus | null = null;
   if (
     stripeConfigured() &&
     engineer.stripeAccountId &&
@@ -25,6 +31,7 @@ export async function GET() {
   ) {
     try {
       const s = await getConnectAccountStatus(engineer.stripeAccountId);
+      liveStripe = s;
       if (
         s.detailsSubmitted !== engineer.stripeDetailsSubmitted ||
         s.chargesEnabled !== engineer.stripeChargesEnabled ||
@@ -61,6 +68,12 @@ export async function GET() {
     orderBy: { sortOrder: "asc" },
     select: { name: true, priceMonthlyPence: true },
   });
+  // Review 3 — an unfinished wizard draft resumes from Home ("Finish your plan").
+  const draftPlan = await prisma.planTier.findFirst({
+    where: { engineerId, status: "DRAFT" },
+    orderBy: { sortOrder: "desc" },
+    select: { id: true, name: true },
+  });
 
   return NextResponse.json({
     role: "owner",
@@ -72,6 +85,9 @@ export async function GET() {
     phoneVerifiedAt: engineer.phoneVerifiedAt,
     businessType: engineer.businessType,
     companyNumber: engineer.companyNumber,
+    legalName: engineer.legalName,
+    soleOwner: engineer.soleOwner,
+    vatRegistered: engineer.vatRegistered,
     postcode: engineer.postcode,
     tradingName: engineer.tradingName,
     logoUrl: engineer.logoUrl,
@@ -86,6 +102,9 @@ export async function GET() {
     stripeConnected: engineer.stripeChargesEnabled,
     stripeDetailsSubmitted: engineer.stripeDetailsSubmitted,
     stripePayoutsEnabled: engineer.stripePayoutsEnabled,
+    // Build Review 3 — "none" | "half" | "needs_more" | "checking" | "ready"
+    // (lib/stripe.ts stripeSetupState) for the hub and Home payment cards.
+    stripeState: stripeSetupState(engineer, liveStripe),
     hasPlan: liveTierCount > 0,
     anyTierCount,
     customerCount,
@@ -97,6 +116,7 @@ export async function GET() {
     inviteSharedAt: engineer.inviteSharedAt,
     referralCount,
     firstPlan,
+    draftPlan,
   });
 }
 

@@ -93,6 +93,7 @@ type FieldKey =
   | "gasSafeCard"
   | "tradingName"
   | "companyNumber"
+  | "soleOwner"
   | "postcode";
 
 // Which step owns each field — a server-side rejection jumps back to it.
@@ -105,6 +106,7 @@ const FIELD_STEP: Record<FieldKey, 1 | 2 | 3> = {
   gasSafeCard: 2,
   tradingName: 3,
   companyNumber: 3,
+  soleOwner: 3,
   postcode: 3,
 };
 
@@ -124,6 +126,7 @@ type Draft = {
   businessType: BusinessType;
   companyNumber: string;
   company: Company | null;
+  soleOwner?: boolean | null;
   postcode: string;
   addressLine1?: string;
   town?: string;
@@ -233,23 +236,30 @@ function SlideIn({ children }: { children: ReactNode }) {
 // 'Building your account, {first name}'. Plays once ever, straight after
 // Step 3." Then the setup wizard (build your first plan) — never the bare
 // dashboard (29 Sept review, systemic defect 3; re-checked 30 Sept).
+// Build Review 3, P2 — "Loading screen too quick": the spinning logo stays
+// at least 4 seconds, worded "Building your free TradeSura account, {name}".
+const BUILDING_MIN_MS = 4000;
+const BUILDING_SPINS = 3;
 function BuildingAccount({ firstName }: { firstName: string }) {
   const [spin] = useState(() => new Animated.Value(0));
   const [dock] = useState(() => new Animated.Value(0));
   useEffect(() => {
     Animated.sequence([
       Animated.timing(spin, {
-        toValue: 1,
-        duration: 1300,
+        toValue: BUILDING_SPINS,
+        duration: BUILDING_MIN_MS - 500,
         easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.spring(dock, { toValue: 1, useNativeDriver: true }),
     ]).start();
-    const t = setTimeout(() => router.replace("/onboarding"), 2000);
+    const t = setTimeout(() => router.replace("/onboarding"), BUILDING_MIN_MS);
     return () => clearTimeout(t);
   }, [spin, dock]);
-  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "720deg"] });
+  const rotate = spin.interpolate({
+    inputRange: [0, BUILDING_SPINS],
+    outputRange: ["0deg", `${BUILDING_SPINS * 360}deg`],
+  });
   const scale = dock.interpolate({ inputRange: [0, 1], outputRange: [1, 0.82] });
   return (
     <View className="flex-1 items-center justify-center bg-night px-8">
@@ -257,7 +267,7 @@ function BuildingAccount({ firstName }: { firstName: string }) {
         <RingMark size={96} />
       </Animated.View>
       <Text className="mt-8 text-center text-[20px] font-bold text-white">
-        Building your account{firstName ? `, ${firstName}` : ""}
+        Building your free TradeSura account{firstName ? `, ${firstName}` : ""}
       </Text>
     </View>
   );
@@ -377,6 +387,9 @@ export default function SignUp() {
   // Limited companies start on the registered office, with "Use a different
   // address" to switch to the lookup.
   const [usingOffice, setUsingOffice] = useState(false);
+  // Build Review 3, section 7 — "Are you the only owner of the company?"
+  // (limited companies only); yes lets Stripe skip the owner/director steps.
+  const [soleOwner, setSoleOwner] = useState<boolean | null>(null);
   const [marketingConsent, setMarketingConsent] = useState(false);
 
   const [busy, setBusy] = useState(false);
@@ -407,6 +420,7 @@ export default function SignUp() {
         setBusinessType(d.businessType);
         setCompanyNumber(d.companyNumber);
         setCompany(d.company);
+        setSoleOwner(d.soleOwner ?? null);
         setPostcode(d.postcode);
         setAddressLine1(d.addressLine1 ?? "");
         setTown(d.town ?? "");
@@ -445,6 +459,7 @@ export default function SignUp() {
         businessType,
         companyNumber,
         company,
+        soleOwner,
         postcode,
         addressLine1,
         town,
@@ -474,6 +489,7 @@ export default function SignUp() {
     businessType,
     companyNumber,
     company,
+    soleOwner,
     postcode,
     addressLine1,
     town,
@@ -877,6 +893,45 @@ export default function SignUp() {
     setCompanyQuery("");
   }
 
+  // Build Review 3, P2 — the company's registered office belongs to the
+  // company: changing business type clears it from the address (and a
+  // suggested trading name, below), never leaving a sole trader with it.
+  function isOfficeAddress(): boolean {
+    const o = company?.office;
+    if (usingOffice) return true;
+    if (!o) return false;
+    return (
+      addressLine1.trim() === o.line1 &&
+      town.trim() === o.town &&
+      postcode.replace(/\s/g, "").toUpperCase() === o.postcode.replace(/\s/g, "").toUpperCase()
+    );
+  }
+
+  function changeBusinessType(value: BusinessType) {
+    if (value === businessType) return;
+    // Build Review 2 — a name filled in from Companies House belongs to that
+    // company; switching type mustn't leave "… Ltd" on a sole trader.
+    if (tradingSuggested) {
+      setTradingName("");
+      setTradingSuggested(false);
+    }
+    if (isOfficeAddress()) {
+      setAddressLine1("");
+      setTown("");
+      setPostcode("");
+      setUsingOffice(false);
+    }
+    setBusinessType(value);
+    clearError("companyNumber");
+    clearError("soleOwner");
+    clearError("tradingName");
+  }
+
+  // Build Review 3, section 2 — a limited company can leave the trading name
+  // blank and trade under its Companies House name; a sole trader (or a
+  // partnership, which has no Companies House name) must enter one.
+  const legalFallback = businessType === "ltd" && company ? company.name : null;
+
   const showManualCompany = manualCompany || lookupUnavailable;
 
   // [DECISION — human, instant-login] No email click-through: the backend
@@ -891,7 +946,11 @@ export default function SignUp() {
               ? checkCompanyNumber(companyNumber)
               : "Find your company, or enter its number instead."
           : null,
-      tradingName: checkRequired(tradingName, "trading name"),
+      tradingName: legalFallback && !tradingName.trim() ? null : checkRequired(tradingName, "trading name"),
+      soleOwner:
+        businessType === "ltd" && soleOwner === null
+          ? "Tell us whether you're the only owner of the company."
+          : null,
       postcode:
         checkUkPostcode(postcode) ??
         (addressLine1.trim() ? null : "Enter your address — or tap Find address and pick it."),
@@ -919,6 +978,8 @@ export default function SignUp() {
             companyNumber:
               businessType === "ltd" ? normaliseCompanyNumber(companyNumber) : undefined,
             companyStatus: businessType === "ltd" && company?.status ? company.status : undefined,
+            legalName: legalFallback ?? undefined,
+            soleOwner: businessType === "ltd" && soleOwner !== null ? soleOwner : undefined,
             postcode: postcode.trim().toUpperCase(),
             addressLine1: addressLine1.trim() || undefined,
             town: town.trim() || undefined,
@@ -1059,7 +1120,7 @@ export default function SignUp() {
               <View className="flex-1">
                 <Lockup height={25} />
               </View>
-              <Text className="font-mono text-[10.5px] font-medium tracking-widest text-white/80">
+              <Text className="tabular-nums text-[10.5px] font-medium tracking-widest text-white/80">
                 STEP {step} OF 3
               </Text>
             </View>
@@ -1382,7 +1443,7 @@ export default function SignUp() {
                             onPress={() => toggleInterest(t.code)}
                             className={`h-9 flex-row items-center gap-1.5 rounded-lg border px-2.5 ${on ? "border-brand-blue" : "border-white/25"}`}
                           >
-                            <Text className="overflow-hidden rounded bg-white/10 px-1.5 py-0.5 font-mono text-[9px] text-white/70">
+                            <Text className="overflow-hidden rounded bg-white/10 px-1.5 py-0.5 tabular-nums text-[9px] text-white/70">
                               {on ? "NOTED" : "SOON"}
                             </Text>
                             <Text className="text-[13px] text-white">{t.name}</Text>
@@ -1462,17 +1523,7 @@ export default function SignUp() {
                         return (
                           <Pressable
                             key={value}
-                            onPress={() => {
-                              // Build Review 2 — a name filled in from Companies
-                              // House belongs to that company; switching type
-                              // mustn't leave "… Ltd" on a sole trader.
-                              if (value !== businessType && tradingSuggested) {
-                                setTradingName("");
-                                setTradingSuggested(false);
-                              }
-                              setBusinessType(value);
-                              clearError("companyNumber");
-                            }}
+                            onPress={() => changeBusinessType(value)}
                             className={`h-10 justify-center rounded-lg border-[1.5px] px-3 ${on ? "border-brand-blue bg-brand-blue/10" : "border-white/30"}`}
                           >
                             <Text className={`text-[14px] ${on ? "text-brand-blue-lift" : "text-white"}`}>
@@ -1581,7 +1632,9 @@ export default function SignUp() {
                     )}
 
                     <View ref={fieldRef("tradingName")} collapsable={false}>
-                      <Text className={labelCls}>Trading name</Text>
+                      <Text className={labelCls}>
+                        Trading name{legalFallback ? " (optional)" : ""}
+                      </Text>
                       <Input
                         value={tradingName}
                         onChangeText={(v) => {
@@ -1596,18 +1649,53 @@ export default function SignUp() {
                         error={errors.tradingName}
                       />
                       <FieldError>{errors.tradingName}</FieldError>
+                      {legalFallback && !tradingName.trim() && (
+                        <Hint>Leave blank to use {legalFallback}</Hint>
+                      )}
                       {tradingSuggested && (
                         <Hint>
                           Suggested from Companies House — change it if you trade under another name
                         </Hint>
                       )}
+                      {/* Build Review 3 — a warning, never a block. */}
                       {businessType !== "ltd" && /\b(ltd|limited)\b/i.test(tradingName) && (
-                        <Hint>
+                        <Text className="mt-1.5 text-[12.5px] leading-[17px] text-warn">
                           Only limited companies can use &ldquo;Ltd&rdquo; in their name — pick Limited company
                           above, or take it out.
-                        </Hint>
+                        </Text>
                       )}
                     </View>
+
+                    {businessType === "ltd" && (
+                      <View ref={fieldRef("soleOwner")} collapsable={false}>
+                        <Text className={labelCls}>Are you the only owner of the company?</Text>
+                        <View className="flex-row gap-2">
+                          {([
+                            [true, "Yes"],
+                            [false, "No"],
+                          ] as const).map(([value, label]) => {
+                            const on = soleOwner === value;
+                            return (
+                              <Pressable
+                                key={label}
+                                onPress={() => {
+                                  setSoleOwner(value);
+                                  clearError("soleOwner");
+                                }}
+                                accessibilityRole="radio"
+                                accessibilityState={{ selected: on }}
+                                className={`h-10 min-w-[72px] items-center justify-center rounded-lg border-[1.5px] px-3 ${on ? "border-brand-blue bg-brand-blue/10" : "border-white/30"}`}
+                              >
+                                <Text className={`text-[14px] ${on ? "text-brand-blue-lift" : "text-white"}`}>
+                                  {label}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                        <FieldError>{errors.soleOwner}</FieldError>
+                      </View>
+                    )}
 
                     <View ref={fieldRef("postcode")} collapsable={false}>
                       <Text className={labelCls}>Correspondence address</Text>

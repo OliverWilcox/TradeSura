@@ -3,7 +3,7 @@ import { View, Text, ScrollView, RefreshControl } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
-import { AppHeader, Card, Pill } from "@/components/ui";
+import { AppHeader, Card, Pill, ScreenTitle } from "@/components/ui";
 import { Icon } from "@/components/icon";
 import { Skeleton, ListRowBone } from "@/components/skeleton";
 
@@ -61,6 +61,7 @@ export default function Messages() {
         contentContainerClassName="gap-3.5 px-4 pb-8 pt-4"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        <ScreenTitle title="Messages" intro="Problems and questions from your plan customers." />
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
         {recentEmergencies > 0 && (

@@ -33,3 +33,25 @@ it("returns a session after account creation even when signup analytics fails", 
   expect(await response.json()).toMatchObject({ token: "test-session" });
   expect(m.create).toHaveBeenCalledOnce();
 });
+
+// Build Review 3, section 2 — trading name rules and the Companies House name.
+const base = { firstName: "Test", lastName: "Engineer", phoneToken: "test", emailToken: "email-proof", gasSafeNo: "123456", postcode: "BN1 1AA" };
+function signup(extra: Record<string, unknown>) {
+  m.track.mockResolvedValue(undefined);
+  return POST(new Request("http://localhost/api/auth/request", { method: "POST", body: JSON.stringify({ email: "test@example.com", signup: { ...base, ...extra } }) }));
+}
+it("a limited company with a blank trading name trades under its Companies House name", async () => {
+  const response = await signup({ tradingName: "", businessType: "ltd", companyNumber: "17325346", legalName: "TRADESURA LTD", soleOwner: true });
+  expect(response.status).toBe(200);
+  expect(m.create.mock.calls[0][0].data).toMatchObject({ tradingName: "TRADESURA LTD", legalName: "TRADESURA LTD", soleOwner: true });
+});
+it("stores the legal name alongside a different trading name", async () => {
+  await signup({ tradingName: "MW Heating", businessType: "ltd", companyNumber: "17325346", legalName: "TRADESURA LTD", soleOwner: false });
+  expect(m.create.mock.calls[0][0].data).toMatchObject({ tradingName: "MW Heating", legalName: "TRADESURA LTD", soleOwner: false });
+});
+it("a sole trader must enter a trading name", async () => {
+  const response = await signup({ tradingName: "", businessType: "sole_trader", legalName: "TRADESURA LTD" });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ field: "tradingName" });
+  expect(m.create).not.toHaveBeenCalled();
+});

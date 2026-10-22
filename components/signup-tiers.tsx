@@ -4,6 +4,7 @@ import { useState } from "react";
 import { NotIncluded } from "@/components/ui";
 import { EmbeddedCheckout } from "@/components/embedded-checkout";
 import { JOIN_BTN, PlanTierCard } from "@/components/plan-tier-card";
+import { perMonth } from "@/lib/engineer";
 
 type Tier = {
   id: string;
@@ -21,6 +22,7 @@ type Started = {
   clientSecret: string;
   publishableKey: string;
   confirmedUrl: string;
+  landlord?: boolean;
   signupToken: string;
 };
 
@@ -28,12 +30,15 @@ export function SignupTiers({
   token,
   tiers: rawTiers,
   engineerName,
+  vatRegistered = false,
   pinnedTierId,
   pinnedGreeting,
 }: {
   token: string;
   tiers: Tier[];
   engineerName: string;
+  /** R5 — prices shown including VAT. */
+  vatRegistered?: boolean;
   /** Build Guide v2 Part 15.1 — the personal-link greeting: "{Engineer
    * first name} suggested {plan name}" pins that plan first. */
   pinnedTierId?: string | null;
@@ -77,15 +82,18 @@ export function SignupTiers({
           lines={selected.lines}
           selected
           compact
+          vatRegistered={vatRegistered}
         />
         <EmbeddedCheckout
           clientSecret={started.clientSecret}
           publishableKey={started.publishableKey}
           confirmedUrl={started.confirmedUrl}
+          landlord={started.landlord}
           signupToken={started.signupToken}
           planName={selected.name}
           priceLabel={pounds(selected.priceMonthlyPence)}
           engineerName={engineerName}
+          vatRegistered={vatRegistered}
         />
       </>
     );
@@ -109,6 +117,7 @@ export function SignupTiers({
             lines={t.lines}
             selected={t.id === selectedId}
             recommended={t.isRecommended}
+            vatRegistered={vatRegistered}
           />
         </button>
       ))}
@@ -123,7 +132,7 @@ export function SignupTiers({
         <button onClick={choose} disabled={busy} className={JOIN_BTN}>
           {busy
             ? "Opening secure Direct Debit setup…"
-            : `Choose ${selected.name} — ${pounds(selected.priceMonthlyPence)}/month by Direct Debit`}
+            : `Choose ${selected.name} — ${perMonth(pounds(selected.priceMonthlyPence), vatRegistered, "/month")} by Direct Debit`}
         </button>
       )}
     </>

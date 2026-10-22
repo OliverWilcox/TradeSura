@@ -3,10 +3,22 @@
 // account's real setup state.
 import { prisma } from "@/lib/db";
 import { appUrl } from "@/lib/app-url";
-import { EMAIL, emailShell, escapeHtml } from "@/lib/email-layout";
+import { EMAIL, SUPPORT_EMAIL, emailAssetBase, emailShell, escapeHtml } from "@/lib/email-layout";
 import { REFERRAL_FIRST_YEAR_PERCENT, REFERRAL_LIFETIME_PERCENT } from "@/lib/referral";
+import { computeApplicationFeePence } from "@/lib/stripe";
+import { legalNameDisplay } from "@/lib/engineer";
 
-const SUPPORT_EMAIL = "support@tradesura.com";
+// Build Review 3, P1 — earnings use the engineer's 80% (after TradeSura's
+// fee, rounded down in their favour), never the customer's price: a £12
+// plan is £115 a year to the engineer, not £144.
+const EXAMPLE_PLAN_PENCE = 1200;
+const EXAMPLE_CUSTOMERS = 10;
+export function engineerYearlyPence(planPence: number): number {
+  return (planPence - computeApplicationFeePence(planPence)) * 12;
+}
+function wholePounds(pence: number): string {
+  return `£${Math.floor(pence / 100).toLocaleString("en-GB")}`;
+}
 
 type Item = { done: boolean; title: string; hint: string };
 
@@ -29,7 +41,13 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
     prisma.customer.count({ where: { engineerId } }),
   ]);
   const firstName = escapeHtml(e.firstName || "there");
-  const brand = escapeHtml(e.tradingName || "Your business");
+  // Build Review 3, P1 — the BUSINESS name fills in ("MW Heating now has a
+  // free TradeSura account"): trading name, else the Companies House name.
+  const brand = escapeHtml(
+    e.tradingName?.trim() || (e.legalName?.trim() ? legalNameDisplay(e.legalName) : "") || "Your business",
+  );
+  const perCustomer = engineerYearlyPence(EXAMPLE_PLAN_PENCE);
+  const examplePounds = `£${EXAMPLE_PLAN_PENCE / 100}`;
   const base = appUrl();
   const open = (to: string) => `${base}/api/open?to=${to}`;
   // The mock-up's "WhatsApp us on …" line — set SUPPORT_WHATSAPP to show it.
@@ -39,10 +57,10 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
   const items: Item[] = [
     { done: Boolean(e.packRequestedAt), title: "Member pack address saved", hint: "posts when your badge goes live" },
     { done: e.stripeChargesEnabled, title: "Set up payments", hint: "2 minutes with Stripe" },
-    { done: liveTiers > 0, title: "Build your first plan", hint: "start from Boiler Care at £12" },
+    { done: liveTiers > 0, title: "Build your first plan", hint: `start from Boiler Care at ${examplePounds}` },
     { done: Boolean(e.profilePublishedAt), title: "Get found on Google", hint: "your free profile page" },
     { done: Boolean(e.websiteConnectedAt), title: "Connect your website", hint: "sell plans there too" },
-    { done: customerCount > 0, title: "Bring in your customers", hint: "each one worth up to £115 a year to you" },
+    { done: customerCount > 0, title: "Bring in your customers", hint: `each one worth up to ${wholePounds(perCustomer)} a year to you` },
   ];
   const doneCount = items.filter((i) => i.done).length;
 
@@ -55,8 +73,8 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
   <tr><td style="padding:24px 32px 6px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F2FBF6;border:1px solid #BDEBD3;border-radius:12px;">
       <tr><td style="padding:16px 18px;font-size:15px;line-height:22px;color:${EMAIL.ink};">
-        Just <b>10 customers</b> on a £12 plan =<br>
-        <span style="font-size:26px;line-height:34px;font-weight:700;color:${EMAIL.money};">£1,152 a year</span> <span style="color:${EMAIL.muted};">in your pocket</span>
+        Just <b>${EXAMPLE_CUSTOMERS} customers</b> on a ${examplePounds} plan =<br>
+        <span style="font-size:26px;line-height:34px;font-weight:700;color:${EMAIL.money};">${wholePounds(perCustomer * EXAMPLE_CUSTOMERS)} a year</span> <span style="color:${EMAIL.muted};">in your pocket</span>
       </td></tr>
     </table>
   </td></tr>
@@ -115,7 +133,7 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
     The TradeSura team
   </td></tr>`;
 
-  const footerExtra = `<img src="${base}/brand/stripe/Powered_by_Stripe_blurple.png" width="110" alt="Powered by Stripe" style="display:block;border:0;margin-bottom:10px;">
+  const footerExtra = `<img src="${emailAssetBase()}/brand/stripe/Powered_by_Stripe_blurple.png" width="110" alt="Powered by Stripe" style="display:block;border:0;margin-bottom:10px;">
     You're receiving this because you created a TradeSura account. <a href="${base}/privacy" style="color:${EMAIL.muted};">Privacy policy</a> · <a href="mailto:${SUPPORT_EMAIL}" style="color:${EMAIL.muted};">Help</a><br>`;
 
   return {

@@ -163,7 +163,7 @@ export default function HomePage() {
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-ink">
                     <path d="M3.6 2.3c-.4.3-.6.8-.6 1.4v16.6c0 .6.2 1.1.6 1.4l.1.1L13.4 12 3.7 2.2l-.1.1z" fill="#5FA3F0" />
                     <path d="M16.7 15.3l-3.3-3.3 3.3-3.3 4 2.3c.7.4.7 1.6 0 2l-4 2.3z" fill="#3DD68C" />
-                    <path d="M13.4 12 3.7 21.8c.4.4 1.1.5 1.8.1l11.2-6.3-3.3-3.6z" fill="#F2B84B" />
+                    <path d="M13.4 12 3.7 21.8c.4.4 1.1.5 1.8.1l11.2-6.3-3.3-3.6z" fill="#F5B544" />
                     <path d="M13.4 12l3.3-3.6L5.5 2.1c-.7-.4-1.4-.3-1.8.1L13.4 12z" fill="#FF6B6B" />
                   </svg>
                 }

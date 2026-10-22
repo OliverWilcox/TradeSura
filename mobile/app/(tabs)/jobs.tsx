@@ -4,7 +4,7 @@ import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { AppHeader, Card, Micro, Pill, Button } from "@/components/ui";
+import { AppHeader, Card, Micro, Pill, Button, ScreenTitle, SectionHeading } from "@/components/ui";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 
 type DueItem = {
@@ -49,7 +49,7 @@ function WeekStrip({ jobDates }: { jobDates: Set<string> }) {
           const hasJob = jobDates.has(key(d));
           return (
             <View key={i} className="flex-1 items-center gap-1 py-1">
-              <Text className="font-mono text-[10px] text-faint">{WEEKDAYS[i]}</Text>
+              <Text className="tabular-nums text-[10px] text-faint">{WEEKDAYS[i]}</Text>
               <View
                 className={`h-7 w-7 items-center justify-center rounded-lg ${isToday ? "bg-flame" : ""}`}
               >
@@ -232,22 +232,21 @@ export default function Jobs() {
         contentContainerClassName="gap-3.5 px-4 pb-8 pt-4"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Text className="text-[28px] font-extrabold tracking-tight text-ink">Reminders</Text>
+        <ScreenTitle
+          title="Reminders"
+          intro="Services coming up. Plan members are reminded and booked automatically; everyone else is a one-tap pitch."
+        />
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
         {!data && !error && <JobsSkeleton />}
 
         {data && (
           <>
-            <Text className="font-sans text-sm text-muted">
-              Gas engineers fit and forget. You won&apos;t — plan members are reminded and booked
-              automatically; everyone else is a one-tap pitch.
-            </Text>
             <WeekStrip jobDates={jobDates} />
 
             {data.overdue.length > 0 && (
               <Card>
-                <Text className="mb-1 font-semibold text-sm text-ink">Overdue</Text>
+                <SectionHeading className="mb-1">Overdue</SectionHeading>
                 {data.overdue.map((d, i) => (
                   <JobRow
                     key={i}
@@ -262,7 +261,7 @@ export default function Jobs() {
 
             <Card>
               <View className="mb-1 flex-row items-baseline justify-between">
-                <Text className="font-semibold text-sm text-ink">Next jobs</Text>
+                <SectionHeading>Next jobs</SectionHeading>
                 {!showAllNext && upcoming.length > 3 && (
                   <Pressable onPress={() => setShowAllNext(true)}>
                     <Text className="font-semibold text-xs text-flame-deep">
@@ -291,7 +290,7 @@ export default function Jobs() {
 
             <Card>
               <View className="mb-1 flex-row items-baseline justify-between">
-                <Text className="font-semibold text-sm text-ink">Past jobs</Text>
+                <SectionHeading>Past jobs</SectionHeading>
                 {!showAllPast && data.past.length > 3 && (
                   <Pressable onPress={() => setShowAllPast(true)}>
                     <Text className="font-semibold text-xs text-flame-deep">
@@ -326,7 +325,7 @@ export default function Jobs() {
             </Card>
 
             <Card>
-              <Text className="mb-1 font-semibold text-sm text-ink">Reminder engine</Text>
+              <SectionHeading className="mb-1">Reminder engine</SectionHeading>
               <View className="flex-row items-center justify-between border-b border-line-soft py-2.5">
                 <Text className="font-sans text-sm text-ink">Customer reminders</Text>
                 <Pill tone="info">AUTO · SMS · 30/14/3 DAYS</Pill>

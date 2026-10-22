@@ -6,7 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
-import { AppHeader, Card, Pill, Button } from "@/components/ui";
+import { AppHeader, Card, Pill, Button, ScreenTitle, SectionHeading } from "@/components/ui";
 
 type Customer = {
   id: string;
@@ -212,7 +212,7 @@ export default function Customers() {
             </Pressable>
           </View>
         )}
-        <Text className="text-[28px] font-extrabold tracking-tight text-ink">Customers</Text>
+        <ScreenTitle title="Customers" intro="Your book. Offer a plan to anyone who isn't on one yet." />
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
         {tabs.length > 0 && (
@@ -302,11 +302,11 @@ export default function Customers() {
             live plans each person signed up; never shown to staff. */}
         {!isStaff && salesByEngineer && salesByEngineer.length > 0 && (
           <Card>
-            <Text className="mb-1 font-semibold text-sm text-ink">Sales by engineer</Text>
+            <SectionHeading className="mb-1">Sales by engineer</SectionHeading>
             {salesByEngineer.map((r) => (
               <View key={r.name} className="flex-row justify-between border-b border-line-soft py-2 last:border-b-0">
                 <Text className="font-sans text-sm text-ink">{r.name}</Text>
-                <Text className="font-mono text-sm text-ink">
+                <Text className="tabular-nums text-sm text-ink">
                   {r.plans} plan{r.plans === 1 ? "" : "s"}
                 </Text>
               </View>
@@ -323,7 +323,7 @@ export default function Customers() {
         {!isStaff && (
           <>
             <Card>
-              <Text className="mb-1 font-semibold text-sm text-ink">Import your book</Text>
+              <SectionHeading className="mb-1">Import your book</SectionHeading>
               <Text className="mb-2.5 font-sans text-xs text-muted">
                 CSV, or pick from your phone&apos;s contacts. We de-dupe by phone number
                 automatically.

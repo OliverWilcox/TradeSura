@@ -174,12 +174,18 @@ export function GateSheet({
   reason,
   cta = "Continue setup",
   onCta,
+  amber,
+  demo,
 }: {
   visible: boolean;
   onClose: () => void;
   reason: string;
   cta?: string;
   onCta: () => void;
+  /** Review 3 — the offer lock reads amber ("needs doing"). */
+  amber?: boolean;
+  /** Review 3 — "Try it in demo mode" while offers are locked. */
+  demo?: () => void;
 }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -189,7 +195,7 @@ export function GateSheet({
           className="rounded-t-3xl border-t border-line-strong bg-paper px-5 pb-10 pt-4"
         >
           <View className="mb-4 h-1 w-10 self-center rounded-full bg-line-strong" />
-          <Text className="text-[16px] font-semibold leading-6 text-ink">{reason}</Text>
+          <Text className={`text-[16px] font-semibold leading-6 ${amber ? "text-warn" : "text-ink"}`}>{reason}</Text>
           <Button
             className="mt-4"
             onPress={() => {
@@ -199,6 +205,18 @@ export function GateSheet({
           >
             {cta}
           </Button>
+          {demo && (
+            <Button
+              variant="ghost"
+              className="mt-2"
+              onPress={() => {
+                onClose();
+                demo();
+              }}
+            >
+              Try it in demo mode
+            </Button>
+          )}
           <Pressable onPress={onClose} className="mt-2 items-center py-2.5">
             <Text className="text-sm font-semibold text-muted">Not now</Text>
           </Pressable>
@@ -248,6 +266,27 @@ export function Card({
   }
   return (
     <View className={`rounded-2xl border border-line bg-paper p-4 ${className}`}>{children}</View>
+  );
+}
+
+// Build Review 3, §3 — every screen opens with a bold white heading and a
+// one-line grey intro saying what to do here.
+export function ScreenTitle({ title, intro }: { title: string; intro?: ReactNode }) {
+  return (
+    <View className="gap-1">
+      <Text className="text-[28px] font-extrabold tracking-tight text-ink">{title}</Text>
+      {intro ? <Text className="text-[15px] leading-[21px] text-muted">{intro}</Text> : null}
+    </View>
+  );
+}
+
+// Build Review 3, §3 — section headings in light blue #5FA3F0, uppercase,
+// larger than the old Micro labels. Micro stays for small in-card labels.
+export function SectionHeading({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <Text className={`text-[13px] font-bold uppercase tracking-[0.1em] text-flame ${className}`}>
+      {children}
+    </Text>
   );
 }
 
@@ -316,7 +355,7 @@ export function Money({
 }) {
   const pounds = pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
   return (
-    <Text className={`font-mono font-extrabold text-ok ${className}`}>
+    <Text className={`font-extrabold tabular-nums text-ok ${className}`}>
       {pounds}
       {suffix}
     </Text>

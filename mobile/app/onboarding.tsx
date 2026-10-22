@@ -7,6 +7,7 @@ import { setupSteps, type SetupStep } from "@/lib/setup-steps";
 import { Icon } from "@/components/icon";
 import { RingProgress } from "@/components/ring-progress";
 import { StripeBadge } from "@/components/stripe-badge";
+import { StripeStatusCard } from "@/components/stripe-status-card";
 
 // 2026 Build Guide TARGET_getting_started_hub — seven numbered steps, a
 // progress ring, and the Gas Safe check status. Steps can be done in any
@@ -92,7 +93,7 @@ export default function Onboarding() {
 
           {inReview && (
             <View className="flex-row items-center justify-center gap-2 rounded-xl border border-warn/50 bg-warn-tint px-3 py-2.5">
-              <Icon name="clock" size={17} color="#f2b84b" />
+              <Icon name="clock" size={17} color="#F5B544" />
               <Text className="text-[14px] text-warn">Gas Safe check in progress · usually within 24 hours</Text>
             </View>
           )}
@@ -105,6 +106,8 @@ export default function Onboarding() {
               <Text className="text-[14px] text-danger">Your Gas Safe check needs attention — tap to see why</Text>
             </Pressable>
           )}
+
+          <StripeStatusCard state={me?.stripeState} />
 
           {steps.map((s, i) => (
             <StepRow key={s.key} n={i + 1} step={s} current={i === currentIdx} />

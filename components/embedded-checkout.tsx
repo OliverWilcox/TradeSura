@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { AddressLookup, type AddressValue } from "@/components/address-lookup";
 import { Card, btnClass } from "@/components/ui";
+import { perMonth } from "@/lib/engineer";
 
 // C2 — the embedded Bacs Direct Debit form. Stays on the engineer's
 // white-label page; the Payment Element collects name / sort code / account
@@ -15,17 +17,22 @@ function CheckoutForm({
   planName,
   priceLabel,
   engineerName,
+  vatRegistered,
+  landlord,
 }: {
   signupToken: string;
   confirmedUrl: string;
   planName: string;
   priceLabel: string;
   engineerName: string;
+  vatRegistered?: boolean;
+  landlord?: boolean;
 }) {
   const stripe = useStripe();
   const elements = useElements();
   const [address, setAddress] = useState<AddressValue>({ line1: "", town: "", postcode: "" });
   const [agreed, setAgreed] = useState(false);
+  const [propertyLet, setPropertyLet] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,10 +68,15 @@ function CheckoutForm({
     // Review #18 — record which terms version they actually agreed to. The
     // checkbox already gates this button; this is what makes that agreement
     // a real record instead of just a UI gesture.
-    const agreeRes = await fetch(`/api/signup/${signupToken}/agree-terms`, { method: "POST" });
+    const agreeRes = await fetch(`/api/signup/${signupToken}/agree-terms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ propertyLet: landlord ? propertyLet : undefined }),
+    });
     if (!agreeRes.ok) {
+      const data = await agreeRes.json().catch(() => ({}));
       setBusy(false);
-      setError("Couldn't record your agreement — try again.");
+      setError(data.error ?? "Couldn't record your agreement — try again.");
       return;
     }
 
@@ -90,7 +102,7 @@ function CheckoutForm({
       <div>
         <h2 className="font-sans font-semibold text-lg">Set up your plan</h2>
         <p className="text-sm text-muted">
-          {planName} · {priceLabel} a month · with {engineerName}
+          {planName} · {perMonth(priceLabel, vatRegistered)} · with {engineerName}
         </p>
       </div>
       <AddressLookup signupToken={signupToken} value={address} onChange={setAddress} />
@@ -113,9 +125,22 @@ function CheckoutForm({
         </div>
         <div className="flex justify-between">
           <span className="text-muted">You pay</span>
-          <b className="font-mono">{priceLabel} monthly</b>
+          <b className="font-mono">{perMonth(priceLabel, vatRegistered, " monthly")}</b>
         </div>
       </Card>
+
+      {/* R9 — Landlord plans are for let properties. */}
+      {landlord && (
+        <label className="flex gap-2 text-xs text-muted items-start">
+          <input
+            type="checkbox"
+            checked={propertyLet}
+            onChange={(e) => setPropertyLet(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-[#5FA3F0]"
+          />
+          This is a Landlord plan. I confirm the property is let to tenants.
+        </label>
+      )}
 
       <label className="flex gap-2 text-xs text-muted items-start">
         <input
@@ -130,10 +155,20 @@ function CheckoutForm({
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {/* Part 15.2 — one white button; green on this page is prices only. */}
-      <button type="submit" disabled={busy || !agreed || !stripe} className={btnClass()}>
+      <button type="submit" disabled={busy || !agreed || (landlord && !propertyLet) || !stripe} className={btnClass()}>
         {busy ? "Setting up your Direct Debit…" : "Set up my plan"}
       </button>
       <p className="text-center text-[11px] text-faint">Cancel anytime.</p>
+      {/* Build Review 3 §3 — the official "Powered by Stripe" badge, never
+          typed text. White artwork: this page sits on dark navy (v2). */}
+      <Image
+        src="/brand/stripe/Powered_by_Stripe_white.svg"
+        alt="Powered by Stripe"
+        width={120}
+        height={27}
+        unoptimized
+        className="mx-auto opacity-80"
+      />
     </form>
   );
 }
@@ -146,6 +181,8 @@ export function EmbeddedCheckout(props: {
   priceLabel: string;
   engineerName: string;
   signupToken: string;
+  vatRegistered?: boolean;
+  landlord?: boolean;
 }) {
   const stripePromise = useMemo(
     () => loadStripe(props.publishableKey),
@@ -179,6 +216,8 @@ export function EmbeddedCheckout(props: {
         planName={props.planName}
         priceLabel={props.priceLabel}
         engineerName={props.engineerName}
+        landlord={props.landlord}
+        vatRegistered={props.vatRegistered}
       />
     </Elements>
   );

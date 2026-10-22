@@ -4,6 +4,7 @@ import { track } from "@/lib/track";
 import { verifyGasSafe } from "@/lib/gas-safe";
 import { clauseLine } from "@/lib/clauses";
 import { profileUrl } from "@/lib/public-url";
+import { tradingNameOf } from "@/lib/engineer";
 import { CustomerShell } from "@/components/shells";
 import { PublicSignup } from "@/components/public-signup";
 
@@ -88,6 +89,7 @@ export async function EngineerPage({
   const bio = engineer.profileBio?.trim();
   const area = engineer.serviceArea?.trim();
   const published = Boolean(engineer.profilePublishedAt);
+  const legalLine = tradingNameOf(engineer);
 
   // The engineer's Stripe Connect business_profile.url points here from the
   // moment they connect payments — before they've published a plan. A hard
@@ -95,7 +97,7 @@ export async function EngineerPage({
   // website, so this renders an honest holding page instead.
   if (tiers.length === 0) {
     return (
-      <CustomerShell tradingName={brand}>
+      <CustomerShell tradingName={brand} legalLine={legalLine}>
         <div className="bg-paper border border-line rounded-xl p-4 text-center">
           <h1 className="font-sans font-semibold text-base mb-1.5">{brand}&apos;s care plans</h1>
           <p className="text-sm text-muted">
@@ -123,6 +125,7 @@ export async function EngineerPage({
         "@type": "HVACBusiness",
         name: brand,
         url: profileUrl(engineer.slug),
+        ...(engineer.legalName?.trim() ? { legalName: engineer.legalName.trim() } : {}),
         ...(engineer.logoUrl ? { image: engineer.logoUrl } : {}),
         ...(bio ? { description: bio } : {}),
         ...(area ? { areaServed: area } : {}),
@@ -133,6 +136,7 @@ export async function EngineerPage({
             "@type": "UnitPriceSpecification",
             price: (t.priceMonthlyPence / 100).toFixed(2),
             priceCurrency: "GBP",
+            ...(engineer.vatRegistered ? { valueAddedTaxIncluded: true } : {}),
             unitText: "MONTH",
           },
         })),
@@ -142,6 +146,7 @@ export async function EngineerPage({
   return (
     <CustomerShell
       tradingName={brand}
+      legalLine={legalLine}
       // Build Guide v2 Part 15.1 — the trust line. Never asserted for an
       // engineer who isn't actually verified.
       sub={gasSafe ? "Gas Safe verified · Backed by TradeSura" : "Backed by TradeSura"}
@@ -175,6 +180,7 @@ export async function EngineerPage({
       <PublicSignup
         slug={slug}
         engineerName={brand}
+        vatRegistered={engineer.vatRegistered}
         initialTierId={tier}
         soldById={demo ? by : undefined}
         channel={
@@ -188,7 +194,7 @@ export async function EngineerPage({
           lines: [
             ...t.clauses
               .sort((a, b) => a.clause.sortOrder - b.clause.sortOrder)
-              .map((tc) => clauseLine(tc.clause)),
+              .map((tc) => clauseLine(tc.clause, t.clauseRates)),
             ...t.customLabels,
           ],
         }))}

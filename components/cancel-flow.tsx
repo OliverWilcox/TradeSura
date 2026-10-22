@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Card, btnClass } from "@/components/ui";
+import { perMonth } from "@/lib/engineer";
 
 // Two taps, honestly counted: tap 1 = "Cancel my plan", tap 2 = "Yes, cancel".
 // Save-flow offers (pause/downgrade) are P1 and deliberately not built.
@@ -11,6 +12,7 @@ export function CancelFlow(props: {
   status: string;
   tierName: string;
   priceLabel: string;
+  vatRegistered?: boolean;
   coolingOffEndsAt: string | null;
 }) {
   const [step, setStep] = useState<"start" | "confirm" | "done">(
@@ -63,7 +65,7 @@ export function CancelFlow(props: {
       <Card>
         <p className="text-sm">
           You&apos;re on the <b>{props.tierName}</b> plan at{" "}
-          <b className="font-mono">{props.priceLabel}/mo</b>.
+          <b className="font-mono">{perMonth(props.priceLabel, props.vatRegistered, "/mo")}</b>.
         </p>
         {inCoolingOff && (
           <p className="text-xs text-muted mt-2">

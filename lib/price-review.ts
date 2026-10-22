@@ -123,6 +123,7 @@ export async function sendPriceReview(opts: {
     if (plan.customer.email) {
       await sendEmail({
         to: plan.customer.email,
+        replyTo: plan.engineer.email,
         subject: `Your ${brand} care plan price is changing (${plan.ref})`,
         html: `<p>Hi ${plan.customer.firstName},</p>
 <p>${brand} has reviewed their care plan prices. Your ${plan.tier?.name ?? ""} plan (${plan.ref}) will change:</p>

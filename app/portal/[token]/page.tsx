@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { brandName } from "@/lib/engineer";
+import { brandName, perMonth, tradingNameOf } from "@/lib/engineer";
 import { CustomerShell } from "@/components/shells";
 import { Card, NotIncluded, Pill, RowLine } from "@/components/ui";
 import { poundsFromPence } from "@/lib/plan-doc";
@@ -32,6 +32,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   return (
     <CustomerShell
       tradingName={brand}
+      legalLine={tradingNameOf(plan.engineer)}
       sub={`Plan ${plan.ref} · ${plan.customer.firstName} ${plan.customer.lastName}${property ? ` · ${property.addressLine1}` : ""}`}
     >
       {plan.status === "ACTIVE" ? (
@@ -42,7 +43,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
               {tier?.name} — {brand}
             </p>
             <span className="font-mono font-semibold">
-              {poundsFromPence(plan.priceMonthlyPence ?? 0)}/mo
+              {perMonth(poundsFromPence(plan.priceMonthlyPence ?? 0), plan.engineer.vatRegistered, "/mo")}
             </span>
           </div>
           <div className="h-px bg-line-strong my-2.5" />

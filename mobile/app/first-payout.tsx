@@ -53,11 +53,11 @@ export default function FirstPayout() {
     <View className="flex-1 bg-bg">
       <SafeAreaView edges={["top", "bottom"]} className="flex-1 justify-center px-6">
         <View className="items-center">
-          <Text className="font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-copper">
+          <Text className="tabular-nums text-[11px] font-bold uppercase tracking-[0.12em] text-copper">
             Your first payout
           </Text>
           <Text
-            className="mt-2.5 font-mono text-[56px] font-extrabold leading-none text-copper"
+            className="mt-2.5 tabular-nums text-[56px] font-extrabold leading-none text-copper"
             style={reduceMotion ? undefined : { fontVariant: ["tabular-nums"] }}
           >
             {pounds(display)}
@@ -81,7 +81,7 @@ export default function FirstPayout() {
                 className="flex-1 items-center rounded-[10px] border border-line bg-white/[0.06] py-2.5"
               >
                 <Text className="text-[15px] font-bold text-white">{big}</Text>
-                <Text className="font-mono text-[9px] uppercase tracking-wide text-night-muted">
+                <Text className="tabular-nums text-[9px] uppercase tracking-wide text-night-muted">
                   {small}
                 </Text>
               </View>

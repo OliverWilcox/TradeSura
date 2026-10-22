@@ -45,7 +45,7 @@ export function StaffHome() {
             <Icon
               name={verified ? "verified" : "warning"}
               size={18}
-              color={verified ? "#5FA3F0" : rejected ? "#FF6B6B" : "#F2B84B"}
+              color={verified ? "#5FA3F0" : rejected ? "#FF6B6B" : "#F5B544"}
             />
             <Text className={`flex-1 font-sans text-sm ${verified ? "text-ink" : rejected ? "text-danger" : "text-warn"}`}>
               {verified
@@ -59,7 +59,7 @@ export function StaffHome() {
 
         <Card variant="raised" className="items-center py-5">
           <Micro>Sign-ups this week</Micro>
-          <Text className="mt-1 font-mono text-5xl font-semibold text-ink">{count}</Text>
+          <Text className="mt-1 tabular-nums text-5xl font-semibold text-ink">{count}</Text>
           <Text className="mt-1 font-sans text-xs text-muted">
             Customers who joined a plan you offered, since Monday.
           </Text>

@@ -184,7 +184,7 @@ export default function SignIn() {
             </Pressable>
 
             <View className="mt-6">
-              <Text className="font-mono text-[12.5px] font-bold uppercase tracking-[4px] text-brand-blue-lift">
+              <Text className="tabular-nums text-[12.5px] font-bold uppercase tracking-[4px] text-brand-blue-lift">
                 Care plan platform
               </Text>
               <View className="mt-2.5">
@@ -237,7 +237,7 @@ export default function SignIn() {
                   placeholder="4-digit code"
                   placeholderTextColor="#9fb6d0"
                   accessibilityLabel="Sign-in code"
-                  className={`min-h-[58px] rounded-2xl border-[1.5px] bg-[#081321]/90 px-4 font-mono text-[22px] tracking-[6px] text-white ${error ? "border-danger" : "border-brand-blue"}`}
+                  className={`min-h-[58px] rounded-2xl border-[1.5px] bg-[#081321]/90 px-4 tabular-nums text-[22px] tracking-[6px] text-white ${error ? "border-danger" : "border-brand-blue"}`}
                 />
                 {error && <Text className="-mt-1 text-[14px] text-danger">{error}</Text>}
                 <Pressable

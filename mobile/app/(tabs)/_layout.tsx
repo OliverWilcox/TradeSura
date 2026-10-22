@@ -30,6 +30,22 @@ const TAB_LABELS: Record<string, string> = {
 };
 const VISIBLE_TABS = ["(home)", "(customers)", "jobs", "payouts"];
 
+// Build Review 3 §3 — "Inside flows, the main button sits in a sticky
+// footer and the tab bar is hidden." These are the nested stack routes
+// (by their file-route name) that are step flows rather than rooms; the
+// bar comes back as soon as the user leaves them. The onboarding hub and
+// the offer flow are root-stack screens, outside (tabs), so they never
+// show the bar in the first place.
+const FLOW_ROUTES = new Set([
+  "plan-wizard",
+  "tier/[tierId]",
+  "team-add",
+  "price-review",
+  "delete-account",
+  "customers/blast",
+  "customers/import-contacts",
+]);
+
 const ACTIVE = "#5FA3F0";
 const IDLE = "#6E86A3";
 
@@ -86,6 +102,7 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
   const nested = active?.state;
   const navKey = `${activeName}:${nested?.index ?? 0}:${nested?.routes?.length ?? 0}`;
   const due = useRemindersBadge(navKey);
+  const focusedNested = nested?.routes?.[nested.index ?? 0]?.name;
   const leftTabs = routes.slice(0, 2);
   const rightTabs = routes.slice(2);
 
@@ -128,6 +145,9 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
       </Pressable>
     );
   }
+
+  // After every hook above, so hiding never changes the hook order.
+  if (focusedNested && FLOW_ROUTES.has(focusedNested)) return null;
 
   return (
     <View

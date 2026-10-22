@@ -12,6 +12,8 @@ import { RingProgress, payoutWeekProgress } from "@/components/ring-progress";
 import { RingMark } from "@/components/ring-mark";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 import { setupSteps } from "@/lib/setup-steps";
+import { offerLock } from "@/lib/offer-lock";
+import { StripeStatusCard } from "@/components/stripe-status-card";
 
 type DueItem = {
   customerId: string;
@@ -58,7 +60,7 @@ function StandingStrip({ standing }: { standing: Standing }) {
   return (
     <Pressable onPress={() => router.push("/more")} className={`flex-row items-center gap-2.5 rounded-xl border px-3.5 py-2.5 ${toneCls}`}>
       {standing.tone === "quiet" && <Icon name="verified" size={14} color="#3dd68c" />}
-      {standing.tone === "amber" && <Icon name="clock" size={16} color="#f2b84b" />}
+      {standing.tone === "amber" && <Icon name="clock" size={16} color="#F5B544" />}
       {standing.tone === "red" && <Icon name="warning" size={14} color="#ff6b6b" />}
       <Text className={`flex-1 font-sans text-[13px] ${textCls}`} numberOfLines={2}>
         {standing.text}
@@ -222,14 +224,9 @@ function OwnerHome() {
   const waitingLine = nextStep ? `Next: ${nextStep.title.toLowerCase()}.` : "";
   const essentialsDone = steps.filter((x) => x.key === "plan" || x.key === "paid").every((x) => x.done);
 
-  // Part 6.5 LAW — the two-leg gate: an offer needs a live plan AND the badge.
-  const offerBlockedBy = !awake
-    ? "Your first plan is step 2 of setup."
-    : !verified
-      ? "Offers unlock with your Gas Safe badge — we'll let you know when it's live."
-      : !me?.stripeConnected
-        ? "Finish your payment setup first — customers can't pay you until it's done."
-        : null;
+  // Review 3 — the offer lock: a live plan, the Gas Safe check AND payments.
+  const lock = offerLock(me ? { ...me, hasPlan: awake } : me);
+  const offerBlockedBy = lock?.reason ?? null;
 
   return (
     <View className="flex-1 bg-panel">
@@ -257,11 +254,11 @@ function OwnerHome() {
             onPress={() => router.push("/add-id")}
             className="flex-row items-center gap-2.5 rounded-xl border border-warn-tint bg-warn-tint px-3.5 py-3"
           >
-            <Icon name="camera" size={16} color="#f2b84b" />
+            <Icon name="camera" size={16} color="#F5B544" />
             <Text className="flex-1 text-[13.5px] font-semibold text-warn">
               Add your Gas Safe ID to go live
             </Text>
-            <Icon name="chevron" size={13} color="#f2b84b" weight="semibold" />
+            <Icon name="chevron" size={13} color="#F5B544" weight="semibold" />
           </Pressable>
         )}
 
@@ -326,6 +323,26 @@ function OwnerHome() {
                 With seven setup steps (some optional), setup only holds the
                 card until the plan and payments are done; the first offer
                 comes before the rest. */}
+            {/* Review 3 — a half-finished Stripe set-up is never a reset. */}
+            <StripeStatusCard state={me?.stripeState} />
+
+            {/* Review 3 P0 — an unfinished wizard draft resumes here. */}
+            {me?.role !== "staff" && me?.draftPlan && (
+              <Card>
+                <Micro>Draft saved</Micro>
+                <Text className="mt-1.5 text-[19px] font-bold text-ink">Finish your plan</Text>
+                <Text className="mt-1 text-[14px] text-muted">
+                  {me.draftPlan.name ? `${me.draftPlan.name} is` : "Your plan is"} saved as a draft. Pick up where you left off.
+                </Text>
+                <Button
+                  className="mt-4"
+                  onPress={() => router.push({ pathname: "/plan-wizard", params: { tierId: me.draftPlan!.id } })}
+                >
+                  Finish my plan
+                </Button>
+              </Card>
+            )}
+
             {!essentialsDone || (data.count > 0 && setupDone < steps.length) ? (
               <Card>
                 <Micro>Get started</Micro>
@@ -357,7 +374,7 @@ function OwnerHome() {
               <Card className="border-[rgba(242,184,75,.3)] bg-warn-tint">
                 <View className="flex-row items-center justify-between">
                   <View className="shrink">
-                    <Text className="font-mono font-bold text-warn">
+                    <Text className="tabular-nums font-bold text-warn">
                       £{(data.prizeYearlyPence / 100).toFixed(0)}/yr not collected
                     </Text>
                     <Text className="mt-0.5 text-[12.5px] text-muted">
@@ -485,8 +502,10 @@ function OwnerHome() {
         visible={offerGate !== null}
         onClose={() => setOfferGate(null)}
         reason={offerGate ?? ""}
-        cta={awake && !verified ? "Check my status" : "Continue setup"}
-        onCta={() => router.push(awake && !verified ? "/more" : "/onboarding")}
+        cta={lock?.cta ?? "Continue setup"}
+        onCta={() => router.push(lock?.href ?? "/onboarding")}
+        amber
+        demo={awake ? () => router.push("/demo") : undefined}
       />
       <GateSheet
         visible={shopGateOpen}

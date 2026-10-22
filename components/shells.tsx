@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { EMERGENCY_LINE } from "@/lib/compliance/interlock";
 import { RingMark } from "@/components/ring-mark";
 
@@ -8,10 +9,13 @@ export function CustomerShell({
   children,
   tradingName,
   sub,
+  legalLine,
 }: {
   children: ReactNode;
   tradingName: string;
   sub?: ReactNode;
+  /** "MW Heating is a trading name of Tradesura Ltd" — from tradingNameOf(). */
+  legalLine?: string | null;
 }) {
   return (
     <div className="flex-1 flex flex-col max-w-md w-full mx-auto min-h-screen bg-panel">
@@ -35,12 +39,13 @@ export function CustomerShell({
             {EMERGENCY_LINE}
           </a>
         </p>
+        {legalLine && <p>{legalLine}</p>}
         {/* Build Guide v2 Part 15 footer. */}
         <p>
           Powered by TradeSura ·{" "}
-          <a href="/terms" className="underline">
+          <Link href="/terms" className="underline">
             Terms &amp; privacy
-          </a>
+          </Link>
         </p>
       </footer>
     </div>

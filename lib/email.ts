@@ -3,6 +3,7 @@
 // epc-builder / improveasy-app projects — when RESEND_API_KEY is set;
 // falls back to the dev driver otherwise, same pattern as lib/sms.ts.
 import { Resend } from "resend";
+import { SUPPORT_EMAIL, withCompanyFooter } from "@/lib/email-layout";
 
 // onboarding@resend.dev works with no domain setup (good for first testing);
 // switch to a verified TradeSura domain address once one's added in the
@@ -24,11 +25,16 @@ export function emailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY);
 }
 
-export async function sendEmail(opts: { to: string; subject: string; html: string }) {
+// Replies go to a monitored inbox, never the no-reply sending address.
+// Customer emails sent on an engineer's behalf pass the engineer's own email.
+const REPLY_TO = process.env.EMAIL_REPLY_TO?.trim() || SUPPORT_EMAIL;
+
+export async function sendEmail(opts: { to: string; subject: string; html: string; replyTo?: string | null }) {
   const resend = getResend();
+  const html = withCompanyFooter(opts.html);
   if (!resend) {
     console.log(
-      `[EMAIL] to=${opts.to} subject="${opts.subject}"\n${opts.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400)}`,
+      `[EMAIL] to=${opts.to} subject="${opts.subject}"\n${html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400)}`,
     );
     return;
   }
@@ -36,7 +42,8 @@ export async function sendEmail(opts: { to: string; subject: string; html: strin
     from: FROM,
     to: opts.to,
     subject: opts.subject,
-    html: opts.html,
+    html,
+    replyTo: opts.replyTo?.trim() || REPLY_TO,
   });
   if (error) {
     console.error(`[EMAIL] Resend error sending to ${opts.to}:`, error);

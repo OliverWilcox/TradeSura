@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { EMERGENCY_LINE } from "@/lib/compliance/interlock";
 import { resolvePlanTier } from "@/lib/plan-tier";
 import { appUrl } from "@/lib/app-url";
+import { perMonth, tradingNameOf } from "@/lib/engineer";
 
 export function poundsFromPence(pence: number): string {
   return `£${(pence / 100).toFixed(2)}`;
@@ -27,7 +28,8 @@ export async function getPlanDocument(planId: string) {
 
 export async function planDocumentEmailHtml(planId: string) {
   const { plan, tier, clauses } = await getPlanDocument(planId);
-  const brand = plan.engineer.tradingName?.trim() || "Your engineer";
+  const brand = plan.engineer.tradingName?.trim() || plan.engineer.legalName?.trim() || "Your engineer";
+  const legalLine = tradingNameOf(plan.engineer);
   const price = poundsFromPence(plan.priceMonthlyPence ?? 0);
   const portalUrl = `${appUrl()}/portal/${plan.portalToken}`;
   const coolingOffEnds = plan.coolingOffEndsAt?.toLocaleDateString("en-GB", {
@@ -41,12 +43,14 @@ export async function planDocumentEmailHtml(planId: string) {
     .join("\n");
 
   return {
+    // The customer's questions go to their engineer, not TradeSura.
+    replyTo: plan.engineer.email,
     subject: `Your ${brand} care plan — ${tier?.name ?? ""} (${plan.ref})`,
     html: `
 <div style="font-family:sans-serif;max-width:560px">
   <h1 style="margin-bottom:2px">${brand} Care Plans</h1>
   <p style="color:#5E6975;margin-top:0">Plan ${plan.ref} · ${plan.customer.firstName} ${plan.customer.lastName}</p>
-  <p><b>You're on the ${tier?.name ?? ""} plan</b> — ${price}/month by Direct Debit.</p>
+  <p><b>You're on the ${tier?.name ?? ""} plan</b> — ${perMonth(price, plan.engineer.vatRegistered, "/month")} by Direct Debit.</p>
   <h2>What your plan includes</h2>
   ${clauseHtml}
   <h2>What's not included</h2>
@@ -60,7 +64,7 @@ export async function planDocumentEmailHtml(planId: string) {
   Direct Debit Guarantee.</p>
   <p><a href="${portalUrl}">View or manage your plan</a></p>
   <p style="color:#8B95A1;font-size:12px">Smell gas? Call the National Gas Emergency line free: ${EMERGENCY_LINE}.
-  ${brand} Care Plans — powered by TradeSura.</p>
+  ${brand} Care Plans — powered by TradeSura.${legalLine ? `<br>${legalLine}.` : ""}</p>
 </div>`,
   };
 }

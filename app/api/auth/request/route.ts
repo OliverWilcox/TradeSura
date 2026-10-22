@@ -39,11 +39,19 @@ const SignupData = z.object({
     .transform((v) => v.replace(/\s/g, ""))
     .pipe(z.string().regex(GAS_SAFE_NO)),
   gasSafeCardToken: z.string().max(2000).optional(),
-  tradingName: z.string().min(2).max(80),
+  // Build Review 3, section 2 — required for a sole trader; a limited
+  // company (or partnership) with a Companies House name may leave it blank
+  // and trade under that name. Length is checked in the refine below.
+  tradingName: z.string().trim().max(80).default(""),
   businessType: z.enum(["sole_trader", "ltd", "partnership"]),
   companyNumber: z.string().max(20).optional(),
   // Companies House company_status, when picked from the lookup.
   companyStatus: z.string().max(40).optional(),
+  // The registered company name from the Companies House lookup — stored as
+  // Engineer.legalName ("MW Heating is a trading name of Tradesura Ltd").
+  legalName: z.string().trim().max(160).optional(),
+  // "Are you the only owner of the company?" (Build Review 3, section 7).
+  soleOwner: z.boolean().optional(),
   postcode: z.string().max(10).transform(normalisePostcode).pipe(z.string().regex(UK_POSTCODE)),
   // 4 Oct notes, step 3.1 — correspondence address (PAF lookup); the member
   // pack ships here once the badge is live.
@@ -69,6 +77,9 @@ const SignupData = z.object({
 const Body = z.object({
   email: z.string().email().max(200),
   signup: SignupData.superRefine((d, ctx) => {
+    if (d.tradingName.length < 2 && !(d.businessType !== "sole_trader" && (d.legalName?.length ?? 0) >= 2)) {
+      ctx.addIssue({ code: "custom", path: ["tradingName"], message: "required" });
+    }
     // Company number: format-checked always, required for a limited company.
     const n = d.companyNumber ? normaliseCompanyNumber(d.companyNumber) : "";
     if (d.businessType === "ltd" && !n) {
@@ -123,6 +134,8 @@ const FIELD_ERRORS: Record<string, FieldError> = {
     field: "companyNumber",
   },
   companyStatus: { error: "Find your company again, or enter its number instead.", field: "companyNumber" },
+  legalName: { error: "Find your company again, or enter its number instead.", field: "companyNumber" },
+  soleOwner: { error: "Tell us whether you're the only owner of the company.", field: "companyNumber" },
   postcode: { error: "Enter a full UK postcode, like HD9 2TT.", field: "postcode" },
   addressLine1: { error: "That address line is too long — shorten it.", field: "postcode" },
   town: { error: "That town name is too long — shorten it.", field: "postcode" },
@@ -263,7 +276,10 @@ export async function POST(req: Request) {
     // /api/settings and /api/onboarding already got this right when a
     // trading name changes later; this was the one place still keying off
     // the email.
-    const slug = await uniqueSlug(rest.tradingName);
+    // Blank trading name on a company = trade under the Companies House name.
+    const legalName = rest.businessType !== "sole_trader" ? rest.legalName || null : null;
+    const tradingName = rest.tradingName.length >= 2 ? rest.tradingName : (legalName ?? rest.tradingName);
+    const slug = await uniqueSlug(tradingName);
 
     // Resolve a claim code (C5): fold the letter cell into attribution so it
     // reaches the account, even if the client didn't pass it explicitly.
@@ -370,7 +386,9 @@ export async function POST(req: Request) {
         smsSignInEnabled: rest.smsSignInEnabled,
         phoneVerifiedAt: phonePayload.texted === "1" ? new Date() : null,
           appleSub,
-          tradingName: rest.tradingName,
+          tradingName,
+          legalName,
+          soleOwner: rest.businessType === "ltd" ? (rest.soleOwner ?? null) : null,
           businessType: rest.businessType,
           companyNumber:
             rest.businessType === "ltd" && rest.companyNumber

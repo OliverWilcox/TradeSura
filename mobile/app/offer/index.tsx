@@ -222,21 +222,24 @@ export default function OfferStart() {
             // offer needs a live plan AND the badge, not plan-only.
             <Card>
               <Micro>Almost there</Micro>
-              <Text className="mt-1.5 text-[19px] font-bold text-ink">
-                Offers unlock with your Gas Safe badge
+              <Text className="mt-1.5 text-[17px] font-bold text-warn">
+                Unlocks when your Gas Safe check is done (usually within 24 hours)
               </Text>
               <Text className="mt-1 text-[14px] leading-5 text-muted">
-                We&apos;re checking your registration — usually within 24 hours, and we&apos;ll
-                let you know when it&apos;s done. Your plan is ready to go the moment it is.
+                We&apos;ll send a push and an email the moment you&apos;re verified. Your plan is
+                ready to go then.
               </Text>
               <Button variant="ghost" className="mt-4" onPress={() => router.push("/more")}>
                 Check my status
+              </Button>
+              <Button variant="ghost" className="mt-2" onPress={() => router.push("/demo")}>
+                Try it in demo mode
               </Button>
             </Card>
           ) : !me?.stripeConnected ? (
             <Card>
               <Micro>One more step</Micro>
-              <Text className="mt-1.5 text-[19px] font-bold text-ink">Finish your payment setup</Text>
+              <Text className="mt-1.5 text-[17px] font-bold text-warn">Set up payments first</Text>
               {me?.role === "staff" ? (
                 <Text className="mt-1 text-[14px] leading-5 text-muted">
                   Customers can&apos;t join until the business owner finishes payment setup — ask them to
@@ -248,8 +251,11 @@ export default function OfferStart() {
                     Customers pay you by Direct Debit through Stripe. Until your payment setup is
                     done, they can&apos;t join — so finish it before sending an offer.
                   </Text>
-                  <Button className="mt-4" onPress={() => router.push("/onboarding")}>
+                  <Button className="mt-4" onPress={() => router.push("/get-paid")}>
                     Set up payments
+                  </Button>
+                  <Button variant="ghost" className="mt-2" onPress={() => router.push("/demo")}>
+                    Try it in demo mode
                   </Button>
                 </>
               )}
@@ -269,7 +275,7 @@ export default function OfferStart() {
                       className={`rounded-full px-3 py-1.5 ${tierId === t.id ? "bg-flame-tint" : "border border-line bg-panel"}`}
                     >
                       <Text
-                        className={`font-mono font-medium text-xs ${tierId === t.id ? "text-flame-deep" : "text-faint"}`}
+                        className={`tabular-nums font-medium text-xs ${tierId === t.id ? "text-flame-deep" : "text-faint"}`}
                       >
                         {t.name} · £{(t.priceMonthlyPence / 100).toFixed(0)}
                       </Text>
@@ -285,7 +291,7 @@ export default function OfferStart() {
                     className={`rounded-full px-3 py-1.5 ${mode === "existing" ? "bg-flame-tint" : "border border-line bg-panel"}`}
                   >
                     <Text
-                      className={`font-mono font-medium text-xs ${mode === "existing" ? "text-flame-deep" : "text-faint"}`}
+                      className={`tabular-nums font-medium text-xs ${mode === "existing" ? "text-flame-deep" : "text-faint"}`}
                     >
                       From my book
                     </Text>
@@ -295,7 +301,7 @@ export default function OfferStart() {
                     className={`rounded-full px-3 py-1.5 ${mode === "new" ? "bg-flame-tint" : "border border-line bg-panel"}`}
                   >
                     <Text
-                      className={`font-mono font-medium text-xs ${mode === "new" ? "text-flame-deep" : "text-faint"}`}
+                      className={`tabular-nums font-medium text-xs ${mode === "new" ? "text-flame-deep" : "text-faint"}`}
                     >
                       New customer
                     </Text>

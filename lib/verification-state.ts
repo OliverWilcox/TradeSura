@@ -130,14 +130,19 @@ export function standingCopy(
 // needs a live plan AND the badge. The app greys these routes out; this is
 // the server's own check so an old build or a direct call can't skip it.
 // Returns the refusal message, or null when the engineer may send.
+// Review 3 — the offer lock: real offers need the Gas Safe check AND
+// payments set up (stripeChargesEnabled). Omitting the Stripe flag checks
+// the badge only (callers that gate payments elsewhere).
 export function offerBlockedReason(e: {
   gasSafeVerifiedAt: Date | null;
   pausedAt: Date | null;
   bannedAt: Date | null;
+  stripeChargesEnabled?: boolean;
 }): string | null {
   if (e.bannedAt || e.pausedAt) return "Your account is paused — check Account for what to do.";
   if (!e.gasSafeVerifiedAt) {
-    return "Offers unlock once your Gas Safe check is done — usually within 24 hours.";
+    return "Unlocks when your Gas Safe check is done (usually within 24 hours).";
   }
+  if (e.stripeChargesEnabled === false) return "Set up payments first.";
   return null;
 }

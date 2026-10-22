@@ -46,7 +46,7 @@ module.exports = {
         ok: "#3dd68c",
         "ok-tint": "rgba(61,214,140,0.14)",
         // attention / failure
-        warn: "#f2b84b",
+        warn: "#f5b544",
         "warn-tint": "rgba(242,184,75,0.14)",
         danger: "#ff6b6b",
         "danger-tint": "rgba(255,107,107,0.14)",
@@ -74,17 +74,19 @@ module.exports = {
       fontFamily: {
         // System font (Build Spec §1: "No custom webfonts"). Weight comes from
         // the font-{normal,medium,semibold,bold} utilities; these family keys
-        // all resolve to the platform UI font. Money/IDs keep a monospace
-        // fallback so figures stay column-aligned.
+        // all resolve to the platform UI font. Build Review 3 §3: no monospace
+        // anywhere — the `mono*` keys are kept only so stray `font-mono`
+        // classes still resolve, and they map to the app font too. Use
+        // `tabular-nums` where figures need to line up.
         sans: ["System"],
         "sans-medium": ["System"],
         "sans-semibold": ["System"],
         "sans-bold": ["System"],
         disp: ["System"],
         "disp-bold": ["System"],
-        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
-        "mono-medium": ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
-        "mono-semibold": ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        mono: ["System"],
+        "mono-medium": ["System"],
+        "mono-semibold": ["System"],
       },
     },
   },

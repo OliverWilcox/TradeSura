@@ -3,7 +3,7 @@ import { View, Text, ScrollView, Share, Linking, Pressable } from "react-native"
 import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
-import { AppHeader, Card, Micro, Pill, Button } from "@/components/ui";
+import { AppHeader, Card, Pill, Button, SectionHeading } from "@/components/ui";
 import { Skeleton, Bone, TextBone, LoadingImage } from "@/components/skeleton";
 import { Icon, type IconName } from "@/components/icon";
 import { RingMark } from "@/components/ring-mark";
@@ -212,7 +212,7 @@ export default function Referral() {
             </View>
 
             <Card>
-              <Micro className="text-flame">The deal</Micro>
+              <SectionHeading>The deal</SectionHeading>
               <View className="mt-2 flex-row items-center gap-4">
                 <Text className="w-[104px] text-[46px] font-extrabold text-copper">{data.firstYearPercent}%</Text>
                 <Text className="flex-1 text-[16px] leading-[22px] text-ink">
@@ -232,7 +232,7 @@ export default function Referral() {
             </Card>
 
             <Card>
-              <Micro className="text-flame">For example</Micro>
+              <SectionHeading>For example</SectionHeading>
               <Text className="mt-1.5 text-[15px] text-ink">
                 An engineer you invite gets {EXAMPLE_CUSTOMERS} customers on £{EXAMPLE_PLAN_PENCE / 100} plans.
               </Text>
@@ -246,7 +246,7 @@ export default function Referral() {
             </Card>
 
             <Card>
-              <Micro className="text-flame">Your invite link</Micro>
+              <SectionHeading>Your invite link</SectionHeading>
               <Text selectable className="mt-1.5 text-[19px] font-bold text-ink">
                 {data.link.replace(/^https?:\/\/(www\.)?/, "")}
               </Text>
@@ -303,13 +303,13 @@ export default function Referral() {
               <Text className="mt-2 font-sans text-[11px] text-faint">
                 Or let them scan or copy your invite link.
               </Text>
-              <Text selectable className="mt-1.5 font-mono text-xs text-flame-deep">
+              <Text selectable className="mt-1.5 tabular-nums text-xs text-flame-deep">
                 {data.link}
               </Text>
             </Card>
 
             <Card>
-              <Micro className="mb-1.5">Your referrals</Micro>
+              <SectionHeading className="mb-1.5">Your referrals</SectionHeading>
               {data.invitees.length === 0 ? (
                 <Text className="py-1 font-sans text-xs text-muted">
                   No referrals yet. Share your link to get started.
@@ -326,7 +326,7 @@ export default function Referral() {
                         <Text className="font-sans text-xs text-muted">
                           {r.activePlans} plan{r.activePlans === 1 ? "" : "s"} live · you get {r.ratePercent}% of our fee
                         </Text>
-                        <Text className="font-mono text-sm font-semibold text-copper">
+                        <Text className="tabular-nums text-sm font-semibold text-copper">
                           {pounds(r.earnedPence)}
                         </Text>
                       </View>
@@ -344,7 +344,7 @@ export default function Referral() {
             </Card>
 
             <Card>
-              <Micro className="mb-1">The deal, plainly</Micro>
+              <SectionHeading className="mb-1">The deal, plainly</SectionHeading>
               <Text className="font-sans text-xs text-muted">
                 Every installer is an affiliate. For each engineer you bring in, you earn{" "}
                 {data.firstYearPercent}% of TradeSura&apos;s fee on every plan they sell for their

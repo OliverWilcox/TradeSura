@@ -118,7 +118,7 @@ export default function PriceReview() {
             <Card>
               <Micro className="mb-1 text-center">New monthly price</Micro>
               <View className="flex-row items-center justify-center py-2">
-                <Text className="font-mono text-3xl font-semibold text-ink">£</Text>
+                <Text className="tabular-nums text-3xl font-semibold text-ink">£</Text>
                 <TextInput
                   value={priceText}
                   onChangeText={(v) => {
@@ -128,7 +128,7 @@ export default function PriceReview() {
                   keyboardType="number-pad"
                   maxLength={4}
                   accessibilityLabel="New monthly price in pounds"
-                  className="w-[84px] p-0 text-center font-mono text-3xl font-semibold text-ink"
+                  className="w-[84px] p-0 text-center tabular-nums text-3xl font-semibold text-ink"
                 />
               </View>
               <Text className="text-center font-sans text-xs text-muted">
@@ -148,7 +148,7 @@ export default function PriceReview() {
                 eligible.map((c, i) => (
                   <View key={i} className="flex-row justify-between border-b border-line-soft py-2 last:border-b-0">
                     <Text className="font-sans text-sm text-ink">{c.name}</Text>
-                    <Text className="font-mono text-xs text-muted">
+                    <Text className="tabular-nums text-xs text-muted">
                       {pounds(c.pricePence)} → {newPence >= MIN_PENCE ? pounds(newPence) : "—"}
                     </Text>
                   </View>

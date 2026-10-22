@@ -217,7 +217,7 @@ export default function CustomerDetail() {
             <View className="flex-row items-baseline justify-between">
               <Text className="font-bold text-base text-ink">{c.plan.tierName}</Text>
               {c.plan.priceMonthlyPence !== null && (
-                <Text className="font-mono font-extrabold text-ok">
+                <Text className="tabular-nums font-extrabold text-ok">
                   £{(c.plan.priceMonthlyPence / 100).toFixed(0)}
                   <Text className="text-xs font-bold text-muted">/month</Text>
                 </Text>
@@ -258,7 +258,7 @@ export default function CustomerDetail() {
                   c.serviceOverdue ? (
                     <Pill tone="danger">OVERDUE</Pill>
                   ) : (
-                    <Text className="font-mono text-sm text-ink">{d(c.nextServiceDue)}</Text>
+                    <Text className="tabular-nums text-sm text-ink">{d(c.nextServiceDue)}</Text>
                   )
                 }
               />
@@ -272,7 +272,7 @@ export default function CustomerDetail() {
         {/* Part 10 — Contact card. */}
         <Card>
           <Micro className="mb-1">Contact</Micro>
-          <RowLine left="Mobile" right={<Text className="font-mono text-sm text-ink">{c.phone}</Text>} />
+          <RowLine left="Mobile" right={<Text className="tabular-nums text-sm text-ink">{c.phone}</Text>} />
           {c.email && <RowLine left="Email" right={c.email} />}
           {c.address && <RowLine left="Address" right={c.address} />}
         </Card>
@@ -286,7 +286,7 @@ export default function CustomerDetail() {
               <View key={i} className="flex-row items-center gap-2 py-1.5">
                 <Text>{t.icon}</Text>
                 <Text className="flex-1 font-sans text-[13px] text-ink">{t.text}</Text>
-                <Text className="font-mono text-[10px] text-faint">{d(t.at)}</Text>
+                <Text className="tabular-nums text-[10px] text-faint">{d(t.at)}</Text>
               </View>
             ))
           )}
@@ -298,7 +298,7 @@ export default function CustomerDetail() {
           </Button>
         )}
         {texted && (
-          <Text className="text-center font-semibold text-xs text-ok">Sent.</Text>
+          <Text className="text-center font-semibold text-xs text-flame">Sent.</Text>
         )}
 
         {c.plan && !ending && !c.viewerIsStaff && (

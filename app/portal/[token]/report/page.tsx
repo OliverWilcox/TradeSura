@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { brandName } from "@/lib/engineer";
+import { brandName, tradingNameOf } from "@/lib/engineer";
 import { CustomerShell } from "@/components/shells";
 import { ReportForm } from "@/components/report-form";
 
@@ -14,7 +14,7 @@ export default async function ReportPage({ params }: { params: Promise<{ token: 
 
   const brand = brandName(plan.engineer);
   return (
-    <CustomerShell tradingName={brand} sub={`Report a problem · Plan ${plan.ref}`}>
+    <CustomerShell tradingName={brand} legalLine={tradingNameOf(plan.engineer)} sub={`Report a problem · Plan ${plan.ref}`}>
       <ReportForm token={token} />
     </CustomerShell>
   );

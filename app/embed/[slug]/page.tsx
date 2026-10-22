@@ -5,6 +5,7 @@ import { track } from "@/lib/track";
 import { appUrl } from "@/lib/app-url";
 import { clauseLine } from "@/lib/clauses";
 import { profileUrl } from "@/lib/public-url";
+import { tradingNameOf } from "@/lib/engineer";
 import { JOIN_BTN, PlanTierCard } from "@/components/plan-tier-card";
 import { EmbedResizer } from "@/components/embed-resizer";
 
@@ -57,12 +58,17 @@ export default async function EmbedPlans({
             const lines = [
               ...t.clauses
                 .sort((a, b) => a.clause.sortOrder - b.clause.sortOrder)
-                .map((tc) => clauseLine(tc.clause)),
+                .map((tc) => clauseLine(tc.clause, t.clauseRates)),
               ...t.customLabels,
             ];
             return (
               <div key={t.id} className="flex flex-col gap-2.5">
-                <PlanTierCard name={t.name} priceMonthlyPence={t.priceMonthlyPence} lines={lines} />
+                <PlanTierCard
+                  name={t.name}
+                  priceMonthlyPence={t.priceMonthlyPence}
+                  vatRegistered={engineer.vatRegistered}
+                  lines={lines}
+                />
                 <a href={`${base}?src=website&tier=${t.id}`} target="_blank" rel="noopener" className={JOIN_BTN}>
                   Join
                 </a>
@@ -74,6 +80,9 @@ export default async function EmbedPlans({
       <p className="font-mono text-[10px] text-faint text-center pt-2.5">
         Monthly by Direct Debit · cancel anytime · powered by TradeSura
       </p>
+      {tradingNameOf(engineer) && (
+        <p className="font-mono text-[10px] text-faint text-center pt-1">{tradingNameOf(engineer)}</p>
+      )}
     </div>
   );
 }

@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { Card, btnClass } from "@/components/ui";
+import { perMonth } from "@/lib/engineer";
 
 export function SignupConfirmed(props: {
   token: string;
   tierName: string;
   priceMonthlyPence: number;
+  vatRegistered?: boolean;
   initialStatus: string;
   portalToken: string | null;
 }) {
@@ -58,7 +60,7 @@ export function SignupConfirmed(props: {
       <Card className="bg-ok-tint border-ok-tint text-center py-6">
         <div className="text-3xl">✓</div>
         <p className="font-semibold mt-1">You&apos;re on the {props.tierName} plan</p>
-        <p className="text-xs text-muted mt-1">£{price}/mo by Direct Debit</p>
+        <p className="text-xs text-muted mt-1">{perMonth(`£${price}`, props.vatRegistered, "/mo")} by Direct Debit</p>
       </Card>
       <Card>
         <p className="text-sm">

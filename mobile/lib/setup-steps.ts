@@ -20,13 +20,24 @@ const FEE_RATE = 0.2;
 
 export function setupSteps(me: Me | null): SetupStep[] {
   const plan = me?.firstPlan ?? null;
-  const yearlyKeep = Math.round(((plan?.priceMonthlyPence ?? 1200) * (1 - FEE_RATE) * 12) / 100);
+  const price = plan?.priceMonthlyPence ?? 1200;
+  // Our 20% rounds down to the penny, in the engineer's favour.
+  const yearlyKeep = Math.round(((price - Math.floor(price * FEE_RATE)) * 12) / 100);
   return [
     {
       key: "plan",
       title: "Build your first plan",
-      sub: plan ? `${plan.name} · ` : "Start from Boiler Care at ",
-      money: plan ? `£${(plan.priceMonthlyPence / 100).toFixed(2).replace(/\.00$/, "")} a month` : "£12",
+      // Review 3 — don't say customers can join before they actually can.
+      sub: plan
+        ? me?.gasSafeVerifiedAt && me?.stripeConnected
+          ? `${plan.name} · `
+          : "Plan ready. Customers can join once payments are set up and your Gas Safe check is done."
+        : "Start from Boiler Care at ",
+      money: plan
+        ? me?.gasSafeVerifiedAt && me?.stripeConnected
+          ? `£${(plan.priceMonthlyPence / 100).toFixed(2).replace(/\.00$/, "")} a month`
+          : undefined
+        : "£12",
       done: Boolean(me?.hasPlan),
       cta: "Build my plan",
       // Opens the builder with its "Back to setup" bar.

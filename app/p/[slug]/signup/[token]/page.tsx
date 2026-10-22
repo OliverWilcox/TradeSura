@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { brandName } from "@/lib/engineer";
+import { brandName, tradingNameOf } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { CustomerShell } from "@/components/shells";
 import { SignupTiers } from "@/components/signup-tiers";
@@ -48,6 +48,7 @@ export default async function SignupPage({
   return (
     <CustomerShell
       tradingName={brand}
+      legalLine={tradingNameOf(plan.engineer)}
       sub={plan.engineer.gasSafeVerifiedAt ? "Gas Safe verified · Backed by TradeSura" : "Backed by TradeSura"}
     >
       <p className="text-sm">
@@ -57,6 +58,7 @@ export default async function SignupPage({
       <SignupTiers
         token={token}
         engineerName={brand}
+        vatRegistered={plan.engineer.vatRegistered}
         pinnedTierId={pinnedTier?.id}
         pinnedGreeting={
           pinnedTier ? `${plan.engineer.firstName ?? brand} suggested ${pinnedTier.name}` : null
@@ -69,7 +71,7 @@ export default async function SignupPage({
           lines: [
             ...t.clauses
               .sort((a, b) => a.clause.sortOrder - b.clause.sortOrder)
-              .map((tc) => clauseLine(tc.clause)),
+              .map((tc) => clauseLine(tc.clause, t.clauseRates)),
             ...t.customLabels,
           ],
         }))}

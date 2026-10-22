@@ -61,7 +61,7 @@ export async function GET() {
       priceMonthlyPence: t.priceMonthlyPence,
       lines: t.clauses
         .sort((a, b) => a.clause.sortOrder - b.clause.sortOrder)
-        .map((tc) => clauseLine(tc.clause)),
+        .map((tc) => clauseLine(tc.clause, t.clauseRates)),
     })),
   });
 }
@@ -76,7 +76,7 @@ export async function POST(req: Request) {
   const [gateBusiness, gateActor] = await Promise.all([
     prisma.engineer.findUnique({
       where: { id: engineerId },
-      select: { gasSafeVerifiedAt: true, pausedAt: true, bannedAt: true },
+      select: { gasSafeVerifiedAt: true, pausedAt: true, bannedAt: true, stripeChargesEnabled: true },
     }),
     prisma.engineer.findUnique({ where: { id: actor.actorId }, select: { gasSafeVerifiedAt: true } }),
   ]);

@@ -18,8 +18,8 @@ type TierDetail = {
   clauseIds: string[];
 };
 
-const STATUS_PILL: Record<TierDetail["status"], { tone: "ok" | "off"; label: (n: number) => string }> = {
-  LIVE: { tone: "ok", label: (n) => `Live · ${n} customer${n === 1 ? "" : "s"}` },
+const STATUS_PILL: Record<TierDetail["status"], { tone: "info" | "off"; label: (n: number) => string }> = {
+  LIVE: { tone: "info", label: (n) => `Live · ${n} customer${n === 1 ? "" : "s"}` },
   STOPPED: { tone: "off", label: (n) => `Stopped · ${n} still on this plan` },
   DRAFT: { tone: "off", label: () => "Draft" },
 };
@@ -168,7 +168,7 @@ export default function EditPlan() {
               left="Price"
               right={
                 <View className="flex-row items-center gap-1.5">
-                  <Text className="font-mono text-sm text-ok">
+                  <Text className="tabular-nums text-sm text-ok">
                     £{(tier.priceMonthlyPence / 100).toFixed(0)}/mo
                   </Text>
                   <Chevron />

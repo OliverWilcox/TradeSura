@@ -110,11 +110,11 @@ export default function Team() {
               <View className="mt-2 flex-row gap-4">
                 <View>
                   <Micro>This week</Micro>
-                  <Text className="font-mono text-base text-ink">{s.signUpsThisWeek}</Text>
+                  <Text className="tabular-nums text-base text-ink">{s.signUpsThisWeek}</Text>
                 </View>
                 <View>
                   <Micro>All time</Micro>
-                  <Text className="font-mono text-base text-ink">{s.signUpsTotal}</Text>
+                  <Text className="tabular-nums text-base text-ink">{s.signUpsTotal}</Text>
                 </View>
               </View>
               {removing === s.id ? (

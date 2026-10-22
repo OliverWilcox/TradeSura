@@ -96,7 +96,7 @@ export default function WebsiteScreen() {
                 <Text className="text-[13px] font-bold uppercase tracking-[0.1em] text-flame">Website code</Text>
               </View>
               <View className="mt-2.5 rounded-xl border border-line-strong bg-bg p-3">
-                <Text selectable className="font-mono text-[12.5px] leading-[19px] text-ink">
+                <Text selectable className="tabular-nums text-[12.5px] leading-[19px] text-ink">
                   {data.snippet}
                 </Text>
               </View>
@@ -147,7 +147,7 @@ export default function WebsiteScreen() {
               <Text className="mt-1.5 text-[14px] text-muted">
                 Add a &ldquo;Care plans&rdquo; button or menu item that points here:
               </Text>
-              <Text selectable className="mt-1.5 font-mono text-[13px] text-ink">
+              <Text selectable className="mt-1.5 tabular-nums text-[13px] text-ink">
                 {data.link}
               </Text>
               <Pressable onPress={() => copy("link", data.link)} className="mt-2.5">

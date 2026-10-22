@@ -85,6 +85,7 @@ export async function cancelPlan(
         : `${brand} has ended your ${plan.tier?.name ?? ""} care plan (${plan.ref})`;
     await sendEmail({
       to: plan.customer.email,
+      replyTo: plan.engineer.email,
       subject: `Your ${brand} care plan is cancelled (${plan.ref})`,
       html: `<p>Hi ${plan.customer.firstName},</p>
 <p>${opener} and no more payments will be collected by Direct Debit. If a payment was taken within

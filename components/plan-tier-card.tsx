@@ -2,6 +2,7 @@
 // targets (and the app's "what your customer sees" preview): white card,
 // navy text, blue ticks, green "Cancel anytime". The 2026 guide wins over
 // older colour rules (CLAUDE.md).
+import { perMonth } from "@/lib/engineer";
 
 function pounds(pence: number) {
   return pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
@@ -17,6 +18,7 @@ export function PlanTierCard({
   selected = false,
   recommended = false,
   compact = false,
+  vatRegistered = false,
 }: {
   name: string;
   priceMonthlyPence: number;
@@ -25,6 +27,8 @@ export function PlanTierCard({
   recommended?: boolean;
   /** Name and price only — the summary above checkout. */
   compact?: boolean;
+  /** R5 — "£X a month including VAT" for a VAT-registered engineer. */
+  vatRegistered?: boolean;
 }) {
   return (
     <div
@@ -38,7 +42,7 @@ export function PlanTierCard({
         </span>
       )}
       <div className="text-[21px] font-bold leading-tight">{name}</div>
-      <div className="text-[15px] mt-0.5">{pounds(priceMonthlyPence)} a month</div>
+      <div className="text-[15px] mt-0.5">{perMonth(pounds(priceMonthlyPence), vatRegistered)}</div>
       {!compact && (
         <>
           <span className="inline-block mt-2.5 rounded-full bg-[#C9F2DA] text-[#14532D] text-[12.5px] px-3 py-0.5">

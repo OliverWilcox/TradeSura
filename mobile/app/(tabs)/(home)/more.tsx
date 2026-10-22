@@ -10,6 +10,7 @@ import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
 import { AppHeader, Avatar, Card, Pill, RowLine, Button, Chevron, OpeningStripe } from "@/components/ui";
 import { Skeleton, TextBone, RowBone, LoadingImage } from "@/components/skeleton";
 import { StaffAccount } from "@/components/staff-account";
+import { Toggle } from "@/components/toggle";
 
 type MoreData = {
   totalPence: number;
@@ -30,6 +31,8 @@ type Settings = {
   phoneVerifiedAt: string | null;
   businessType: string | null;
   companyNumber: string | null;
+  legalName?: string | null;
+  vatRegistered?: boolean;
   postcode: string | null;
   standing: { state: string } & Status;
   gasSafe: Status;
@@ -80,6 +83,9 @@ function OwnerAccount() {
   const [stripeBusy, setStripeBusy] = useState(false);
   const [stripeError, setStripeError] = useState<string | null>(null);
 
+  const [vatBusy, setVatBusy] = useState(false);
+  const [vatError, setVatError] = useState<string | null>(null);
+
   const [flushBusy, setFlushBusy] = useState(false);
   const [flushResult, setFlushResult] = useState<string | null>(null);
 
@@ -109,6 +115,11 @@ function OwnerAccount() {
     setRefreshing(false);
   }
 
+  // Build Review 3, section 2 — a company may leave its trading name blank
+  // and trade under its Companies House name; a sole trader can't.
+  const legalFallback =
+    settings && settings.businessType !== "sole_trader" ? settings.legalName?.trim() || null : null;
+
   const dirty = settings
     ? tradingName !== settings.tradingName ||
       firstName !== (settings.firstName ?? "") ||
@@ -121,14 +132,14 @@ function OwnerAccount() {
       setSettingsError("Enter your first and last name.");
       return;
     }
-    if (tradingName.trim().length < 2) {
+    if (tradingName.trim().length < 2 && !legalFallback) {
       setSettingsError("Enter your trading name — at least 2 characters.");
       return;
     }
     setSavingSettings(true);
     setSettingsError(null);
     try {
-      await api("/api/settings", {
+      const saved = await api<{ tradingName?: string }>("/api/settings", {
         method: "PATCH",
         body: JSON.stringify({
           tradingName,
@@ -137,7 +148,10 @@ function OwnerAccount() {
           logoUrl: settings.logoUrl,
         }),
       });
-      setSettings({ ...settings, tradingName, firstName: firstName.trim(), lastName: lastName.trim() });
+      // A blank name on a company comes back as its Companies House name.
+      const name = saved.tradingName ?? tradingName;
+      setTradingName(name);
+      setSettings({ ...settings, tradingName: name, firstName: firstName.trim(), lastName: lastName.trim() });
       setSavedSettings(true);
       await refreshMe();
     } catch (e) {
@@ -209,6 +223,25 @@ function OwnerAccount() {
       setStripeError(e instanceof ApiError ? e.message : "Couldn't start payment setup.");
     } finally {
       setStripeBusy(false);
+    }
+  }
+
+  // R5 (Build Review 3) — customer pages show "£X a month including VAT"
+  // while this is on. Saved straight away, like any iOS switch.
+  async function setVat(next: boolean) {
+    if (!settings) return;
+    const prev = Boolean(settings.vatRegistered);
+    setSettings({ ...settings, vatRegistered: next });
+    setVatBusy(true);
+    setVatError(null);
+    try {
+      await api("/api/settings/vat", { method: "POST", body: JSON.stringify({ vatRegistered: next }) });
+      await refreshMe();
+    } catch (e) {
+      setSettings((s) => (s ? { ...s, vatRegistered: prev } : s));
+      setVatError(e instanceof ApiError ? e.message : "Couldn't save that — try again.");
+    } finally {
+      setVatBusy(false);
     }
   }
 
@@ -303,7 +336,7 @@ function OwnerAccount() {
                 <RowLine
                   left="Mobile"
                   right={
-                    <Text className="font-mono text-sm text-ink">
+                    <Text className="tabular-nums text-sm text-ink">
                       {settings.phone}
                       {settings.phoneVerifiedAt ? " ✓" : ""}
                     </Text>
@@ -360,8 +393,29 @@ function OwnerAccount() {
               setSavedSettings(false);
               setSettingsError(null);
             }}
+            placeholder={legalFallback ?? undefined}
             className="mt-1 min-h-[48px] rounded-[10px] border border-line bg-paper px-3.5 font-sans text-[16px] text-ink"
           />
+          {legalFallback && (
+            <Text className="mt-1 font-sans text-[11px] text-faint">Leave blank to use {legalFallback}</Text>
+          )}
+          {settings && (
+            <View className="mt-3 flex-row items-center justify-between gap-3">
+              <View className="shrink">
+                <Text className="font-sans text-sm text-ink">VAT registered</Text>
+                <Text className="font-sans text-[11px] text-faint">
+                  Customers see your prices as &ldquo;including VAT&rdquo;.
+                </Text>
+              </View>
+              <Toggle
+                value={Boolean(settings.vatRegistered)}
+                onValueChange={setVat}
+                disabled={vatBusy}
+                accessibilityLabel="VAT registered"
+              />
+            </View>
+          )}
+          {vatError && <Text className="mt-1.5 font-sans text-xs text-danger">{vatError}</Text>}
           <Text className="mt-3 font-sans text-xs text-muted">Logo (optional)</Text>
           <Pressable
             onPress={pickLogo}
@@ -392,7 +446,7 @@ function OwnerAccount() {
               <RowLine
                 left="Your page"
                 right={
-                  <Text className="font-mono text-xs text-flame-deep">tradesura.com/p/{settings.slug}</Text>
+                  <Text className="tabular-nums text-xs text-flame-deep">tradesura.com/p/{settings.slug}</Text>
                 }
               />
               <Text className="mt-1 font-sans text-[11px] text-faint">

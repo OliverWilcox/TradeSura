@@ -8,7 +8,9 @@ import { standingCopy, gasSafeStatus, paymentsStatus } from "@/lib/verification-
 import { smsAvailable } from "@/lib/contact-verification";
 
 const Body = z.object({
-  tradingName: z.string().min(2).max(80),
+  // Blank is allowed for a company with a Companies House name on file —
+  // it then trades under that name (Build Review 3, section 2).
+  tradingName: z.string().trim().max(80),
   // Optional so older clients that only send the trading name keep working.
   // Accounts from older signup builds have no name at all — this is how the
   // engineer fills it in (greeting, avatar initials).
@@ -37,6 +39,8 @@ export async function GET() {
     phoneVerifiedAt: engineer.phoneVerifiedAt,
     businessType: engineer.businessType,
     companyNumber: engineer.companyNumber,
+    legalName: engineer.legalName,
+    vatRegistered: engineer.vatRegistered,
     postcode: engineer.postcode,
     // Part 6.4/17.3 — the same truth source the dashboard strip and Payouts'
     // banner read. `standing` is the collapsed single-line ladder (used only
@@ -63,16 +67,28 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: messages[field] ?? "Check the form and try again." }, { status: 400 });
   }
 
-  const slug = await uniqueSlug(parsed.data.tradingName, engineerId);
+  let tradingName = parsed.data.tradingName;
+  if (tradingName.length < 2) {
+    const current = await prisma.engineer.findUnique({
+      where: { id: engineerId },
+      select: { legalName: true, businessType: true },
+    });
+    const legal = current?.businessType !== "sole_trader" ? current?.legalName?.trim() : null;
+    if (!legal) {
+      return NextResponse.json({ error: "Enter your trading name — at least 2 characters." }, { status: 400 });
+    }
+    tradingName = legal;
+  }
+  const slug = await uniqueSlug(tradingName, engineerId);
   await prisma.engineer.update({
     where: { id: engineerId },
     data: {
-      tradingName: parsed.data.tradingName,
+      tradingName,
       ...(parsed.data.firstName ? { firstName: parsed.data.firstName } : {}),
       ...(parsed.data.lastName ? { lastName: parsed.data.lastName } : {}),
       logoUrl: parsed.data.logoUrl || null,
       slug,
     },
   });
-  return NextResponse.json({ ok: true, slug });
+  return NextResponse.json({ ok: true, slug, tradingName });
 }

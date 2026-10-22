@@ -16,6 +16,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Lockup } from "@/components/ui";
 import { AuthBackdrop } from "@/components/auth-backdrop";
 import { Icon } from "@/components/icon";
+import { PoweredByStripe } from "@/components/stripe-badge";
 import { EXAMPLE_CUSTOMERS, formatPounds, yearlyPence } from "@/lib/earnings";
 
 type ClaimResolved =
@@ -174,7 +175,7 @@ export default function Welcome() {
           bounces={false}
         >
           <Animated.View style={fadeRise(brandAnim)}>
-            <Text className="font-mono text-[10px] font-bold uppercase tracking-[3px] text-brand-blue-lift">
+            <Text className="tabular-nums text-[10px] font-bold uppercase tracking-[3px] text-brand-blue-lift">
               Care plan platform
             </Text>
             <View className="mt-2.5">
@@ -261,7 +262,7 @@ export default function Welcome() {
                 className="flex-1 items-center rounded-xl border border-white/15 bg-white/[0.08] py-2.5"
               >
                 <Text className="text-[15px] font-bold text-white">{big}</Text>
-                <Text className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-night-muted">
+                <Text className="mt-0.5 tabular-nums text-[11px] uppercase tracking-wider text-night-muted">
                   {small}
                 </Text>
               </View>
@@ -289,14 +290,15 @@ export default function Welcome() {
             >
               <Text className="text-[14px] font-semibold text-white">I already have an account</Text>
             </Pressable>
-            <Text className="mt-3 text-center font-mono text-[9px] uppercase tracking-wider text-night-muted">
+            <Text className="mt-3 text-center tabular-nums text-[11px] uppercase tracking-wider text-night-muted">
               Gas Safe verified members
             </Text>
-            {/* 4 Oct notes 3.10 — plain small grey text; the boxed badge
-                read as a third button. */}
-            <Text className="mb-1 mt-1.5 text-center text-[9px] text-night-muted">
-              Powered by <Text className="font-bold">stripe</Text>
-            </Text>
+            {/* Build Review 3 §3 — the official badge, never typed text.
+                Outline-only white vector (not the boxed pill), so it still
+                doesn't read as a third button (4 Oct notes 3.10). */}
+            <View className="mb-1 mt-2 items-center opacity-80">
+              <PoweredByStripe width={92} />
+            </View>
           </Animated.View>
         </ScrollView>
       </SafeAreaView>

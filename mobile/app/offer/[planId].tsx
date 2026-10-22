@@ -77,16 +77,16 @@ export default function OfferLive() {
         </Text>
         <Text className="text-center text-sm text-muted">
           {status.customerFirstName} {status.customerLastName} is on a plan at{" "}
-          <Text className="font-mono font-bold text-ink">
+          <Text className="tabular-nums font-bold text-ink">
             £{Math.round((status.priceMonthlyPence ?? 0) / 100)}/mo
           </Text>
           .
         </Text>
-        <Text className="font-mono text-3xl font-extrabold text-copper">
+        <Text className="tabular-nums text-3xl font-extrabold text-copper">
           £{Math.round(status.incomeMonthlyPence / 100)}
           <Text className="text-base font-bold text-muted"> /month</Text>
         </Text>
-        <Text className="font-mono text-xs text-faint">
+        <Text className="tabular-nums text-xs text-faint">
           locked in across {status.activePlans} active plan{status.activePlans === 1 ? "" : "s"}
         </Text>
         <Button onPress={() => router.replace("/")} className="mt-4 w-64">
@@ -125,7 +125,7 @@ export default function OfferLive() {
             </Skeleton>
           ) : (
             <>
-              <Text selectable className="font-mono text-xs text-muted">
+              <Text selectable className="tabular-nums text-xs text-muted">
                 {info.link}
               </Text>
               <Button
@@ -165,7 +165,7 @@ export default function OfferLive() {
             {STEPS.map((step, i) => (
               <Text
                 key={step}
-                className={`font-mono font-medium text-[10px] ${
+                className={`tabular-nums font-medium text-[10px] ${
                   i < idx ? "text-flame-deep" : i === idx ? "text-flame" : "text-faint"
                 }`}
               >
@@ -184,11 +184,11 @@ export default function OfferLive() {
           <Card className="border-copper-tint bg-copper-tint">
             <Text className="font-sans text-xs text-copper-deep">
               {status.customerFirstName} signs at{" "}
-              <Text className="font-mono font-semibold">
+              <Text className="tabular-nums font-semibold">
                 {status.priceMonthlyPence ? `£${Math.round(status.priceMonthlyPence / 100)}/mo` : "£15/mo"}
               </Text>{" "}
               → your income becomes{" "}
-              <Text className="font-mono font-semibold">
+              <Text className="tabular-nums font-semibold">
                 £
                 {Math.floor(
                   (status.incomeMonthlyPence + (status.priceMonthlyPence ?? 1500)) / 100,

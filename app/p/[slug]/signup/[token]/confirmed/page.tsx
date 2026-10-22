@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { brandName } from "@/lib/engineer";
+import { brandName, tradingNameOf } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { CustomerShell } from "@/components/shells";
 import { SignupConfirmed } from "@/components/signup-confirmed";
@@ -32,11 +32,12 @@ export default async function ConfirmedPage({
 
   const brand = brandName(plan.engineer);
   return (
-    <CustomerShell tradingName={brand} sub={`Plan ${plan.ref} · ${plan.customer.firstName} ${plan.customer.lastName}`}>
+    <CustomerShell tradingName={brand} legalLine={tradingNameOf(plan.engineer)} sub={`Plan ${plan.ref} · ${plan.customer.firstName} ${plan.customer.lastName}`}>
       <SignupConfirmed
         token={token}
         tierName={plan.tier?.name ?? "your"}
         priceMonthlyPence={plan.priceMonthlyPence ?? 0}
+        vatRegistered={plan.engineer.vatRegistered}
         initialStatus={plan.status}
         portalToken={plan.status === "ACTIVE" ? plan.portalToken : null}
       />

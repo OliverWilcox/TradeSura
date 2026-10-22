@@ -10,8 +10,58 @@
 //
 // One shared helper, used everywhere a trading name needs a safe display
 // fallback, so this class of bug can't reappear one call site at a time.
-export function brandName<T extends { tradingName: string | null; slug: string }>(
+export function brandName<T extends { tradingName: string | null; legalName?: string | null; slug: string }>(
   engineer: T,
 ): string {
-  return engineer.tradingName?.trim() || engineer.slug;
+  return displayName(engineer);
+}
+
+type Named = { tradingName: string | null; legalName?: string | null; slug: string };
+
+// Build Review 3, section 2 — a limited company may leave its trading name
+// blank and trade under its Companies House name. Sign-up copies that name
+// into tradingName in that case, so brandName() already covers it; this is
+// the belt-and-braces fallback for a row where only legalName is set.
+export function displayName(engineer: Named): string {
+  return engineer.tradingName?.trim() || engineer.legalName?.trim() || engineer.slug;
+}
+
+// Companies House names arrive upper case ("TRADESURA LTD"); customer pages
+// show them as a name ("Tradesura Ltd").
+export function legalNameDisplay(legalName: string): string {
+  return legalName
+    .trim()
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (m) => m.toUpperCase())
+    .replace(/'S\b/g, "'s")
+    .replace(/\b(Plc|Llp|Llc|Uk)\b/g, (m) => m.toUpperCase())
+    .replace(/(?!^)\b(And|Of|The|For|In|On|At)\b/g, (m) => m.toLowerCase());
+}
+
+// Compared without case, punctuation or a trailing Ltd/Limited, so "Smith
+// Heating" trading as SMITH HEATING LTD isn't told it's a trading name.
+function nameKey(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9& ]/g, " ")
+    .replace(/\b(ltd|limited|llp|plc)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Build Review 3, section 2 — "When a trading name differs from the legal
+// name, customer pages show 'MW Heating is a trading name of Tradesura Ltd'".
+// Null when there's no legal name on file or the two are the same name.
+export function tradingNameOf(engineer: Named): string | null {
+  const legal = engineer.legalName?.trim();
+  const trading = engineer.tradingName?.trim();
+  if (!legal || !trading || nameKey(legal) === nameKey(trading)) return null;
+  return `${trading} is a trading name of ${legalNameDisplay(legal)}`;
+}
+
+// R5 — prices show including VAT where the engineer is VAT registered;
+// otherwise the existing wording is unchanged. `plain` is how the call site
+// already wrote it ("/mo", "/month", " a month").
+export function perMonth(priceLabel: string, vatRegistered: boolean | null | undefined, plain = " a month"): string {
+  return vatRegistered ? `${priceLabel} a month including VAT` : `${priceLabel}${plain}`;
 }

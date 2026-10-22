@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { brandName } from "@/lib/engineer";
+import { brandName, tradingNameOf } from "@/lib/engineer";
 import { CustomerShell } from "@/components/shells";
 import { CancelFlow } from "@/components/cancel-flow";
 import { poundsFromPence } from "@/lib/plan-doc";
@@ -15,12 +15,13 @@ export default async function ManagePage({ params }: { params: Promise<{ token: 
 
   const brand = brandName(plan.engineer);
   return (
-    <CustomerShell tradingName={brand} sub={`Manage plan · ${plan.ref}`}>
+    <CustomerShell tradingName={brand} legalLine={tradingNameOf(plan.engineer)} sub={`Manage plan · ${plan.ref}`}>
       <CancelFlow
         token={token}
         status={plan.status}
         tierName={plan.tier?.name ?? "your"}
         priceLabel={poundsFromPence(plan.priceMonthlyPence ?? 0)}
+        vatRegistered={plan.engineer.vatRegistered}
         coolingOffEndsAt={plan.coolingOffEndsAt?.toISOString() ?? null}
       />
     </CustomerShell>
