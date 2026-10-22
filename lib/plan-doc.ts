@@ -5,6 +5,7 @@ import { EMERGENCY_LINE } from "@/lib/compliance/interlock";
 import { resolvePlanTier } from "@/lib/plan-tier";
 import { appUrl } from "@/lib/app-url";
 import { perMonth, tradingNameOf } from "@/lib/engineer";
+import { FIRST_PAYMENT_LINE, billingIntervalOf, priceLine } from "@/lib/billing-interval";
 
 export function poundsFromPence(pence: number): string {
   return `£${(pence / 100).toFixed(2)}`;
@@ -32,6 +33,7 @@ export async function planDocumentEmailHtml(planId: string) {
   const legalLine = tradingNameOf(plan.engineer);
   const price = poundsFromPence(plan.priceMonthlyPence ?? 0);
   const portalUrl = `${appUrl()}/portal/${plan.portalToken}`;
+  const yearly = billingIntervalOf(plan.billingInterval) === "year";
   const coolingOffEnds = plan.coolingOffEndsAt?.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "long",
@@ -50,7 +52,10 @@ export async function planDocumentEmailHtml(planId: string) {
 <div style="font-family:sans-serif;max-width:560px">
   <h1 style="margin-bottom:2px">${brand} Care Plans</h1>
   <p style="color:#5E6975;margin-top:0">Plan ${plan.ref} · ${plan.customer.firstName} ${plan.customer.lastName}</p>
-  <p><b>You're on the ${tier?.name ?? ""} plan</b> — ${perMonth(price, plan.engineer.vatRegistered, "/month")} by Direct Debit.</p>
+  <p><b>You're on the ${tier?.name ?? ""} plan</b> — ${yearly ? priceLine(plan.priceMonthlyPence ?? 0, "year", plan.engineer.vatRegistered) : perMonth(price, plan.engineer.vatRegistered, "/month")} by Direct Debit.
+  ${FIRST_PAYMENT_LINE}</p>
+  <p>${yearly ? "Your annual service can be booked once your yearly payment has cleared." : "Your annual service can be booked once your third monthly payment has cleared."}
+  Everything else starts from your first payment.</p>
   <h2>What your plan includes</h2>
   ${clauseHtml}
   <h2>What's not included</h2>
@@ -59,9 +64,12 @@ export async function planDocumentEmailHtml(planId: string) {
   agreement, not an insurance policy.</p>
   <h2>Your rights</h2>
   <p>You have a <b>14-day cooling-off period</b>${coolingOffEnds ? ` (until ${coolingOffEnds})` : ""}:
-  cancel within it for a full refund of any payment taken. You can cancel at any time after that
-  in two taps from your plan page — no phone calls, no hoops. Your payments are protected by the
-  Direct Debit Guarantee.</p>
+  cancel within it and nothing is taken. There's no minimum term: cancel at any time after that in
+  two taps from your plan page — no phone calls, no hoops. ${
+    yearly
+      ? "Your plan then ends at the end of the month you're in, and the unused whole months are refunded."
+      : "Your plan then ends at the end of the month you've paid for."
+  } The Direct Debit Guarantee applies to every payment.</p>
   <p><a href="${portalUrl}">View or manage your plan</a></p>
   <p style="color:#8B95A1;font-size:12px">Smell gas? Call the National Gas Emergency line free: ${EMERGENCY_LINE}.
   ${brand} Care Plans — powered by TradeSura.${legalLine ? `<br>${legalLine}.` : ""}</p>

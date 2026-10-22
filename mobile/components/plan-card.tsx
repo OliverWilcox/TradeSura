@@ -91,7 +91,21 @@ export function CustomerPlanCard({
               </View>
             );
           })}
+          {/* Retention spec — every plan comes with the home's passport. */}
+          {cancelChip && (
+            <View className="flex-row items-start gap-2.5">
+              <View className="pt-0.5">
+                <Icon name="check" size={15} color={TICK_BLUE} weight="bold" />
+              </View>
+              <Text className="flex-1 text-[15px]" style={{ color: NAVY }}>
+                Your Home Passport
+              </Text>
+            </View>
+          )}
         </View>
+        {cancelChip && (
+          <Text className="mt-2.5 text-[13px] text-[#5B6B82]">First payment after your 14-day cooling-off period.</Text>
+        )}
         {showJoin && (
           <View className="mt-4 items-center rounded-xl py-3" style={{ backgroundColor: JOIN_BLUE }}>
             <Text className="text-[16px] font-semibold text-white">Join</Text>

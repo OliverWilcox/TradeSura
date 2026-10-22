@@ -4,7 +4,8 @@ import { useState } from "react";
 import { NotIncluded } from "@/components/ui";
 import { EmbeddedCheckout } from "@/components/embedded-checkout";
 import { JOIN_BTN, PlanTierCard } from "@/components/plan-tier-card";
-import { perMonth } from "@/lib/engineer";
+import { BillingChoice } from "@/components/billing-choice";
+import { chargePence, priceLine, type BillingInterval } from "@/lib/billing-interval";
 
 type Tier = {
   id: string;
@@ -37,6 +38,8 @@ export function PublicSignup({
   channel = "web",
   soldById,
   initialTierId,
+  rejoin,
+  firstMonthFree,
 }: {
   slug: string;
   tiers: Tier[];
@@ -47,6 +50,9 @@ export function PublicSignup({
   soldById?: string;
   /** Pre-selects a plan, e.g. a Join tap on the engineer's website embed. */
   initialTierId?: string;
+  /** Win-back rejoin link token, and whether it carries a free month. */
+  rejoin?: string;
+  firstMonthFree?: boolean;
 }) {
   const [selectedId, setSelectedId] = useState(
     tiers.find((t) => t.id === initialTierId)?.id ??
@@ -60,6 +66,7 @@ export function PublicSignup({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [started, setStarted] = useState<Started | null>(null);
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
   const selected = tiers.find((t) => t.id === selectedId);
 
   const ready =
@@ -83,6 +90,8 @@ export function PublicSignup({
         email: email.trim(),
         channel,
         soldById,
+        billingInterval,
+        rejoin,
       }),
     });
     const data = await res.json();
@@ -99,6 +108,12 @@ export function PublicSignup({
   if (started && selected) {
     return (
       <>
+      {firstMonthFree && (
+        <p className="rounded-xl bg-flame-tint px-3 py-2 text-sm text-ink">
+          Welcome back. Your first month is free: your first payment is a month after your 14-day
+          cooling-off period.
+        </p>
+      )}
         <PlanTierCard
           name={selected.name}
           priceMonthlyPence={selected.priceMonthlyPence}
@@ -114,7 +129,8 @@ export function PublicSignup({
           landlord={started.landlord}
           signupToken={started.signupToken}
           planName={selected.name}
-          priceLabel={pounds(selected.priceMonthlyPence)}
+          priceLabel={pounds(chargePence(selected.priceMonthlyPence, billingInterval))}
+          billingInterval={billingInterval}
           engineerName={engineerName}
           vatRegistered={vatRegistered}
         />
@@ -124,6 +140,12 @@ export function PublicSignup({
 
   return (
     <>
+      {firstMonthFree && (
+        <p className="rounded-xl bg-flame-tint px-3 py-2 text-sm text-ink">
+          Welcome back. Your first month is free: your first payment is a month after your 14-day
+          cooling-off period.
+        </p>
+      )}
       {tiers.map((t) => (
         <button
           key={t.id}
@@ -151,13 +173,22 @@ export function PublicSignup({
       <input className={input} placeholder="Mobile number" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
       <input className={input} placeholder="Email (for your plan document)" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
 
+      {selected && (
+        <BillingChoice
+          priceMonthlyPence={selected.priceMonthlyPence}
+          value={billingInterval}
+          onChange={setBillingInterval}
+          vatRegistered={vatRegistered}
+        />
+      )}
+
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {selected && (
         <button onClick={begin} disabled={busy || !ready} className={JOIN_BTN}>
           {busy
             ? "Setting up…"
-            : `Join ${selected.name} — ${perMonth(pounds(selected.priceMonthlyPence), vatRegistered, "/month")} by Direct Debit`}
+            : `Join ${selected.name} — ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)} by Direct Debit`}
         </button>
       )}
     </>

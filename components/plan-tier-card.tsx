@@ -1,8 +1,9 @@
 // The customer's plan card on the web — matched to the 2026 Build Guide
 // targets (and the app's "what your customer sees" preview): white card,
-// navy text, blue ticks, green "Cancel anytime". The 2026 guide wins over
+// navy text, blue ticks, blue "Cancel anytime" (Review 3). The 2026 guide wins over
 // older colour rules (CLAUDE.md).
 import { perMonth } from "@/lib/engineer";
+import { FIRST_PAYMENT_LINE } from "@/lib/billing-interval";
 
 function pounds(pence: number) {
   return pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
@@ -45,7 +46,7 @@ export function PlanTierCard({
       <div className="text-[15px] mt-0.5">{perMonth(pounds(priceMonthlyPence), vatRegistered)}</div>
       {!compact && (
         <>
-          <span className="inline-block mt-2.5 rounded-full bg-[#C9F2DA] text-[#14532D] text-[12.5px] px-3 py-0.5">
+          <span className="inline-block mt-2.5 rounded-full bg-[#E3EEFB] text-[#1F4E8C] text-[12.5px] px-3 py-0.5">
             Cancel anytime
           </span>
           <ul className="mt-2.5 space-y-1.5">
@@ -61,7 +62,13 @@ export function PlanTierCard({
                 </li>
               );
             })}
+            {/* Retention spec §1/§4 — every plan comes with the home's passport. */}
+            <li className="flex gap-2.5 text-[14px]">
+              <span aria-hidden className="text-[#1F5FC4] font-bold">✓</span>
+              <span>Your Home Passport</span>
+            </li>
           </ul>
+          <p className="mt-2.5 text-[12.5px] text-[#5B6B82]">{FIRST_PAYMENT_LINE}</p>
         </>
       )}
     </div>

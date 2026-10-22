@@ -5,6 +5,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, RowLine, Tick, Button } from "@/components/ui";
 import { Skeleton, Bone, TextBone, RowBone } from "@/components/skeleton";
+import { CancelSaveCard } from "@/components/cancel-save-card";
+import { PassportSection } from "@/components/passport-section";
 
 type Detail = {
   id: string;
@@ -208,6 +210,8 @@ export default function CustomerDetail() {
           {c.plan ? <Pill tone="info">ON PLAN</Pill> : <Pill tone="off">NO PLAN</Pill>}
         </View>
 
+        <CancelSaveCard customerId={c.id} onChange={load} />
+
         {/* Part 10 — "'Her plan — as signed' card showing the signed
             version (title, price, benefits — frozen snapshot, Part 7.2)."
             No pronoun is ever captured at signup, so this is always "Their". */}
@@ -269,6 +273,8 @@ export default function CustomerDetail() {
           </Card>
         )}
 
+        <PassportSection customerId={c.id} />
+
         {/* Part 10 — Contact card. */}
         <Card>
           <Micro className="mb-1">Contact</Micro>
@@ -323,13 +329,14 @@ export default function CustomerDetail() {
               ))}
             </View>
             <Text className="mt-2.5 font-sans text-xs text-muted">
-              Their Direct Debit stops straight away and they get an email to confirm. This can&apos;t be
-              undone — they&apos;d need to sign up again.
+              The plan ends at the end of the month they&apos;ve paid for, and they get an email with the
+              end date and a one-tap rejoin link. Use this to log a cancellation they asked for by phone
+              or email too.
             </Text>
             {endError && <Text className="mt-2 font-sans text-xs text-danger">{endError}</Text>}
             <View className="mt-3 gap-2">
               <Button variant="dangerghost" onPress={endPlan} disabled={busy || !endReason}>
-                {busy ? "Ending…" : "End plan and stop payments"}
+                {busy ? "Ending…" : "End plan at the end of the paid month"}
               </Button>
               <Button
                 variant="ghost"

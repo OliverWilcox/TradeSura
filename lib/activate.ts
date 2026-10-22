@@ -7,6 +7,9 @@ import { sendPushNotification } from "@/lib/push";
 import { planDocumentEmailHtml } from "@/lib/plan-doc";
 import { activeMonthlyPence } from "@/lib/plans";
 import { appUrl } from "@/lib/app-url";
+import { FIRST_PAYMENT_LINE, billingIntervalOf, chargePence, priceLine } from "@/lib/billing-interval";
+import { attachPlanToPassport } from "@/lib/passport";
+import { queueWelcomeTouches } from "@/lib/welcome-touches";
 
 // Idempotent: safe to call again if Stripe retries the webhook, or if the
 // confirmed-page poll and the webhook both land.
@@ -23,7 +26,9 @@ export async function activatePlan(
     data: {
       status: "ACTIVE",
       activatedAt: now,
-      coolingOffEndsAt: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000),
+      // Set at mandate confirmation (lib/plan-billing.ts confirmSignupMandate),
+      // which also moves the first collection to after it.
+      coolingOffEndsAt: existing.coolingOffEndsAt ?? new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000),
       mandateStatus: "active",
       stripeSubscriptionId: stripeIds.subscriptionId ?? existing.stripeSubscriptionId,
       stripeCustomerId: stripeIds.customerId ?? existing.stripeCustomerId,
@@ -43,6 +48,10 @@ export async function activatePlan(
   });
 
   await cancelScheduledSms(`nudge:${plan.id}`);
+  // Section 4 — the home's passport goes LIVE with the plan.
+  await attachPlanToPassport(plan.id);
+  // Retention §9 — engineer's welcome, then the Home Passport prompt.
+  await queueWelcomeTouches(plan.id).catch((err) => console.error("[activate] welcome touches failed:", err));
 
   const engineer = await prisma.engineer.findUniqueOrThrow({
     where: { id: plan.engineerId },
@@ -55,7 +64,7 @@ export async function activatePlan(
   await sendSms({
     engineerId: plan.engineerId,
     to: plan.customer.phone,
-    body: `Welcome to ${brand}'s ${plan.tier?.name ?? "care"} plan — £${((plan.priceMonthlyPence ?? 0) / 100).toFixed(2)}/mo by Direct Debit. We'll message you when your annual service is due. Manage or cancel anytime: ${portalUrl}`,
+    body: `Welcome to ${brand}'s ${plan.tier?.name ?? "care"} plan — ${priceLine(plan.priceMonthlyPence ?? 0, plan.billingInterval)} by Direct Debit. ${FIRST_PAYMENT_LINE} We'll message you when your annual service is due. Manage or cancel anytime: ${portalUrl}`,
     messageClass: "TRANSACTIONAL",
     consentBasis: "plan-member-transactional",
   });
@@ -74,7 +83,11 @@ export async function activatePlan(
 
   // C3 — the sustaining dopamine ping to the engineer.
   const { totalPence, count } = await activeMonthlyPence(plan.engineerId);
-  const yearly = Math.round(((plan.priceMonthlyPence ?? 0) * 12) / 100);
+  const yearly = Math.round(
+    (billingIntervalOf(plan.billingInterval) === "year"
+      ? chargePence(plan.priceMonthlyPence ?? 0, "year")
+      : (plan.priceMonthlyPence ?? 0) * 12) / 100,
+  );
   await notifyEngineer(
     plan.engineerId,
     `🎉 ${plan.customer.firstName} ${plan.customer.lastName} just joined ${plan.tier?.name ?? "your plan"} — £${yearly}/yr added. ${count} plan${count === 1 ? "" : "s"} live, £${Math.round(totalPence / 100)}/mo.`,

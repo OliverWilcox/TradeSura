@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { rejoinFreeMonth } from "@/lib/rejoin-offer";
 import { isLandlordPlan } from "@/lib/clauses";
 import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
@@ -21,6 +22,10 @@ const Body = z.object({
   channel: z.enum(["web", "demo", "blast", "referral", "website"]).default("web"),
   // Section 8 — the staff engineer handing over their phone ("They're with me").
   soldById: z.string().max(40).optional(),
+  // Section 1 — monthly, or yearly at 12 months for the price of 11.
+  billingInterval: z.enum(["month", "year"]).default("month"),
+  // Retention §9 — arrived from a win-back rejoin link.
+  rejoin: z.string().max(64).optional(),
 });
 
 // Public plan page (C1) → embedded checkout. No pre-created plan and no
@@ -79,7 +84,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       lastName: b.lastName,
       phone,
       email: b.email || null,
-      source: b.channel === "demo" ? "doorstep" : "web",
+      source: b.channel === "demo" ? "doorstep" : b.channel === "website" ? "website" : "web",
       addedById: seller?.id ?? null,
     },
   });
@@ -102,6 +107,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       customerId: customer.id,
       tierId: tier.id,
       priceMonthlyPence: tier.priceMonthlyPence,
+      billingInterval: b.billingInterval,
       // LAW (plan wording is locked) — freeze the tier as agreed here too.
       agreedTier: snapshotTier(tier) as unknown as Prisma.InputJsonValue,
       signupToken: newToken(),
@@ -118,6 +124,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     tierId: tier.id,
     name: tier.name,
     priceMonthlyPence: tier.priceMonthlyPence,
+    billingInterval: b.billingInterval,
     channel: b.channel,
   });
 
@@ -125,6 +132,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     const sub = await createEmbeddedSubscription({
       engineerAccountId: engineer.stripeAccountId,
       priceMonthlyPence: tier.priceMonthlyPence,
+      billingInterval: b.billingInterval,
       productName: `${brand} — ${tier.name} care plan`,
       customerName: `${b.firstName} ${b.lastName}`,
       customerEmail: b.email || undefined,
@@ -132,10 +140,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       existingStripeCustomerId: customer.stripeCustomerId,
       planId: plan.id,
       planRef: plan.ref,
+      extraFreeMonths: (await rejoinFreeMonth(engineer.id, b.rejoin)) ? 1 : 0,
     });
     await prisma.plan.update({
       where: { id: plan.id },
-      data: { stripeSubscriptionId: sub.subscriptionId, stripeCustomerId: sub.customerId, mandateStatus: "pending" },
+      data: {
+        stripeSubscriptionId: sub.subscriptionId,
+        stripeCustomerId: sub.customerId,
+        mandateStatus: "pending",
+        // Provisional: confirmSignupMandate restarts it when the mandate lands.
+        coolingOffEndsAt: sub.trialEnd,
+      },
     });
     await prisma.customer.update({
       where: { id: customer.id },
