@@ -3,6 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getActor } from "@/lib/auth";
 import { track } from "@/lib/track";
+import { passportForCustomer, passportState } from "@/lib/passport";
+import { requestRating } from "@/lib/ratings";
 
 const Body = z.object({
   servicedOn: z.string().datetime().optional(),
@@ -52,10 +54,38 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     lastServicedAt = created.lastServicedAt!;
   }
 
+  // Retention spec §4/§5 — a service on a plan also goes on the Home
+  // Passport and asks the customer for a rating, same as "Log a service".
+  let serviceRecordId: string | null = null;
+  let ratingRequested = false;
+  const passportId = await passportForCustomer(id);
+  if (passportId && (await passportState(passportId)) === "LIVE") {
+    const plan = await prisma.plan.findFirst({
+      where: { customerId: id, engineerId, status: { in: ["ACTIVE", "PAUSED"] } },
+      select: { id: true },
+    });
+    const appliance = existing ?? (await prisma.appliance.findFirst({ where: { property: { customerId: id } } }));
+    const record = await prisma.serviceRecord.create({
+      data: {
+        passportId,
+        applianceId: appliance?.id ?? null,
+        engineerId,
+        planId: plan?.id ?? null,
+        kind: "service",
+        doneAt: servicedOn,
+        notes: parsed.data.note || null,
+        nextDueAt: new Date(new Date(servicedOn).setFullYear(servicedOn.getFullYear() + 1)),
+      },
+    });
+    serviceRecordId = record.id;
+    ratingRequested = (await requestRating(record.id)).requested;
+  }
+
   await track("service_recorded", { type: "ENGINEER", id: engineerId }, {
     customerId: id,
     servicedOn: servicedOn.toISOString(),
     note: parsed.data.note,
+    serviceRecordId,
   });
-  return NextResponse.json({ ok: true, lastServicedAt });
+  return NextResponse.json({ ok: true, lastServicedAt, ratingRequested });
 }

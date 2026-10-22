@@ -65,9 +65,16 @@
         }
       ],
       [
+        "expo-camera",
+        {
+          "cameraPermission": "TradeSura uses the camera to scan boiler stickers and photograph your Gas Safe ID card and services.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-image-picker",
         {
-          "cameraPermission": "To photograph your Gas Safe ID card for verification.",
+          "cameraPermission": "To photograph your Gas Safe ID card, boilers and services.",
           "photosPermission": "TradeSura uses your photos to upload your logo and Gas Safe ID card."
         }
       ],

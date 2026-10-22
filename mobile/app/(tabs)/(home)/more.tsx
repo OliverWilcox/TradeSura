@@ -503,6 +503,9 @@ function OwnerAccount() {
           <Pressable onPress={() => router.push("/team")}>
             <RowLine left="Team" right={<Chevron />} />
           </Pressable>
+          <Pressable onPress={() => router.push("/ratings")}>
+            <RowLine left="Ratings" right={<Chevron />} />
+          </Pressable>
           <Pressable onPress={() => router.push("/referral")}>
             <RowLine left="Invite an engineer · earn 25% of our fee" right={<Chevron />} />
           </Pressable>
