@@ -5,6 +5,7 @@ import { track } from "@/lib/track";
 import { recordReferralEarning } from "@/lib/referral";
 import { activatePlan } from "@/lib/activate";
 import { sendPushNotification } from "@/lib/push";
+import { alertIfStripeNeedsMore } from "@/lib/stripe-onboarding";
 import {
   completePaymentRescue,
   confirmSignupMandate,
@@ -97,6 +98,7 @@ async function handleEvent(event: Stripe.Event) {
           accountId,
         });
       }
+      await alertIfStripeNeedsMore(engineer, s);
       return;
     }
 
