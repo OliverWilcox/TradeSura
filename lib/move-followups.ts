@@ -8,7 +8,7 @@ import { passportForCustomer } from "@/lib/passport";
 // who cancels because they're moving, and consents to the Home Passport
 // passing to the next owner, triggers two things a week after the moving
 // date: the installer gets a "new owner" lead, and TradeSura queues a
-// welcome letter to the address for posting (shown in /admin/retention).
+// welcome letter to the address for posting (for the admin area).
 export const MOVE_FOLLOWUP_DELAY_DAYS = 7;
 // Older moves are left alone so a first run doesn't send stale leads.
 export const MOVE_FOLLOWUP_WINDOW_DAYS = 60;

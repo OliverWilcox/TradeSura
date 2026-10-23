@@ -52,3 +52,12 @@ next-env.d.ts
 /app/generated/prisma
 !.env.example
 lib/generated/
+
+# Build guides, reviews and notes stay on the dev machine, not in the repo
+*.md
+/docs/
+/app/assets/*
+!/app/assets/brand/
+
+# Local-only backups (not pushed)
+/_local-backup/
