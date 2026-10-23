@@ -22,6 +22,7 @@ const TOKEN_KEY = "ts_engineer_token";
 const STRIPE_SKIPPED_KEY = "ts_stripe_skipped";
 const HAS_SIGNED_IN_KEY = "ts_has_signed_in_before";
 const HAS_SEEN_FIRST_PAYOUT_KEY = "ts_has_seen_first_payout";
+const HAS_SEEN_FIRST_CUSTOMER_KEY = "ts_has_seen_first_customer";
 const PUSH_PROMPTED_KEY = "ts_push_prompted";
 
 // process.env.EXPO_PUBLIC_* is inlined by Metro at build time — see .env.example.
@@ -80,6 +81,16 @@ export async function getHasSeenFirstPayout(): Promise<boolean> {
 
 export async function setHasSeenFirstPayout(): Promise<void> {
   await SecureStore.setItemAsync(HAS_SEEN_FIRST_PAYOUT_KEY, "1");
+}
+
+// Review 3 §3 — the one-time first-customer celebration, opened from Home
+// (or the first-activation push) and marked seen by the screen itself.
+export async function getHasSeenFirstCustomer(): Promise<boolean> {
+  return (await SecureStore.getItemAsync(HAS_SEEN_FIRST_CUSTOMER_KEY)) === "1";
+}
+
+export async function setHasSeenFirstCustomer(): Promise<void> {
+  await SecureStore.setItemAsync(HAS_SEEN_FIRST_CUSTOMER_KEY, "1");
 }
 
 export class ApiError extends Error {

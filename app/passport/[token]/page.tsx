@@ -5,6 +5,8 @@ import { brandName, tradingNameOf } from "@/lib/engineer";
 import { RECORD_KIND_LABEL, loadPassportView } from "@/lib/passport";
 import { CustomerShell } from "@/components/shells";
 import { Card, Micro, Pill, btnClass } from "@/components/ui";
+import { PassportSetup } from "@/components/passport-setup";
+import { MAX_BOILER_PHOTOS, passportNeedsSetup } from "@/lib/passport-setup";
 import { setContactConsent } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +49,16 @@ export default async function PassportPage({ params }: { params: Promise<{ token
             is kept and you can still view and download it.
           </p>
         </Card>
+      )}
+
+      {state === "LIVE" && passportNeedsSetup(boiler) && (
+        <PassportSetup
+          token={token}
+          needMake={!boiler?.make?.trim()}
+          needModel={!boiler?.model?.trim()}
+          needFitted={!boiler?.installedAt}
+          photoRoom={MAX_BOILER_PHOTOS - (boiler?.photoUrls.length ?? 0)}
+        />
       )}
 
       <Card>

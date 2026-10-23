@@ -9,6 +9,7 @@ import { referralRatePercent } from "@/lib/referral";
 import { recentEmergencyCount } from "@/lib/emergencies";
 import { standingCopy } from "@/lib/verification-state";
 import { track } from "@/lib/track";
+import { firstMemberYearlyPence } from "@/lib/first-member";
 
 // Mobile counterpart to the dashboard queries in app/page.tsx (Screen 02) —
 // same logic, returned as JSON instead of rendered server-side.
@@ -123,7 +124,26 @@ export async function GET() {
   // where the engineer sees that the gas-emergency interlock fired.
   const emergencies = await recentEmergencyCount(engineerId);
 
+  // Review 3 §3 — the "first customer" celebration. Only while exactly one
+  // plan has ever gone live, so long-standing accounts never see it.
+  let firstMember: { planId: string; customerFirstName: string; planName: string; yearlyPence: number } | null = null;
+  if (count === 1 && (await prisma.plan.count({ where: { engineerId, activatedAt: { not: null } } })) === 1) {
+    const p = await prisma.plan.findFirst({
+      where: { engineerId, status: "ACTIVE" },
+      include: { customer: { select: { firstName: true } }, tier: { select: { name: true } } },
+    });
+    if (p) {
+      firstMember = {
+        planId: p.id,
+        customerFirstName: p.customer.firstName,
+        planName: p.tier?.name ?? "your plan",
+        yearlyPence: firstMemberYearlyPence(p.priceMonthlyPence ?? 0, p.billingInterval),
+      };
+    }
+  }
+
   return NextResponse.json({
+    firstMember,
     emergencies,
     totalPence,
     count,

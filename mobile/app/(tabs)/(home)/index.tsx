@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, ScrollView, RefreshControl, Pressable } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { api, ApiError, getPushPrompted, setPushPrompted } from "@/lib/api";
+import { api, ApiError, getHasSeenFirstCustomer, getPushPrompted, setPushPrompted } from "@/lib/api";
 import { pushPermission, registerForPush } from "@/lib/push";
 import { useAuth } from "@/lib/auth-context";
 import { StaffHome } from "@/components/staff-home";
@@ -43,6 +43,7 @@ type Dashboard = {
   emergencies: number;
   offersWaiting: { customerFirstName: string; planId: string } | null;
   standing: Standing;
+  firstMember?: { planId: string; customerFirstName: string; planName: string; yearlyPence: number } | null;
 };
 
 // Build Guide v2 Part 6.4 — the standing strip: permanent infrastructure,
@@ -188,6 +189,29 @@ function OwnerHome() {
       refreshMe();
     }, [load, refreshMe]),
   );
+
+  // Review 3 §3 — celebrate the first customer once, ever. The screen sets
+  // the flag itself, so arriving there from the push counts too.
+  useEffect(() => {
+    const m = data?.firstMember;
+    if (!m) return;
+    let cancelled = false;
+    getHasSeenFirstCustomer().then((seen) => {
+      if (seen || cancelled) return;
+      router.push({
+        pathname: "/first-customer",
+        params: {
+          name: m.customerFirstName,
+          plan: m.planName,
+          yearlyPence: String(m.yearlyPence),
+          planId: m.planId,
+        },
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.firstMember]);
 
   async function onRefresh() {
     setRefreshing(true);

@@ -9,6 +9,7 @@ import { sendEmail } from "@/lib/email";
 import { sendPushNotification } from "@/lib/push";
 import { track } from "@/lib/track";
 import { companyOfficers, officerMatches, type Officer } from "@/lib/companies-house";
+import { AdminNav } from "@/components/admin-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -194,6 +195,7 @@ export default async function Verifications({
 
   return (
     <main className="mx-auto w-full max-w-3xl p-6">
+      <AdminNav adminKey={key!} current="/admin/verifications" />
       <h1 className="text-2xl font-bold">Gas Safe verification queue</h1>
       <p className="mt-1 text-sm text-muted">
         Check each number and card against the Gas Safe register, then approve or reject.

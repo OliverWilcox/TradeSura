@@ -47,6 +47,13 @@ function StatusLine({ status }: { status: Status }) {
   );
 }
 
+// Mirrors lib/retention.ts WINBACK_OFFERS (display copy only).
+type WinbackOffer = "none" | "first_month_free";
+const WINBACK_CHOICES: { value: WinbackOffer; label: string }[] = [
+  { value: "none", label: "Rejoin in one tap" },
+  { value: "first_month_free", label: "Rejoin and get your first month free" },
+];
+
 const BUSINESS_TYPE_LABELS: Record<string, string> = {
   sole_trader: "Sole trader",
   ltd: "Limited company",
@@ -86,6 +93,10 @@ function OwnerAccount() {
   const [vatBusy, setVatBusy] = useState(false);
   const [vatError, setVatError] = useState<string | null>(null);
 
+  const [winback, setWinback] = useState<WinbackOffer | null>(null);
+  const [winbackBusy, setWinbackBusy] = useState(false);
+  const [winbackError, setWinbackError] = useState<string | null>(null);
+
   const [flushBusy, setFlushBusy] = useState(false);
   const [flushResult, setFlushResult] = useState<string | null>(null);
 
@@ -101,6 +112,10 @@ function OwnerAccount() {
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't load this page.");
     }
+    // Separate so an older backend without the route doesn't blank the page.
+    api<{ offer: WinbackOffer }>("/api/settings/winback")
+      .then((w) => setWinback(w.offer))
+      .catch(() => {});
   }, []);
 
   useFocusEffect(
@@ -242,6 +257,24 @@ function OwnerAccount() {
       setVatError(e instanceof ApiError ? e.message : "Couldn't save that — try again.");
     } finally {
       setVatBusy(false);
+    }
+  }
+
+  // Retention spec §9 — the engineer's choice of win-back offer, texted 30
+  // days after a plan ends and again before winter. Saved on tap.
+  async function chooseWinback(next: WinbackOffer) {
+    if (next === winback || winbackBusy) return;
+    const prev = winback;
+    setWinback(next);
+    setWinbackBusy(true);
+    setWinbackError(null);
+    try {
+      await api("/api/settings/winback", { method: "POST", body: JSON.stringify({ offer: next }) });
+    } catch (e) {
+      setWinback(prev);
+      setWinbackError(e instanceof ApiError ? e.message : "Couldn't save that — try again.");
+    } finally {
+      setWinbackBusy(false);
     }
   }
 
@@ -471,6 +504,38 @@ function OwnerAccount() {
             <Text className="mt-2 font-semibold text-xs text-ink">Saved</Text>
           )}
         </Card>
+
+        {winback && (
+          <Card>
+            <Text className="font-semibold text-sm text-ink">Win-back offer</Text>
+            <Text className="mt-0.5 font-sans text-xs text-muted">
+              Texted from you to customers 30 days after their plan ends, and again before winter.
+            </Text>
+            <View className="mt-2" accessibilityRole="radiogroup">
+              {WINBACK_CHOICES.map((c, i) => {
+                const on = winback === c.value;
+                return (
+                  <Pressable
+                    key={c.value}
+                    onPress={() => chooseWinback(c.value)}
+                    disabled={winbackBusy}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: on, disabled: winbackBusy }}
+                    className={`flex-row items-center gap-3 py-3 ${i < WINBACK_CHOICES.length - 1 ? "border-b border-line-soft" : ""}`}
+                  >
+                    <View
+                      className={`h-5 w-5 items-center justify-center rounded-full border-2 ${on ? "border-flame" : "border-line-strong"}`}
+                    >
+                      {on && <View className="h-2.5 w-2.5 rounded-full bg-flame" />}
+                    </View>
+                    <Text className="flex-1 font-sans text-sm text-ink">{c.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {winbackError && <Text className="mt-1.5 font-sans text-xs text-danger">{winbackError}</Text>}
+          </Card>
+        )}
 
         {/* Dev-only tooling — never shown in a production build. */}
         {__DEV__ && data && (

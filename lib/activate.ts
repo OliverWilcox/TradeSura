@@ -10,6 +10,7 @@ import { appUrl } from "@/lib/app-url";
 import { FIRST_PAYMENT_LINE, billingIntervalOf, chargePence, priceLine } from "@/lib/billing-interval";
 import { attachPlanToPassport } from "@/lib/passport";
 import { queueWelcomeTouches } from "@/lib/welcome-touches";
+import { firstCustomerPath, firstMemberYearlyPence } from "@/lib/first-member";
 
 // Idempotent: safe to call again if Stripe retries the webhook, or if the
 // confirmed-page poll and the webhook both land.
@@ -92,11 +93,22 @@ export async function activatePlan(
     plan.engineerId,
     `🎉 ${plan.customer.firstName} ${plan.customer.lastName} just joined ${plan.tier?.name ?? "your plan"} — £${yearly}/yr added. ${count} plan${count === 1 ? "" : "s"} live, £${Math.round(totalPence / 100)}/mo.`,
   );
+  // Review 3 §3 — the very first customer deep-links to the celebration.
+  const isFirst = count === 1 && (await prisma.plan.count({ where: { engineerId: plan.engineerId, activatedAt: { not: null } } })) === 1;
   await sendPushNotification(
     plan.engineerId,
-    "New plan member",
+    isFirst ? "Your first customer!" : "New plan member",
     `${plan.customer.firstName} ${plan.customer.lastName} joined ${plan.tier?.name ?? "your plan"} — £${yearly}/yr added.`,
-    { url: `/customer/${plan.customerId}` },
+    {
+      url: isFirst
+        ? firstCustomerPath({
+            planId: plan.id,
+            customerFirstName: plan.customer.firstName,
+            planName: plan.tier?.name ?? "your plan",
+            yearlyPence: firstMemberYearlyPence(plan.priceMonthlyPence ?? 0, plan.billingInterval),
+          })
+        : `/customer/${plan.customerId}`,
+    },
   );
   // Section 8 — the staff engineer who signed them up hears too, with no £.
   if (plan.soldById) {

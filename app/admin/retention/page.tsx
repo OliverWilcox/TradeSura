@@ -6,9 +6,11 @@ import { adminAuthorised } from "@/lib/admin-auth";
 import { removeRating, settingInt, NEW_MEMBER_THRESHOLD_KEY } from "@/lib/ratings";
 import { reasonLabel } from "@/lib/retention";
 import { offerNearbyEngineers } from "@/lib/installer-leaves";
+import type { LetterMeta } from "@/lib/move-followups";
 import { websiteSalesByEngineer } from "@/lib/website-sales";
 import { startOfMonth } from "@/lib/enquiries";
 import { LISTED_ENGINEER_WHERE, markTownPublished } from "@/lib/town";
+import { AdminNav } from "@/components/admin-nav";
 import {
   CANCEL_RATE_FLAG_KEY,
   DEFAULT_CANCEL_RATE_FLAG,
@@ -92,6 +94,26 @@ async function installerLeft(fd: FormData) {
   await prisma.engineer.update({ where: { id: engineerId }, data: { leftAt: new Date() } });
   const { offered } = await offerNearbyEngineers(engineerId);
   await track("installer_left", { type: "SYSTEM" }, { engineerId, customersOffered: offered });
+  revalidatePath(PATH);
+}
+
+// Retention §4 — welcome letters to the next owner, queued by the daily
+// move follow-up job (lib/move-followups.ts) and posted by hand.
+async function markLetterPosted(fd: FormData) {
+  "use server";
+  if (!keyOf(fd)) return;
+  const queuedEventId = String(fd.get("eventId") ?? "");
+  const queued = await prisma.event.findFirst({ where: { id: queuedEventId, name: "welcome_letter_queued" } });
+  if (!queued) return;
+  const posted = await prisma.event.findFirst({
+    where: { name: "welcome_letter_posted", meta: { path: ["queuedEventId"], equals: queuedEventId } },
+  });
+  if (!posted) {
+    await track("welcome_letter_posted", { type: "SYSTEM" }, {
+      queuedEventId,
+      passportId: (queued.meta as LetterMeta | null)?.passportId,
+    });
+  }
   revalidatePath(PATH);
 }
 
@@ -197,6 +219,12 @@ export default async function Retention({ searchParams }: { searchParams: Promis
     websiteSalesByEngineer(month),
   ]);
   const [cancelThreshold, stickerThreshold, newThreshold, settingRows] = settings;
+  const [lettersQueued, lettersPosted] = await Promise.all([
+    prisma.event.findMany({ where: { name: "welcome_letter_queued" }, orderBy: { ts: "asc" }, select: { id: true, ts: true, meta: true } }),
+    prisma.event.findMany({ where: { name: "welcome_letter_posted" }, select: { meta: true } }),
+  ]);
+  const postedIds = new Set(lettersPosted.map((e) => (e.meta as { queuedEventId?: string } | null)?.queuedEventId));
+  const letters = lettersQueued.filter((e) => !postedIds.has(e.id));
   const settingValue = new Map(settingRows.map((r) => [r.key, r.value]));
 
   // ---- tiles ----
@@ -289,6 +317,7 @@ export default async function Retention({ searchParams }: { searchParams: Promis
 
   return (
     <main className="mx-auto w-full max-w-6xl p-6 text-sm">
+      <AdminNav adminKey={key!} current="/admin/retention" />
       <h1 className="text-2xl font-bold">Installer retention</h1>
       <p className="mt-1 text-muted">Last 30 days unless marked. A ⚑ flag means it&apos;s worth stepping in early.</p>
 
@@ -526,6 +555,34 @@ export default async function Retention({ searchParams }: { searchParams: Promis
           );
         })}
         {topups.length === 0 && <li className="text-muted">None.</li>}
+      </ul>
+
+      <h2 className="mt-10 text-xl font-bold">Letters to post</h2>
+      <p className="mt-1 text-muted">
+        Welcome letters to the next owner of a home, a week after a customer moved out and agreed to pass on the
+        Home Passport. Their installer has had a new-owner lead.
+      </p>
+      <ul className="mt-3 flex flex-col gap-2">
+        {letters.map((l) => {
+          const m = l.meta as LetterMeta | null;
+          return (
+            <li key={l.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-line bg-paper p-4">
+              <div className="min-w-0">
+                <div className="whitespace-pre-line font-semibold">{m?.address ?? "Address missing"}</div>
+                <div className="mt-1 text-muted">
+                  Queued {l.ts.toLocaleDateString("en-GB")} · installer{" "}
+                  {nameById.get(m?.engineerId ?? "") ?? m?.engineerId ?? "unknown"}
+                </div>
+              </div>
+              <form action={markLetterPosted}>
+                <input type="hidden" name="key" value={key} />
+                <input type="hidden" name="eventId" value={l.id} />
+                <button className="rounded-lg bg-white px-4 py-2 font-semibold text-[#0f2140]">Mark posted</button>
+              </form>
+            </li>
+          );
+        })}
+        {letters.length === 0 && <li className="text-muted">Nothing to post.</li>}
       </ul>
 
       <h2 className="mt-10 text-xl font-bold">Settings</h2>
