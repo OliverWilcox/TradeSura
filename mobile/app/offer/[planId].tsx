@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Button, Tick } from "@/components/ui";
 import { Skeleton, Bone, TextBone, LoadingImage } from "@/components/skeleton";
+import { formatPounds } from "@/lib/earnings";
 
 type LinkInfo = { link: string; qrDataUrl: string };
 
@@ -72,13 +73,13 @@ export default function OfferLive() {
           <Tick size={36} />
         </View>
         <Text className="text-center text-[21px] font-extrabold text-ink">
-          {status.customerFirstName} joined — +£
-          {Math.round(((status.priceMonthlyPence ?? 0) * 12) / 100)}/yr
+          {status.customerFirstName} joined — +
+          {formatPounds((status.priceMonthlyPence ?? 0) * 12)}/yr
         </Text>
         <Text className="text-center text-sm text-muted">
           {status.customerFirstName} {status.customerLastName} is on a plan at{" "}
           <Text className="tabular-nums font-bold text-ink">
-            £{Math.round((status.priceMonthlyPence ?? 0) / 100)}/mo
+            {formatPounds(status.priceMonthlyPence ?? 0)}/mo
           </Text>
           .
         </Text>
@@ -185,15 +186,11 @@ export default function OfferLive() {
             <Text className="font-sans text-xs text-copper-deep">
               {status.customerFirstName} signs at{" "}
               <Text className="tabular-nums font-semibold">
-                {status.priceMonthlyPence ? `£${Math.round(status.priceMonthlyPence / 100)}/mo` : "£15/mo"}
+                {status.priceMonthlyPence ? `${formatPounds(status.priceMonthlyPence)}/mo` : "£15/mo"}
               </Text>{" "}
               → your income becomes{" "}
               <Text className="tabular-nums font-semibold">
-                £
-                {Math.floor(
-                  (status.incomeMonthlyPence + (status.priceMonthlyPence ?? 1500)) / 100,
-                )}
-                /mo
+                {formatPounds(status.incomeMonthlyPence + (status.priceMonthlyPence ?? 1500))}/mo
               </Text>
               . One job. Forever-ish.
             </Text>

@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Pill, Tick, Button, ScreenTitle } from "@/components/ui";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
+import { formatPounds } from "@/lib/earnings";
 
 type Tier = {
   id: string;
@@ -116,7 +117,14 @@ export default function PlansHub() {
         contentContainerClassName="gap-3.5 px-4 pb-8 pt-4"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <ScreenTitle title="My plans" intro="Your plans, ready to offer to your customers." />
+        <ScreenTitle
+          title="My plans"
+          intro={
+            tiers.some((t) => t.status === "LIVE")
+              ? "Your live plans are ready to offer to your customers."
+              : "Finish your plan to start offering it to customers."
+          }
+        />
 
         {/* The builder's Step 1 starter chips replace the old quick-start
             picker that used to open here. */}
@@ -133,7 +141,7 @@ export default function PlansHub() {
               <View className="flex-row items-baseline justify-between">
                 <Text className="font-bold text-[17px] text-ink">{t.name}</Text>
                 <Text className="tabular-nums font-extrabold text-ok">
-                  £{(t.priceMonthlyPence / 100).toFixed(0)}
+                  {formatPounds(t.priceMonthlyPence)}
                   <Text className="text-xs font-bold text-muted">/month</Text>
                 </Text>
               </View>
@@ -151,27 +159,36 @@ export default function PlansHub() {
               <View className="mt-2.5">
                 <Pill tone={pill.tone}>{pill.label(t.activePlanCount)}</Pill>
               </View>
-              <View className="mt-3 flex-row gap-2">
+              {t.status === "DRAFT" ? (
                 <Button
-                  variant="ghost"
-                  className="flex-1"
-                  onPress={() => router.push({ pathname: "/tier/[tierId]", params: { tierId: t.id } })}
+                  className="mt-3"
+                  onPress={() => router.push({ pathname: "/plan-wizard", params: { tierId: t.id } })}
                 >
-                  Edit plan
+                  Finish plan
                 </Button>
-                <Button
-                  variant="ghost"
-                  className="flex-1"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/(tabs)/(customers)/customers",
-                      params: { tierId: t.id, planName: t.name },
-                    })
-                  }
-                >
-                  View customers
-                </Button>
-              </View>
+              ) : (
+                <View className="mt-3 flex-row gap-2">
+                  <Button
+                    variant="ghost"
+                    className="flex-1"
+                    onPress={() => router.push({ pathname: "/tier/[tierId]", params: { tierId: t.id } })}
+                  >
+                    Edit plan
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="flex-1"
+                    onPress={() =>
+                      router.push({
+                        pathname: "/(tabs)/(customers)/customers",
+                        params: { tierId: t.id, planName: t.name },
+                      })
+                    }
+                  >
+                    View customers
+                  </Button>
+                </View>
+              )}
             </Card>
           );
         })}

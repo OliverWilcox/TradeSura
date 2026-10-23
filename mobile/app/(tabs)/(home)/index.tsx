@@ -496,8 +496,9 @@ function OwnerHome() {
               <QuickAction
                 icon="document"
                 label="My plans"
-                muted={!awake}
-                onPress={() => (awake ? router.push("/plans") : setPlansGateOpen(true))}
+                // Any plan, a draft included, opens My plans.
+                muted={!awake && !me?.anyTierCount}
+                onPress={() => (awake || me?.anyTierCount ? router.push("/plans") : setPlansGateOpen(true))}
               />
               <QuickAction
                 icon="invite"

@@ -7,6 +7,7 @@ import { AppHeader, Card, Micro, Pill, RowLine, Tick, Button } from "@/component
 import { Skeleton, Bone, TextBone, RowBone } from "@/components/skeleton";
 import { CancelSaveCard } from "@/components/cancel-save-card";
 import { PassportSection } from "@/components/passport-section";
+import { formatPounds } from "@/lib/earnings";
 
 type Detail = {
   id: string;
@@ -242,7 +243,7 @@ export default function CustomerDetail() {
               <Text className="font-bold text-base text-ink">{c.plan.tierName}</Text>
               {c.plan.priceMonthlyPence !== null && (
                 <Text className="tabular-nums font-extrabold text-ok">
-                  £{(c.plan.priceMonthlyPence / 100).toFixed(0)}
+                  {formatPounds(c.plan.priceMonthlyPence)}
                   <Text className="text-xs font-bold text-muted">/month</Text>
                 </Text>
               )}

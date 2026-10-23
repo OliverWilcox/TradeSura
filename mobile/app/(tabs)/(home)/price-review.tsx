@@ -41,7 +41,7 @@ export default function PriceReview() {
     try {
       const d = await api<Preview>(`/api/tiers/${tierId}/price-review`);
       setData(d);
-      setPriceText((t) => t || String(Math.round(d.currentPricePence / 100)));
+      setPriceText((t) => t || (d.currentPricePence / 100).toFixed(d.currentPricePence % 100 ? 2 : 0));
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't load the price review.");

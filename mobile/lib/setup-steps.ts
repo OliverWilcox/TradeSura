@@ -11,6 +11,8 @@ export type SetupStep = {
   /** £ figure in the subtitle, shown in money-green. */
   money?: string;
   done: boolean;
+  /** Not available yet: shown with a padlock and can't be opened. */
+  locked?: boolean;
   /** Label for the inline button on the current step. */
   cta: string;
   href: Href;
@@ -20,6 +22,8 @@ const FEE_RATE = 0.2;
 
 export function setupSteps(me: Me | null): SetupStep[] {
   const plan = me?.firstPlan ?? null;
+  // An unfinished wizard draft and no live plan yet: step 1 resumes it.
+  const draft = !me?.hasPlan ? (me?.draftPlan ?? null) : null;
   const price = plan?.priceMonthlyPence ?? 1200;
   // Our 20% rounds down to the penny, in the engineer's favour.
   const yearlyKeep = Math.round(((price - Math.floor(price * FEE_RATE)) * 12) / 100);
@@ -32,16 +36,22 @@ export function setupSteps(me: Me | null): SetupStep[] {
         ? me?.gasSafeVerifiedAt && me?.stripeConnected
           ? `${plan.name} · `
           : "Plan ready. Customers can join once payments are set up and your Gas Safe check is done."
-        : "Start from Boiler Care at ",
+        : draft
+          ? `${draft.name ? `${draft.name} is` : "Your plan is"} saved as a draft. Pick up where you left off.`
+          : "Start from Boiler Care at ",
       money: plan
         ? me?.gasSafeVerifiedAt && me?.stripeConnected
           ? `£${(plan.priceMonthlyPence / 100).toFixed(2).replace(/\.00$/, "")} a month`
           : undefined
-        : "£12",
+        : draft
+          ? undefined
+          : "£12",
       done: Boolean(me?.hasPlan),
-      cta: "Build my plan",
+      cta: draft ? "Finish my plan" : "Build my plan",
       // Opens the builder with its "Back to setup" bar.
-      href: { pathname: "/plans", params: { from: "setup" } },
+      href: draft
+        ? { pathname: "/plan-wizard", params: { tierId: draft.id, from: "setup" } }
+        : { pathname: "/plans", params: { from: "setup" } },
     },
     {
       key: "paid",
@@ -70,9 +80,11 @@ export function setupSteps(me: Me | null): SetupStep[] {
     {
       key: "customers",
       title: "Bring in your customers",
-      sub: "Each one worth up to ",
-      money: `£${yearlyKeep} a year to you`,
+      // Review 3 — opens once a plan is live, so there's something to offer.
+      sub: me?.hasPlan ? "Each one worth up to " : "Opens once your first plan is live",
+      money: me?.hasPlan ? `£${yearlyKeep} a year to you` : undefined,
       done: (me?.customerCount ?? 0) > 0,
+      locked: !me?.hasPlan && (me?.customerCount ?? 0) === 0,
       cta: "Import customers",
       href: "/customers/import-contacts",
     },

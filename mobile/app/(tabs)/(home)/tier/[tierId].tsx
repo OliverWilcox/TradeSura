@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Pill, RowLine, Chevron, Button } from "@/components/ui";
 import { Skeleton, Bone, RowBone } from "@/components/skeleton";
+import { formatPounds } from "@/lib/earnings";
 
 // Build Guide v2 Part 7.4 — "Edit plan": three rows, each opening its wizard
 // step pre-filled, plus the stop/start toggle. This screen is a menu into
@@ -169,7 +170,7 @@ export default function EditPlan() {
               right={
                 <View className="flex-row items-center gap-1.5">
                   <Text className="tabular-nums text-sm text-ok">
-                    £{(tier.priceMonthlyPence / 100).toFixed(0)}/mo
+                    {formatPounds(tier.priceMonthlyPence)}/mo
                   </Text>
                   <Chevron />
                 </View>

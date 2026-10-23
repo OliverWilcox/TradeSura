@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Button } from "@/components/ui";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 import { checkEmail, checkRequired, checkUkMobile, checkUkPostcode } from "@/lib/validate";
+import { formatPounds } from "@/lib/earnings";
 
 // The script card, then the send card: plan pills, book/new toggle and a
 // few customer rows.
@@ -49,7 +50,7 @@ type Tier = { id: string; name: string; priceMonthlyPence: number; lines: string
 function offerScript(tier: Tier | null): string {
   const price = tier ? `£${(tier.priceMonthlyPence / 100).toFixed(2).replace(/\.00$/, "")} a month` : "a small monthly fee";
   const service = !tier || tier.lines.some((l) => /annual boiler service/i.test(l));
-  return `“I put all my customers on a care plan now — ${price}${service ? " and your annual service is included" : " and you’re first in my diary"}. I’ll text you the link, have a look tonight.”`;
+  return `“I put all my customers on a care plan now — ${price} and you’re first in my diary.${service ? " Your annual service comes with it once your third payment’s gone through." : ""} I’ll text you the link, have a look tonight.”`;
 }
 
 // Thumb-sized, size-only text class (see components/address-lookup.tsx).
@@ -277,7 +278,7 @@ export default function OfferStart() {
                       <Text
                         className={`tabular-nums font-medium text-xs ${tierId === t.id ? "text-flame-deep" : "text-faint"}`}
                       >
-                        {t.name} · £{(t.priceMonthlyPence / 100).toFixed(0)}
+                        {t.name} · {formatPounds(t.priceMonthlyPence)}
                       </Text>
                     </Pressable>
                   ))}

@@ -52,6 +52,8 @@ export type Me = {
   // Build Review 3 — payment setup progress (owners only; absent for staff).
   stripeState?: StripeState;
   hasPlan: boolean;
+  /** Plans of any status, drafts included. */
+  anyTierCount?: number;
   customerCount: number;
   activePlans: number;
   packRequestedAt: string | null;

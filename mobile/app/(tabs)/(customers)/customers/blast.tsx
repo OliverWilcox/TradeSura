@@ -4,6 +4,7 @@ import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Button } from "@/components/ui";
+import { formatPounds } from "@/lib/earnings";
 
 type Tier = { id: string; name: string; priceMonthlyPence: number };
 type Results = { sent: number; visits: number; plansLive: number; since: string };
@@ -49,7 +50,7 @@ export default function Blast() {
   }
 
   const cheapest = data?.tiers[0];
-  const priceLabel = cheapest ? `£${(cheapest.priceMonthlyPence / 100).toFixed(0)}` : "£12";
+  const priceLabel = cheapest ? formatPounds(cheapest.priceMonthlyPence) : "£12";
 
   return (
     <View className="flex-1 bg-panel">

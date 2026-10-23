@@ -18,9 +18,11 @@ function StepRow({ n, step, current }: { n: number; step: SetupStep; current: bo
   return (
     <Pressable
       onPress={() => router.push(step.href)}
+      disabled={step.locked}
       accessibilityRole="button"
-      accessibilityLabel={`Step ${n}: ${step.title}${step.done ? ", done" : ""}`}
-      className={`flex-row items-center gap-3.5 rounded-2xl border px-3.5 py-3.5 ${current ? "border-[1.5px] border-flame" : "border-line-strong"}`}
+      accessibilityState={{ disabled: Boolean(step.locked) }}
+      accessibilityLabel={`Step ${n}: ${step.title}${step.done ? ", done" : step.locked ? ", locked" : ""}`}
+      className={`flex-row items-center gap-3.5 rounded-2xl border px-3.5 py-3.5 ${current && !step.locked ? "border-[1.5px] border-flame" : "border-line-strong"} ${step.locked ? "opacity-60" : ""}`}
     >
       <View className="h-12 w-12 items-center justify-center rounded-full border border-line-strong bg-paper">
         <Text className="text-[20px] font-semibold text-ink">{n}</Text>
@@ -32,7 +34,9 @@ function StepRow({ n, step, current }: { n: number; step: SetupStep; current: bo
           {step.money && <Text className="font-semibold text-ok">{step.money}</Text>}
         </Text>
       </View>
-      {step.done ? (
+      {step.locked ? (
+        <Icon name="lock" size={17} color="#c9d6e6" weight="semibold" />
+      ) : step.done ? (
         <View className="h-10 w-10 items-center justify-center rounded-full bg-ok">
           <Icon name="check" size={18} color="#0f2140" weight="bold" />
         </View>
@@ -63,7 +67,7 @@ export default function Onboarding() {
 
   const steps = setupSteps(me);
   const done = steps.filter((s) => s.done).length;
-  const currentIdx = steps.findIndex((s) => !s.done);
+  const currentIdx = steps.findIndex((s) => !s.done && !s.locked);
   const verified = Boolean(me?.gasSafeVerifiedAt);
   const rejected = Boolean(me?.gasSafeRejectedAt) && !verified;
   const inReview = Boolean(me?.gasSafeReviewRequestedAt) && !verified && !rejected;
