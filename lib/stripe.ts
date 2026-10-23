@@ -315,8 +315,8 @@ export async function getOrCreateConnectAccount(engineer: ConnectEngineer): Prom
   if (engineer.stripeAccountId) return engineer.stripeAccountId;
   const stripe = getStripe();
   const base = baseCreateParams(engineer);
-  const p = prefillParams(engineer);
-  try {
+  const create = async (e: ConnectEngineer) => {
+    const p = prefillParams(e);
     const account = await stripe.v2.core.accounts.create({
       ...base,
       contact_phone: p.contact_phone,
@@ -330,12 +330,24 @@ export async function getOrCreateConnectAccount(engineer: ConnectEngineer): Prom
     });
     if (p.representative) await addRepresentative(account.id, p.representative);
     return account.id;
+  };
+  try {
+    return await create(engineer);
   } catch (err) {
-    // A pre-filled value Stripe won't accept (an odd address, a descriptor it
-    // dislikes) must never block payment setup — fall back to the bare
-    // account and let the hosted form ask for it.
     if (!(err instanceof Stripe.errors.StripeInvalidRequestError)) throw err;
-    console.error("[stripe] pre-filled account create rejected, creating bare:", err.message, err.param);
+    console.error("[stripe] pre-filled account create rejected:", err.message, err.param);
+    // One field Stripe won't take shouldn't cost the whole pre-fill: a phone
+    // number it rejects (e.g. Ofcom's 07700 drama range) is retried without
+    // the phone; anything else falls back to the bare account and the hosted
+    // form asks for it.
+    if (/phone/i.test(`${err.param ?? ""} ${err.message}`)) {
+      try {
+        return await create({ ...engineer, phone: null });
+      } catch (retryErr) {
+        if (!(retryErr instanceof Stripe.errors.StripeInvalidRequestError)) throw retryErr;
+        console.error("[stripe] pre-fill without phone rejected:", retryErr.message, retryErr.param);
+      }
+    }
     const account = await stripe.v2.core.accounts.create(base);
     return account.id;
   }
@@ -387,16 +399,28 @@ export async function prefillConnectAccount(accountId: string, engineer: Connect
     // identity alone rather than send details for the wrong kind of business.
     const entityMismatch =
       a.identity?.entity_type && p.identity.entity_type && a.identity.entity_type !== p.identity.entity_type;
-    const patch = {
-      contact_phone: missingOnly(p.contact_phone, a.contact_phone),
-      display_name: missingOnly(p.display_name, a.display_name),
-      identity: entityMismatch ? undefined : missingOnly(p.identity, a.identity),
-      defaults: missingOnly({ profile: p.profile }, a.defaults),
-      configuration: missingOnly({ merchant: p.merchant }, a.configuration),
+    const patchFor = (q: ReturnType<typeof prefillParams>) => {
+      const patch = {
+        contact_phone: missingOnly(q.contact_phone, a.contact_phone),
+        display_name: missingOnly(q.display_name, a.display_name),
+        identity: entityMismatch ? undefined : missingOnly(q.identity, a.identity),
+        defaults: missingOnly({ profile: q.profile }, a.defaults),
+        configuration: missingOnly({ merchant: q.merchant }, a.configuration),
+      };
+      return Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
     };
-    const update = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+    const update = patchFor(p);
     if (Object.keys(update).length > 0) {
-      await stripe.v2.core.accounts.update(accountId, update as Stripe.V2.Core.AccountUpdateParams);
+      try {
+        await stripe.v2.core.accounts.update(accountId, update as Stripe.V2.Core.AccountUpdateParams);
+      } catch (err) {
+        // As at create: a rejected phone shouldn't block the rest.
+        if (!(err instanceof Stripe.errors.StripeInvalidRequestError) || !/phone/i.test(`${err.param ?? ""} ${err.message}`)) throw err;
+        const retry = patchFor(prefillParams({ ...engineer, phone: null }));
+        if (Object.keys(retry).length > 0) {
+          await stripe.v2.core.accounts.update(accountId, retry as Stripe.V2.Core.AccountUpdateParams);
+        }
+      }
     }
     if (p.representative && !entityMismatch) {
       const people = await stripe.v2.core.accounts.persons.list(accountId);
