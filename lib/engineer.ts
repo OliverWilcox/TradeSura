@@ -26,18 +26,6 @@ export function displayName(engineer: Named): string {
   return engineer.tradingName?.trim() || engineer.legalName?.trim() || engineer.slug;
 }
 
-// Companies House names arrive upper case ("TRADESURA LTD"); customer pages
-// show them as a name ("Tradesura Ltd").
-export function legalNameDisplay(legalName: string): string {
-  return legalName
-    .trim()
-    .toLowerCase()
-    .replace(/\b([a-z])/g, (m) => m.toUpperCase())
-    .replace(/'S\b/g, "'s")
-    .replace(/\b(Plc|Llp|Llc|Uk)\b/g, (m) => m.toUpperCase())
-    .replace(/(?!^)\b(And|Of|The|For|In|On|At)\b/g, (m) => m.toLowerCase());
-}
-
 // Compared without case, punctuation or a trailing Ltd/Limited, so "Smith
 // Heating" trading as SMITH HEATING LTD isn't told it's a trading name.
 function nameKey(s: string): string {
@@ -50,13 +38,14 @@ function nameKey(s: string): string {
 }
 
 // Build Review 3, section 2 — "When a trading name differs from the legal
-// name, customer pages show 'MW Heating is a trading name of Tradesura Ltd'".
+// name, customer pages show 'MW Heating is a trading name of …'", with the
+// registered name exactly as Companies House has it ("302 MD LTD").
 // Null when there's no legal name on file or the two are the same name.
 export function tradingNameOf(engineer: Named): string | null {
   const legal = engineer.legalName?.trim();
   const trading = engineer.tradingName?.trim();
   if (!legal || !trading || nameKey(legal) === nameKey(trading)) return null;
-  return `${trading} is a trading name of ${legalNameDisplay(legal)}`;
+  return `${trading} is a trading name of ${legal}`;
 }
 
 // R5 — prices show including VAT where the engineer is VAT registered;
@@ -66,22 +55,3 @@ export function perMonth(priceLabel: string, vatRegistered: boolean | null | und
   return vatRegistered ? `${priceLabel} a month including VAT` : `${priceLabel}${plain}`;
 }
 
-// Companies House names are all capitals ("MW HEATING SERVICES LTD"). When a
-// company trades under its registered name, customers see it in normal
-// casing ("Mw Heating Services Ltd" would read wrong for initials, so words of
-// up to 3 letters with no vowel stay as typed, e.g. "MW", "HD"). The exact
-// legal name is still kept separately for the "trading name of" line.
-export function companyDisplayName(legalName: string): string {
-  if (legalName !== legalName.toUpperCase()) return legalName;
-  const keepUpper = new Set(["LLP", "PLC", "UK", "GB", "CIC"]);
-  return legalName
-    .split(/(\s+)/)
-    .map((w) => {
-      if (!w.trim()) return w;
-      if (keepUpper.has(w)) return w;
-      if (w === "LTD") return "Ltd";
-      if (w.length <= 3 && !/[AEIOUY]/.test(w)) return w;
-      return w.charAt(0) + w.slice(1).toLowerCase();
-    })
-    .join("");
-}

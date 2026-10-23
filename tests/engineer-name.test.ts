@@ -5,7 +5,7 @@ import { COMPANY_LINE, emailShell, withCompanyFooter } from "@/lib/email-layout"
 describe("engineer names (Build Review 3, section 2)", () => {
   it("says when a trading name differs from the legal name", () => {
     expect(tradingNameOf({ tradingName: "MW Heating", legalName: "TRADESURA LTD", slug: "mw" })).toBe(
-      "MW Heating is a trading name of Tradesura Ltd",
+      "MW Heating is a trading name of TRADESURA LTD",
     );
   });
 
@@ -40,14 +40,5 @@ describe("company footer on every email", () => {
     expect(html).toContain(COMPANY_LINE);
     expect(html).toMatch(/<img src="https:\/\/[^"]+\/brand\/lockup\.png"/);
     expect(withCompanyFooter(html)).toBe(html);
-  });
-});
-
-describe("companyDisplayName", () => {
-  it("turns a Companies House name into normal casing, keeping initials", async () => {
-    const { companyDisplayName } = await import("@/lib/engineer");
-    expect(companyDisplayName("TRADESURA LTD")).toBe("Tradesura Ltd");
-    expect(companyDisplayName("MW HEATING SERVICES LTD")).toBe("MW Heating Services Ltd");
-    expect(companyDisplayName("Smith & Sons Ltd")).toBe("Smith & Sons Ltd");
   });
 });

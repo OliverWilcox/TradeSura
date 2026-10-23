@@ -162,7 +162,7 @@ function Input({
           setFocused(false);
           props.onBlur?.(e);
         }}
-        className={`h-14 rounded-xl border bg-[#081321] px-3.5 py-0 text-[17px] text-white ${right ? "pr-20" : ""} ${props.editable === false ? "text-white/70" : ""} ${error ? "border-danger" : focused ? "border-brand-blue" : "border-white/30"}`}
+        className={`h-14 rounded-xl border bg-[#081321] px-3.5 py-0 text-[17px] text-white ${right ? "pr-20" : ""} ${props.editable === false ? "text-white/70" : ""} ${error ? "border-warn" : focused ? "border-brand-blue" : "border-white/30"}`}
       />
       {right && <View className="absolute right-3.5">{right}</View>}
     </View>
@@ -171,7 +171,9 @@ function Input({
 
 function FieldError({ children }: { children?: ReactNode }) {
   if (!children) return null;
-  return <Text className="mt-1.5 text-[13px] leading-[17px] text-danger">{children}</Text>;
+  // Amber, not red: a missing or mistyped answer is a warning, not a fault
+  // (Review 3 design rules).
+  return <Text className="mt-1.5 text-[13px] leading-[17px] text-warn">{children}</Text>;
 }
 
 function Hint({ children }: { children: ReactNode }) {
@@ -371,7 +373,6 @@ export default function SignUp() {
 
   // Step 3 — business
   const [tradingName, setTradingName] = useState("");
-  const [tradingSuggested, setTradingSuggested] = useState(false);
   const [businessType, setBusinessType] = useState<BusinessType>("sole_trader");
   const [companyQuery, setCompanyQuery] = useState("");
   const [companyResults, setCompanyResults] = useState<Company[]>([]);
@@ -873,11 +874,8 @@ export default function SignUp() {
     setCompanyNumber(c.number);
     setCompanyResults([]);
     clearError("companyNumber");
-    if (!tradingName.trim() || tradingSuggested) {
-      setTradingName(titleCase(c.name));
-      setTradingSuggested(true);
-      clearError("tradingName");
-    }
+    // Decision 1 — the trading name stays blank for a company (the hint says
+    // the Companies House name is used), so nothing is filled in here.
     if (c.office && (!addressLine1.trim() || usingOffice)) {
       setAddressLine1(c.office.line1);
       setTown(c.office.town);
@@ -909,12 +907,6 @@ export default function SignUp() {
 
   function changeBusinessType(value: BusinessType) {
     if (value === businessType) return;
-    // Build Review 2 — a name filled in from Companies House belongs to that
-    // company; switching type mustn't leave "… Ltd" on a sole trader.
-    if (tradingSuggested) {
-      setTradingName("");
-      setTradingSuggested(false);
-    }
     if (isOfficeAddress()) {
       setAddressLine1("");
       setTown("");
@@ -1647,7 +1639,6 @@ export default function SignUp() {
                         value={tradingName}
                         onChangeText={(v) => {
                           setTradingName(v);
-                          setTradingSuggested(false);
                           clearError("tradingName");
                         }}
                         placeholder="e.g. Smith Heating"
@@ -1659,11 +1650,6 @@ export default function SignUp() {
                       <FieldError>{errors.tradingName}</FieldError>
                       {legalFallback && !tradingName.trim() && (
                         <Hint>Leave blank to use {legalFallback}</Hint>
-                      )}
-                      {tradingSuggested && (
-                        <Hint>
-                          Suggested from Companies House — change it if you trade under another name
-                        </Hint>
                       )}
                       {/* Build Review 3 — a warning, never a block. */}
                       {businessType !== "ltd" && /\b(ltd|limited)\b/i.test(tradingName) && (
@@ -1789,19 +1775,4 @@ export default function SignUp() {
       </SafeAreaView>
     </View>
   );
-}
-
-// Companies House names are upper case ("SMITH HEATING LTD"); the suggested
-// trading name reads like a name ("Smith Heating Ltd").
-// 4 Oct notes, step 3.3: letters after "&" and apostrophes stay capitals
-// ("J&D Heating Ltd", "O'Neill Gas") — except a possessive s ("Smith's").
-function titleCase(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/\b([a-z])/g, (m) => m.toUpperCase())
-    .replace(/'S\b/g, "'s")
-    .replace(/\bLtd\b/g, "Ltd")
-    .replace(/\b(Plc|Llp|Llc|Uk)\b/g, (m) => m.toUpperCase())
-    // Small joining words stay lower case, except as the first word.
-    .replace(/(?!^)\b(And|Of|The|For|In|On|At)\b/g, (m) => m.toLowerCase());
 }
