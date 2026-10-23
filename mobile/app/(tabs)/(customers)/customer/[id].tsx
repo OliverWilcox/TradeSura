@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, Alert, Pressable } from "react-native";
+import { View, Text, ScrollView, Alert, Pressable, Linking } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
@@ -28,6 +28,8 @@ type Detail = {
     status: string;
     mandateStatus: string | null;
     activatedAt: string | null;
+    paymentFailedAt?: string | null;
+    paymentEndsAt?: string | null;
   } | null;
   canTextManageLink: boolean;
   viewerIsStaff?: boolean;
@@ -52,7 +54,7 @@ const END_REASONS = [
 ];
 
 function d(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "Europe/London" });
 }
 
 export default function CustomerDetail() {
@@ -212,6 +214,23 @@ export default function CustomerDetail() {
         </View>
 
         <CancelSaveCard customerId={c.id} onChange={load} />
+
+        {/* Retention §3 — a failed Direct Debit, so the installer can follow up. */}
+        {c.plan?.paymentFailedAt && (
+          <Card className="border-warn/50 bg-warn-tint">
+            <Text className="text-[13px] font-bold uppercase tracking-[0.08em] text-warn">Payment didn&apos;t go through</Text>
+            <Text className="mt-1.5 text-[15px] text-ink">
+              We&apos;ve texted and emailed {c.firstName} a one-tap link to update their bank details, from you.
+            </Text>
+            <Text className="mt-1 text-[13px] text-muted">
+              Reminders go on day 3 and day 7. Service booking is paused until it&apos;s paid
+              {c.plan.paymentEndsAt ? `; the plan ends on ${d(c.plan.paymentEndsAt)} if it isn't` : ""}.
+            </Text>
+            <Button className="mt-3" onPress={() => Linking.openURL(`tel:${c.phone}`)}>
+              {`Call ${c.firstName}`}
+            </Button>
+          </Card>
+        )}
 
         {/* Part 10 — "'Her plan — as signed' card showing the signed
             version (title, price, benefits — frozen snapshot, Part 7.2)."

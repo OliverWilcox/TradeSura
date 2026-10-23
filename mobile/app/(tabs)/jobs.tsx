@@ -81,7 +81,7 @@ function reminderLine(dueDate: Date): string {
   if (nextOffset === undefined) return "Reminder sent — they can reply to book.";
   const sendDate = new Date(dueDate);
   sendDate.setDate(sendDate.getDate() - nextOffset);
-  const weekday = sendDate.toLocaleDateString("en-GB", { weekday: "long" });
+  const weekday = sendDate.toLocaleDateString("en-GB", { weekday: "long", timeZone: "Europe/London" });
   return `${nextOffset}-day text goes out ${weekday}.`;
 }
 
@@ -108,7 +108,7 @@ function JobRow({
           {d.hasCp12 && " · CP12"}
           {" · "}
           {new Date(d.dueDate)
-            .toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
+            .toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "Europe/London" })
             .toUpperCase()}
         </Micro>
         {d.onPlan ? (
@@ -314,7 +314,7 @@ export default function Jobs() {
                       <Micro>
                         {a.applianceLabel.toUpperCase()} · SERVICED{" "}
                         {new Date(a.lastServicedAt)
-                          .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                          .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "Europe/London" })
                           .toUpperCase()}
                       </Micro>
                     </View>

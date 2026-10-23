@@ -18,7 +18,7 @@ type Rating = {
 };
 type Data = { summary: { average: number | null; count: number; isNew: boolean }; ratings: Rating[] };
 
-const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London" });
 
 // Section 5 — every rating customers have given, never filtered, each with
 // one public reply.

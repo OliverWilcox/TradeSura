@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import { View, Text, Modal, Pressable, TextInput, Linking, KeyboardAvoidingView, Platform } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui";
 import { Icon } from "@/components/icon";
 
@@ -74,6 +74,9 @@ export function StickerScanner({
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
+      {/* A Modal sits outside the app's safe-area provider, so it needs its
+          own or the title lands under the status bar. */}
+      <SafeAreaProvider>
       <View className="flex-1 bg-bg">
         <SafeAreaView edges={["top"]} className="flex-row items-center justify-between px-4 pb-2">
           <Text className="text-[17px] font-bold text-ink">Link sticker</Text>
@@ -150,6 +153,7 @@ export function StickerScanner({
           {error && <Text className="text-center text-[13px] text-danger">{error}</Text>}
         </KeyboardAvoidingView>
       </View>
+      </SafeAreaProvider>
     </Modal>
   );
 }

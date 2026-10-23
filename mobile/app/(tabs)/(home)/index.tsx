@@ -334,7 +334,7 @@ function OwnerHome() {
                       <Text className="text-copper">
                         £{(data.nextPayoutPence / 100).toFixed(2)}
                         {data.nextPayoutDate
-                          ? ` · ${new Date(data.nextPayoutDate).toLocaleDateString("en-GB", { weekday: "short" })}`
+                          ? ` · ${new Date(data.nextPayoutDate).toLocaleDateString("en-GB", { weekday: "short", timeZone: "Europe/London" })}`
                           : ""}
                       </Text>
                     ) : (

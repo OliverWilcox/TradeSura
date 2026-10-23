@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { RESCUE_GRACE_DAYS } from "@/lib/plan-billing";
 import { getActor, getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { cancelScheduledSms } from "@/lib/sms";
@@ -122,6 +123,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           status: active.status,
           mandateStatus: isStaff ? null : active.mandateStatus,
           activatedAt: active.activatedAt?.toISOString() ?? null,
+          // Retention §3 — the installer sees a failed payment and the grace
+          // period, so they can follow up personally.
+          paymentFailedAt: active.paymentFailedAt?.toISOString() ?? null,
+          paymentEndsAt: active.paymentFailedAt
+            ? new Date(active.paymentFailedAt.getTime() + RESCUE_GRACE_DAYS * 86_400_000).toISOString()
+            : null,
         }
       : null,
     canTextManageLink: Boolean(mostRecentPlan),

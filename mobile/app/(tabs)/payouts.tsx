@@ -43,7 +43,7 @@ function pounds(pence: number) {
   return `£${(pence / 100).toFixed(2)}`;
 }
 function shortDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "Europe/London" });
 }
 
 // E11 — Payouts & collections. Real Stripe balance + payout history once the

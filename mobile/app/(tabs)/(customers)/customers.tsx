@@ -40,7 +40,7 @@ function statusLine(c: Customer): string {
     if (c.activatedAt) {
       const days = (Date.now() - new Date(c.activatedAt).getTime()) / 864e5;
       if (days < 7) return `${plan} — joined this week`;
-      const month = new Date(c.activatedAt).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+      const month = new Date(c.activatedAt).toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "Europe/London" });
       return `${plan} — since ${month}`;
     }
     return plan;

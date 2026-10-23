@@ -25,7 +25,7 @@ function pounds(p: number) {
   return `£${(p / 100).toFixed(2)}`;
 }
 function longDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" });
 }
 
 export default function PriceReview() {

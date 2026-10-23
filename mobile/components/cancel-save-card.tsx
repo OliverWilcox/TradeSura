@@ -24,8 +24,8 @@ type CancelState = {
   canAct?: boolean;
 };
 
-const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-const monthYear = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
+const monthYear = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Europe/London" });
 const pounds = (p: number) => (p % 100 === 0 ? `£${p / 100}` : `£${(p / 100).toFixed(2)}`);
 
 export function CancelSaveCard({ customerId, onChange }: { customerId: string; onChange?: () => void }) {
@@ -96,7 +96,7 @@ export function CancelSaveCard({ customerId, onChange }: { customerId: string; o
     <Card variant="raised">
       <View className="flex-row items-center justify-between">
         <Micro>Wants to cancel</Micro>
-        <Pill tone="danger">{s.source === "engineer_logged" ? "LOGGED BY YOU" : "FROM THEIR LINK"}</Pill>
+        <Pill tone="warn">{s.source === "engineer_logged" ? "LOGGED BY YOU" : "FROM THEIR LINK"}</Pill>
       </View>
       <Text className="mt-1.5 text-base font-bold text-ink">{s.customerName} wants to cancel</Text>
       <Text className="mt-0.5 text-sm text-ink">

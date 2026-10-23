@@ -116,7 +116,8 @@ export default function YourNumbers() {
                 TradeSura sent you {data.enquiries.total} enquir{data.enquiries.total === 1 ? "y" : "ies"}
               </Text>
               <Text className="mt-1 text-[13px] text-muted">
-                {data.enquiries.messages} messages · {data.enquiries.calls} calls — tap to see them
+                {data.enquiries.messages} message{data.enquiries.messages === 1 ? "" : "s"} · {data.enquiries.calls} call
+                {data.enquiries.calls === 1 ? "" : "s"} — tap to see them
               </Text>
             </Card>
           </Pressable>
