@@ -1053,7 +1053,7 @@ export default function PlanWizard() {
           </>
         )}
 
-        {error && <Text className="px-1 text-sm text-danger">{error}</Text>}
+        {error && <Text className="px-1 text-sm text-warn">{error}</Text>}
 
       </ScrollView>
 

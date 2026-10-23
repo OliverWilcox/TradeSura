@@ -97,7 +97,7 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
     <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${EMAIL.blue};text-transform:uppercase;padding-bottom:8px;">What happens next</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;line-height:20px;color:${EMAIL.ink};">
       <tr><td width="28" valign="top" style="color:${EMAIL.link};font-weight:700;padding:5px 0;">1</td><td style="padding:5px 0;">We check your Gas Safe registration, usually within 24 hours.</td></tr>
-      <tr><td width="28" valign="top" style="color:${EMAIL.link};font-weight:700;padding:5px 0;">2</td><td style="padding:5px 0;">Your Gas Safe registration shows on your plans and profile.</td></tr>
+      <tr><td width="28" valign="top" style="color:${EMAIL.link};font-weight:700;padding:5px 0;">2</td><td style="padding:5px 0;">Your <b>Verified Member</b> badge goes live on your plans and profile.</td></tr>
       <tr><td width="28" valign="top" style="color:${EMAIL.link};font-weight:700;padding:5px 0;">3</td><td style="padding:5px 0;">Your member pack is posted, with QR boiler stickers that link each boiler to its Home Passport.</td></tr>
     </table>
   </td></tr>
