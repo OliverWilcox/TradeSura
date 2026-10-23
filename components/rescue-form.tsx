@@ -57,7 +57,7 @@ export function RescueForm(props: Props) {
       <div>
         <h1 className="font-semibold text-lg">Hi {props.firstName}, let&apos;s get your plan back on track</h1>
         <p className="text-sm text-muted mt-1">
-          Your {props.amountLabel} payment to {props.brand} didn&apos;t go through. Add your bank details below and
+          Your {props.amountLabel} payment to {props.brand}{" "}didn&apos;t go through. Add your bank details below and
           your {props.planName ? `${props.planName} plan` : "plan"} carries on as normal.
         </p>
       </div>

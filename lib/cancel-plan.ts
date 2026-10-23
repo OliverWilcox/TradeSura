@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/db";
+import { clauseLine } from "@/lib/clauses";
 import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { sendEmail } from "@/lib/email";
@@ -65,11 +66,24 @@ export async function cancelContext(planId: string) {
       tier: { include: { clauses: { include: { clause: true } } } },
     },
   });
-  const liveTiers = await prisma.planTier.findMany({
-    where: { engineerId: plan.engineerId, status: "LIVE" },
-    select: { id: true, name: true, priceMonthlyPence: true },
-    orderBy: { priceMonthlyPence: "asc" },
-  });
+  const liveTiers = (
+    await prisma.planTier.findMany({
+      where: { engineerId: plan.engineerId, status: "LIVE" },
+      select: {
+        id: true,
+        name: true,
+        priceMonthlyPence: true,
+        clauseRates: true,
+        clauses: { include: { clause: true }, orderBy: { clause: { sortOrder: "asc" } } },
+      },
+      orderBy: { priceMonthlyPence: "asc" },
+    })
+  ).map((t) => ({
+    id: t.id,
+    name: t.name,
+    priceMonthlyPence: t.priceMonthlyPence,
+    lines: [...t.clauses.map((tc) => clauseLine(tc.clause, t.clauseRates)), "Your Home Passport"],
+  }));
   const brand = brandName(plan.engineer);
   const tier = resolvePlanTier(plan);
   const serviceUsed = await planServiceUsed(plan);

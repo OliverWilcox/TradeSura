@@ -19,7 +19,7 @@ const SECONDARY =
 const CANCEL_BTN =
   "block w-full text-center font-semibold rounded-[10px] px-4 py-3 text-[15px] bg-transparent text-white border-[1.5px] border-white/55 disabled:opacity-50";
 
-type Cheaper = { id: string; name: string; priceMonthlyPence: number; savingPence: number };
+type Cheaper = { id: string; name: string; priceMonthlyPence: number; savingPence: number; lines?: string[] };
 
 const longDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -247,6 +247,22 @@ export function CancelFlow(props: {
           <h1 className="text-[20px] font-bold leading-tight">{props.brand} has a cheaper plan for you</h1>
           <p className="text-[21px] font-bold mt-3">{props.cheaper.name}</p>
           <p className="text-[15px]">{price(props.cheaper.priceMonthlyPence)}</p>
+          {(props.cheaper.lines ?? []).length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {(props.cheaper.lines ?? []).map((l) => {
+                    const [title, note] = l.split(" — ");
+                    return (
+                      <li key={l} className="flex gap-2 text-[14px]">
+                        <span aria-hidden className="text-[#1F5FC4] font-bold">✓</span>
+                        <span>
+                          {title}
+                          {note && <span className="block text-[12.5px] text-[#5B6B82]">{note}</span>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
           <p className={`text-[13px] mt-2 ${MUTED}`}>
             Save {pounds(props.cheaper.savingPence)} a month compared with your {props.tierName} plan.
           </p>
@@ -309,6 +325,22 @@ export function CancelFlow(props: {
             <Step n={2} title={`${props.brand} has a cheaper plan for you`}>
               <p className="text-[21px] font-bold mt-3">{offer.tier.name}</p>
               <p className="text-[15px]">{price(offer.tier.priceMonthlyPence)}</p>
+              {(offer.tier.lines ?? []).length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {(offer.tier.lines ?? []).map((l) => {
+                    const [title, note] = l.split(" — ");
+                    return (
+                      <li key={l} className="flex gap-2 text-[14px]">
+                        <span aria-hidden className="text-[#1F5FC4] font-bold">✓</span>
+                        <span>
+                          {title}
+                          {note && <span className="block text-[12.5px] text-[#5B6B82]">{note}</span>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
               <p className={`text-[13px] mt-2 ${MUTED}`}>Save {pounds(offer.savingPence)} a month and stay with {props.brand}.</p>
             </Step>
           )}

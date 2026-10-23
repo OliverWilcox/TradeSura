@@ -25,7 +25,8 @@ export const WINTER_MONTH = 9; // October (0-based) — "before winter" is 1 Oct
 
 export const ANNUAL_SERVICE_CODE = "ANNUAL_SERVICE";
 
-export type TierOption = { id: string; name: string; priceMonthlyPence: number };
+// lines: what the plan includes, shown on the cheaper-plan offer (spec §2).
+export type TierOption = { id: string; name: string; priceMonthlyPence: number; lines?: string[] };
 
 export type Offer =
   | { kind: "cheaper_plan"; tier: TierOption; savingPence: number }

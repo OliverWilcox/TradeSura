@@ -147,7 +147,12 @@ export async function EngineerPage({
 
   // Live Gas Safe check — the badge shows register data queried now, not a
   // value cached at signup.
-  const gasSafe = engineer.gasSafeNo ? await verifyGasSafe(engineer.gasSafeNo) : null;
+  const registerMatch = engineer.gasSafeNo ? await verifyGasSafe(engineer.gasSafeNo) : null;
+  // Verification is a human decision in the admin queue (29 Sept review):
+  // an approved, standing engineer shows the badge even when their number
+  // isn't in our copy of the register.
+  const gasSafe =
+    registerMatch ?? (engineer.gasSafeVerifiedAt && !engineer.pausedAt && !engineer.bannedAt ? true : null);
 
   await track("page_visit", { type: "CUSTOMER" }, {
     engineerId: engineer.id,

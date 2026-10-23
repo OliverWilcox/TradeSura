@@ -32,7 +32,14 @@ export type DueService = {
 export async function dueServices(engineerId: string, opts: { addedById?: string } = {}): Promise<DueService[]> {
   const own = opts.addedById ? { addedById: opts.addedById } : {};
   const plans = await prisma.plan.findMany({
-    where: { engineerId, status: "ACTIVE", activatedAt: { not: null }, ...(opts.addedById ? { customer: own } : {}) },
+    // Retention §3 — service booking pauses while a payment is outstanding.
+    where: {
+      engineerId,
+      status: "ACTIVE",
+      activatedAt: { not: null },
+      paymentFailedAt: null,
+      ...(opts.addedById ? { customer: own } : {}),
+    },
     include: {
       customer: true,
       tier: { include: { clauses: { include: { clause: true } } } },

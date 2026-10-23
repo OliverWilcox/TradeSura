@@ -16,6 +16,7 @@ type Detail = {
   email: string | null;
   source: string;
   address: string | null;
+  hasPassport?: boolean;
   appliance: { label: string; lastServicedAt: string | null } | null;
   nextServiceDue: string | null;
   serviceOverdue: boolean;
@@ -249,7 +250,8 @@ export default function CustomerDetail() {
 
         {/* Part 10 — Service card: Last service / Next due with a red
             OVERDUE chip when late. */}
-        {(c.appliance?.lastServicedAt || c.nextServiceDue) && (
+        {/* With a Home Passport, its section shows service dates and logs services. */}
+        {!c.hasPassport && (c.appliance?.lastServicedAt || c.nextServiceDue) && (
           <Card>
             <Micro className="mb-1">Service</Micro>
             {c.appliance?.lastServicedAt && (

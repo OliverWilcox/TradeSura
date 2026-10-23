@@ -98,6 +98,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     phone: customer.phone,
     email: customer.email,
     source: customer.source,
+    // Retention §4 — the Home Passport section takes over the service card.
+    hasPassport: customer.properties.some((p) => p.passportId),
     address: customer.properties[0]
       ? [customer.properties[0].addressLine1, customer.properties[0].town, customer.properties[0].postcode]
           .filter(Boolean)

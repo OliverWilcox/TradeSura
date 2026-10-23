@@ -9,6 +9,9 @@ export const unstable_settings = { initialRouteName: "index" };
 export default function HomeStack() {
   return (
     <Stack screenOptions={{ headerShown: false, animation: "fade", animationDuration: 220 }}>
+      {/* Home first: declaring only the wizard made it the stack's first
+          route, which the web build opened instead of the dashboard. */}
+      <Stack.Screen name="index" />
       {/* Review 3 P0 — Back in the wizard means the previous step, so the
           swipe-back gesture can't skip out of it. */}
       <Stack.Screen name="plan-wizard" options={{ gestureEnabled: false }} />
