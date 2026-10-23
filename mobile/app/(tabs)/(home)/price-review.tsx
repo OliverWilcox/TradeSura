@@ -112,7 +112,7 @@ export default function PriceReview() {
           <>
             <Text className="px-1 font-sans text-sm text-muted">
               Once a year you can change what your current customers pay. They get{" "}
-              {data.noticeDays} days&apos; notice by text and email, with a free way to cancel.
+              {data.noticeDays}{" "}days&apos; notice by text and email, with a free way to cancel.
             </Text>
 
             <Card>
@@ -156,7 +156,7 @@ export default function PriceReview() {
               )}
               {waiting.length > 0 && (
                 <Text className="mt-2 font-sans text-xs text-faint">
-                  {waiting.length} other{waiting.length === 1 ? "" : "s"} can&apos;t be reviewed yet (a review is
+                  {waiting.length} other{waiting.length === 1 ? "" : "s"}{" "}can&apos;t be reviewed yet (a review is
                   pending, or they joined or were last reviewed less than a year ago). They keep their price.
                 </Text>
               )}

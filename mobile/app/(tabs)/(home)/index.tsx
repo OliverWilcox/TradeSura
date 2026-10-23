@@ -405,7 +405,7 @@ function OwnerHome() {
                       £{(data.prizeYearlyPence / 100).toFixed(0)}/yr not collected
                     </Text>
                     <Text className="mt-0.5 text-[12.5px] text-muted">
-                      {data.noPlan} book customers aren&apos;t on a plan yet
+                      {data.noPlan}{" "}book customers aren&apos;t on a plan yet
                     </Text>
                   </View>
                   <Pressable onPress={() => router.push("/customers")}>
@@ -421,7 +421,7 @@ function OwnerHome() {
               <Card>
                 <Micro>Still open</Micro>
                 <Text className="mt-1 text-[15px] font-bold text-ink">
-                  {data.offersWaiting.customerFirstName} hasn&apos;t set up their plan yet
+                  {data.offersWaiting.customerFirstName}{" "}hasn&apos;t set up their plan yet
                 </Text>
                 <Text className="mt-1 text-[12.5px] text-muted">
                   Worth a follow-up call — the link is still live.

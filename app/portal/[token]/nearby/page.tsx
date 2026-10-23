@@ -29,7 +29,7 @@ export default async function NearbyPage({ params }: { params: Promise<{ token: 
       <div className={CARD}>
         <h1 className="text-[20px] font-bold leading-tight">Engineers near you</h1>
         <p className="text-[13px] mt-1.5 text-[#5B6B82]">
-          {brandName(plan.engineer)} no longer offers care plans through TradeSura. If you&apos;d like someone else to
+          {brandName(plan.engineer)}{" "}no longer offers care plans through TradeSura. If you&apos;d like someone else to
           look after your boiler, choose an engineer below and sign up with them. Nothing changes unless you do.
         </p>
       </div>

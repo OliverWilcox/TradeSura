@@ -450,7 +450,7 @@ export default function OfferStart() {
                 </Button>
               </View>
               <Micro className="mt-2 text-center">
-                We&apos;ll nudge {previewName} if they haven&apos;t looked in 3 days.
+                We&apos;ll nudge {previewName}{" "}if they haven&apos;t looked in 3 days.
               </Micro>
             </Card>
           )}

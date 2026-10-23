@@ -79,7 +79,7 @@ export default async function FindPassportPage({
           ) : (
             <form action={requestPassportAccess} className="space-y-2.5 mt-3">
               <p className="text-xs text-muted">
-                The records belong to the home. To see them, ask {brand ?? "the engineer"} — they&apos;ll
+                The records belong to the home. To see them, ask {brand ?? "the engineer"}{" "}— they&apos;ll
                 check with the homeowner first.
               </p>
               <input type="hidden" name="postcode" value={postcode} />
