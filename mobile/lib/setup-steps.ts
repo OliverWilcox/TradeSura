@@ -48,7 +48,7 @@ export function setupSteps(me: Me | null): SetupStep[] {
       title: "Get paid",
       sub: me?.stripeConnected ? "Paid out every Friday" : "About 3 minutes with Stripe",
       done: Boolean(me?.stripeConnected),
-      cta: me?.stripeDetailsSubmitted ? "Finish payments" : "Set up payments",
+      cta: me?.stripeDetailsSubmitted || me?.stripeState === "half" || me?.stripeState === "needs_more" ? "Finish payments" : "Set up payments",
       href: "/get-paid",
     },
     {

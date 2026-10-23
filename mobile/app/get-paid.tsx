@@ -1,9 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { View, Text, ScrollView, Pressable } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
 import { AppHeader, Button, OpeningStripe } from "@/components/ui";
@@ -35,6 +35,13 @@ function FlowRow({ icon, n, children }: { icon: IconName; n: number; children: R
 
 export default function GetPaid() {
   const { me, refreshMe, skipStripe } = useAuth();
+  // Creating the Stripe account takes several slow calls: start it while the
+  // engineer reads this screen, so "Continue to Stripe" only fetches the link.
+  const prepared = useRef<Promise<unknown> | null>(null);
+  useEffect(() => {
+    if (me?.role === "staff" || me?.stripeConnected) return;
+    prepared.current = api("/api/stripe/prepare", { method: "POST" }).catch(() => {});
+  }, [me?.role, me?.stripeConnected]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set after coming back from Stripe without payments switched on.
@@ -46,6 +53,8 @@ export default function GetPaid() {
     try {
       // Build Guide v2 review 17 Sept, B3 — see lib/stripe.ts's
       // getConnectLinkWithRetry for why a single retry belongs here.
+      // Never race the background set-up into a second account.
+      await prepared.current;
       const { url } = await getConnectLinkWithRetry();
       // Build Guide v2 Part 17.1 — an ephemeral session kills iOS's "wants
       // to use stripe.com" prompt (ignored, harmlessly, on Android).

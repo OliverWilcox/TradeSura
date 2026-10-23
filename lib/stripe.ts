@@ -429,6 +429,12 @@ export async function prefillConnectAccount(accountId: string, engineer: Connect
       }
     }
   } catch (err) {
+    // Once the engineer has opened Stripe's form, Stripe owns those answers
+    // and refuses platform writes — expected, nothing to fix.
+    if (err instanceof Stripe.errors.StripeError && /do not have permission/i.test(err.message)) {
+      console.log("[stripe] pre-fill skipped: the engineer has started Stripe's form");
+      return;
+    }
     console.error("[stripe] best-effort account pre-fill failed:", err);
   }
 }
