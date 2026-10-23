@@ -54,13 +54,10 @@ export function getStripe(): Stripe {
 // production 29 Sept, req_vqw2i8fG29yblL) — the merchant config has no
 // transfers capability at all in the v2 types.
 //
-// VERIFY IN TEST MODE before relying on this: the bacs_debit_payments
-// capability key under configuration.merchant.capabilities is confirmed to
-// exist in the SDK types, but its actual approval behaviour for a GB
-// individual/company account (does it need anything else alongside
-// card_payments?) hasn't been exercised against a live sandbox call from
-// this session — no Stripe CLI/keys available here. Watch for
-// capability_not_available_* errors on first real account creation.
+// Capabilities are only what launch needs (Stripe's onboarding guidance,
+// point 5): bacs_debit_payments on merchant and stripe_transfers on
+// recipient. Checked in test mode 23 Oct: a GB account accepts Bacs without
+// card_payments and asks for the same details.
 const IDENTITY_ENTITY_TYPE: Record<string, "individual" | "company"> = {
   sole_trader: "individual",
   ltd: "company",
@@ -295,10 +292,6 @@ function baseCreateParams(e: ConnectEngineer): Stripe.V2.Core.AccountCreateParam
       merchant: {
         mcc: MCC,
         capabilities: {
-          // card_payments is a platform-level prerequisite for the merchant
-          // configuration even though this integration only charges Bacs —
-          // mirrors the same requirement the old v1 Express account had.
-          card_payments: { requested: true },
           bacs_debit_payments: { requested: true },
         },
       },
@@ -472,11 +465,12 @@ export type ConnectAccountStatus = {
 function statusFromV2Account(a: Stripe.V2.Core.Account): ConnectAccountStatus {
   const caps = a.configuration?.merchant?.capabilities;
   // "Charges enabled" means a destination charge will actually succeed, which
-  // needs the recipient's transfers capability too — card_payments alone
-  // let a merchant-only account read as ready while every checkout failed.
+  // needs Bacs (the only way customers pay) and the recipient's transfers
+  // capability — a merchant-only account would read as ready while every
+  // checkout failed.
   const transfersActive =
     a.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status === "active";
-  const chargesEnabled = caps?.card_payments?.status === "active" && transfersActive;
+  const chargesEnabled = caps?.bacs_debit_payments?.status === "active" && transfersActive;
   const payoutsEnabled = caps?.stripe_balance?.payouts?.status === "active";
   const deadline = a.requirements?.summary?.minimum_deadline?.status;
   const requirementsDue =
