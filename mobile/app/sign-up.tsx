@@ -921,6 +921,14 @@ export default function SignUp() {
       setPostcode("");
       setUsingOffice(false);
     }
+    // Back to Limited company with the company still picked and no address
+    // typed: its registered office comes back, as when it was first picked.
+    if (value === "ltd" && company?.office && !addressLine1.trim()) {
+      setAddressLine1(company.office.line1);
+      setTown(company.office.town);
+      setPostcode(company.office.postcode);
+      setUsingOffice(true);
+    }
     setBusinessType(value);
     clearError("companyNumber");
     clearError("soleOwner");

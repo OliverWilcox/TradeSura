@@ -42,3 +42,12 @@ describe("company footer on every email", () => {
     expect(withCompanyFooter(html)).toBe(html);
   });
 });
+
+describe("companyDisplayName", () => {
+  it("turns a Companies House name into normal casing, keeping initials", async () => {
+    const { companyDisplayName } = await import("@/lib/engineer");
+    expect(companyDisplayName("TRADESURA LTD")).toBe("Tradesura Ltd");
+    expect(companyDisplayName("MW HEATING SERVICES LTD")).toBe("MW Heating Services Ltd");
+    expect(companyDisplayName("Smith & Sons Ltd")).toBe("Smith & Sons Ltd");
+  });
+});

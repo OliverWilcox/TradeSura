@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { companyDisplayName } from "@/lib/engineer";
 import { verifyToken } from "@/lib/auth";
 import { issueSignInCode, maskEmail, sessionToken, signInCodesEnabled } from "@/lib/sign-in-code";
 import { uniqueSlug } from "@/lib/slug";
@@ -278,7 +279,8 @@ export async function POST(req: Request) {
     // the email.
     // Blank trading name on a company = trade under the Companies House name.
     const legalName = rest.businessType !== "sole_trader" ? rest.legalName || null : null;
-    const tradingName = rest.tradingName.length >= 2 ? rest.tradingName : (legalName ?? rest.tradingName);
+    const tradingName =
+      rest.tradingName.length >= 2 ? rest.tradingName : legalName ? companyDisplayName(legalName) : rest.tradingName;
     const slug = await uniqueSlug(tradingName);
 
     // Resolve a claim code (C5): fold the letter cell into attribution so it

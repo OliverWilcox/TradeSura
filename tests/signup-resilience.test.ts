@@ -43,7 +43,7 @@ function signup(extra: Record<string, unknown>) {
 it("a limited company with a blank trading name trades under its Companies House name", async () => {
   const response = await signup({ tradingName: "", businessType: "ltd", companyNumber: "17325346", legalName: "TRADESURA LTD", soleOwner: true });
   expect(response.status).toBe(200);
-  expect(m.create.mock.calls[0][0].data).toMatchObject({ tradingName: "TRADESURA LTD", legalName: "TRADESURA LTD", soleOwner: true });
+  expect(m.create.mock.calls[0][0].data).toMatchObject({ tradingName: "Tradesura Ltd", legalName: "TRADESURA LTD", soleOwner: true });
 });
 it("stores the legal name alongside a different trading name", async () => {
   await signup({ tradingName: "MW Heating", businessType: "ltd", companyNumber: "17325346", legalName: "TRADESURA LTD", soleOwner: false });

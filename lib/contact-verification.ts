@@ -17,7 +17,10 @@ type Purpose = "signup-email" | "signup-sms" | "enable-sms" | "signin-sms";
 // All attempts and resends for a destination share a lock, even across app instances.
 export async function requestContactCode(purpose: Purpose, destination: string, claims: Record<string, string>) {
   const sms = purpose !== "signup-email";
-  if (sms ? !smsAvailable() : !emailConfigured()) throw new VerificationError(`${sms ? "Text messages" : "Verification emails"} are unavailable right now. Please try again later.`, 503);
+  // Local development only, with no provider set up: hand the code back so
+  // the screen can fill it in (same as sign-in's devCode). Never in production.
+  const devNoProvider = process.env.NODE_ENV === "development" && (sms ? !smsAvailable() : !emailConfigured());
+  if (!devNoProvider && (sms ? !smsAvailable() : !emailConfigured())) throw new VerificationError(`${sms ? "Text messages" : "Verification emails"} are unavailable right now. Please try again later.`, 503);
   const scope = `${purpose}:${destination}`;
   const code = String(randomInt(1000, 10000));
   const row = await prisma.$transaction(async tx => {
@@ -32,6 +35,10 @@ export async function requestContactCode(purpose: Purpose, destination: string, 
     await tx.signInCode.updateMany({ where: { engineerId: scope, usedAt: null }, data: { usedAt: now } });
     return tx.signInCode.create({ data: { engineerId: scope, channel: purpose, codeHash: hashCode(code), attempts, expiresAt: new Date(now.getTime() + CODE_TTL_MS) } });
   });
+  if (devNoProvider) {
+    console.log(`[dev] ${purpose} code for ${destination}: ${code}`);
+    return { requestToken: await signToken({ contactCodeId: row.id, purpose, ...claims }, "10m"), devCode: code };
+  }
   try {
     if (sms) await sendVerificationCode(destination, code);
     else await sendEmail({ to: destination, ...codeEmail({ code, expiresAt: row.expiresAt }) });

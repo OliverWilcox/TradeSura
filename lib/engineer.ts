@@ -65,3 +65,23 @@ export function tradingNameOf(engineer: Named): string | null {
 export function perMonth(priceLabel: string, vatRegistered: boolean | null | undefined, plain = " a month"): string {
   return vatRegistered ? `${priceLabel} a month including VAT` : `${priceLabel}${plain}`;
 }
+
+// Companies House names are all capitals ("MW HEATING SERVICES LTD"). When a
+// company trades under its registered name, customers see it in normal
+// casing ("Mw Heating Services Ltd" would read wrong for initials, so words of
+// up to 3 letters with no vowel stay as typed, e.g. "MW", "HD"). The exact
+// legal name is still kept separately for the "trading name of" line.
+export function companyDisplayName(legalName: string): string {
+  if (legalName !== legalName.toUpperCase()) return legalName;
+  const keepUpper = new Set(["LLP", "PLC", "UK", "GB", "CIC"]);
+  return legalName
+    .split(/(\s+)/)
+    .map((w) => {
+      if (!w.trim()) return w;
+      if (keepUpper.has(w)) return w;
+      if (w === "LTD") return "Ltd";
+      if (w.length <= 3 && !/[AEIOUY]/.test(w)) return w;
+      return w.charAt(0) + w.slice(1).toLowerCase();
+    })
+    .join("");
+}
