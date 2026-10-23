@@ -96,7 +96,7 @@ export function AddressLookupField({
           autoCapitalize="characters"
           autoComplete="postal-code"
           textContentType="postalCode"
-          className={`flex-1 ${fieldCls} ${postcodeError ? "border-danger" : ""}`}
+          className={`flex-1 ${fieldCls} ${postcodeError ? "border-warn" : ""}`}
         />
         <Pressable
           onPress={findAddress}
@@ -111,7 +111,7 @@ export function AddressLookupField({
         </Pressable>
       </View>
 
-      {postcodeError && <Text className="text-[13px] text-danger">{postcodeError}</Text>}
+      {postcodeError && <Text className="text-[13px] text-warn">{postcodeError}</Text>}
       {searchError && <Micro className="text-faint">{searchError}</Micro>}
 
       {results && results.length > 0 && (

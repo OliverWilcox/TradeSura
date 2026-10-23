@@ -70,7 +70,7 @@ export function IdCardPicker({
     }
   }
 
-  const border = error ? "border-danger" : "border-white/35";
+  const border = error ? "border-warn" : "border-white/35";
 
   if (value.phase === "empty" || value.phase === "denied") {
     return (
