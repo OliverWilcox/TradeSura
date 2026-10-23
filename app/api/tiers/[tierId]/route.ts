@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { checkWording } from "@/lib/compliance/blocklist";
+import { rateWordingError } from "@/lib/plan-rules";
 import {
   TIER_PRICE_MIN_PENCE,
   TIER_PRICE_MAX_PENCE,
@@ -111,6 +112,8 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
       return NextResponse.json({ error: "blocked_wording", label, ...check }, { status: 422 });
     }
   }
+  const rateWording = rateWordingError(parsed.data.clauseRates);
+  if (rateWording) return NextResponse.json(rateWording, { status: 400 });
 
   // Part 7.1 LAW — required (CORE) options are unremovable; union them in
   // rather than trusting the client picker alone.

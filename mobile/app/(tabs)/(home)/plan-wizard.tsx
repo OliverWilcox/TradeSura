@@ -125,6 +125,9 @@ export default function PlanWizard() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [customLabels, setCustomLabels] = useState<string[]>([]);
   const [rates, setRates] = useState<Record<string, string>>({});
+  // Rate boxes are free text on the customer's page, so they run the same
+  // word filter as the plan name (server-side, via check-wording).
+  const [rateBlocked, setRateBlocked] = useState<Record<string, string>>({});
   const [qualified, setQualified] = useState<Record<string, string>>({});
   const [qualPrompts, setQualPrompts] = useState<Record<string, string>>({});
   const [qualAsk, setQualAsk] = useState<Template | null>(null);
@@ -235,9 +238,12 @@ export default function PlanWizard() {
   const missingRates = templates.filter(
     (t) => t.pricingLabel === RATE_LABEL && selected.has(t.code) && !rates[t.code]?.trim(),
   );
-  const rateError = missingRates.length
-    ? `Enter your rate for ${missingRates.map((t) => t.title).join(" and ")}.`
-    : null;
+  const blockedRate = templates.find((t) => selected.has(t.code) && rateBlocked[t.code]);
+  const rateError = blockedRate
+    ? `Your rate for "${blockedRate.title}" can't say that: that wording makes this an insurance product. Enter just the rate, like 10% off.`
+    : missingRates.length
+      ? `Enter your rate for ${missingRates.map((t) => t.title).join(" and ")}.`
+      : null;
   const landlordPlan = templates.some((t) => t.category === LANDLORD_CATEGORY && selected.has(t.code));
   const suggestedName = landlordPlan ? "Landlord Care" : "Boiler Care";
   // Until the engineer sets a price themselves, the price follows the guide.
@@ -385,6 +391,26 @@ export default function PlanWizard() {
       return false;
     }
   }
+
+  useEffect(() => {
+    const entries = Object.entries(rates).filter(([, v]) => v.trim());
+    const t = setTimeout(async () => {
+      const next: Record<string, string> = {};
+      for (const [code, v] of entries) {
+        try {
+          const check = await api<{ ok: true } | { ok: false; explanation: string }>("/api/tiers/check-wording", {
+            method: "POST",
+            body: JSON.stringify({ text: v.trim() }),
+          });
+          if (!check.ok) next[code] = check.explanation;
+        } catch {
+          // The server re-checks on save; a failed live check isn't a block.
+        }
+      }
+      setRateBlocked(next);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [rates]);
 
   // Part 8 Step 3 — the blocklist runs live as they type (Build Review 2),
   // not only when Next is tapped.
@@ -695,7 +721,7 @@ export default function PlanWizard() {
                               placeholder="Your rate, e.g. 10% off"
                               placeholderTextColor="#6e86a3"
                               accessibilityLabel={`Your rate for ${t.title}`}
-                              className="mt-2 min-h-[42px] rounded-xl border border-line-strong bg-bg px-3 text-[15px] text-ink"
+                              className={`mt-2 min-h-[42px] rounded-xl border bg-bg px-3 text-[15px] text-ink ${rateBlocked[t.code] ? "border-warn" : "border-line-strong"}`}
                             />
                           )}
                         </View>

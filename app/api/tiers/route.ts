@@ -11,7 +11,7 @@ import {
   serviceRuleError,
   withRequiredClauses,
 } from "@/lib/clauses";
-import { goLiveError } from "@/lib/plan-rules";
+import { goLiveError, rateWordingError } from "@/lib/plan-rules";
 import { checkWording } from "@/lib/compliance/blocklist";
 
 // Build Guide v2 Part 7 — "My plans" hub. Every plan the engineer has ever
@@ -94,6 +94,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "blocked_wording", label, ...check }, { status: 422 });
     }
   }
+  const rateWording = rateWordingError(body.clauseRates);
+  if (rateWording) return NextResponse.json(rateWording, { status: 400 });
   // Builder Step 4's provision promise is required to go live.
   const publishNow = body.publishNow === true;
   if (publishNow && body.attest !== true) {

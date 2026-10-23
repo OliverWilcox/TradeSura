@@ -67,3 +67,14 @@ describe("wording blocklist", () => {
     });
   }
 });
+
+// Build Review 3 follow-up — the "you set the rate" boxes are free text on
+// the customer's page, so they pass the word filter too.
+describe("rateWordingError", () => {
+  it("blocks insurance wording in a rate and allows a plain rate", async () => {
+    const { rateWordingError } = await import("@/lib/plan-rules");
+    expect(rateWordingError({ MULTI_APPLIANCE: "10% off" })).toBeNull();
+    const err = rateWordingError({ MULTI_APPLIANCE: "10% off + breakdown cover" });
+    expect(err?.code).toBe("rate_blocked");
+  });
+});
