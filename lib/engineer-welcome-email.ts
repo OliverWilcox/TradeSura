@@ -3,10 +3,9 @@
 // account's real setup state.
 import { prisma } from "@/lib/db";
 import { appUrl } from "@/lib/app-url";
-import { EMAIL, SUPPORT_EMAIL, emailAssetBase, emailShell, escapeHtml } from "@/lib/email-layout";
+import { EMAIL, SUPPORT_EMAIL, emailAssetBase, emailButton, emailShell, escapeHtml } from "@/lib/email-layout";
 import { REFERRAL_FIRST_YEAR_PERCENT, REFERRAL_LIFETIME_PERCENT } from "@/lib/referral";
 import { computeApplicationFeePence } from "@/lib/stripe";
-import { legalNameDisplay } from "@/lib/engineer";
 
 // Build Review 3, P1 — earnings use the engineer's 80% (after TradeSura's
 // fee, rounded down in their favour), never the customer's price: a £12
@@ -36,15 +35,16 @@ function checklistRow(item: Item, last: boolean): string {
 
 export async function engineerWelcomeEmailHtml(engineerId: string) {
   const e = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
-  const [liveTiers, customerCount] = await Promise.all([
+  const [liveTiers, customerCount, referralCount] = await Promise.all([
     prisma.planTier.count({ where: { engineerId, status: "LIVE" } }),
     prisma.customer.count({ where: { engineerId } }),
+    prisma.engineer.count({ where: { referrerId: engineerId } }),
   ]);
   const firstName = escapeHtml(e.firstName || "there");
   // Build Review 3, P1 — the BUSINESS name fills in ("MW Heating now has a
   // free TradeSura account"): trading name, else the Companies House name.
   const brand = escapeHtml(
-    e.tradingName?.trim() || (e.legalName?.trim() ? legalNameDisplay(e.legalName) : "") || "Your business",
+    e.tradingName?.trim() || e.legalName?.trim() || "Your business",
   );
   const perCustomer = engineerYearlyPence(EXAMPLE_PLAN_PENCE);
   const examplePounds = `£${EXAMPLE_PLAN_PENCE / 100}`;
@@ -53,14 +53,16 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
   // The mock-up's "WhatsApp us on …" line — set SUPPORT_WHATSAPP to show it.
   const whatsapp = process.env.SUPPORT_WHATSAPP?.trim();
 
-  // The mock-up's six rows, in its order (inviting has its own block below).
+  // The app's seven setup steps, in the Getting started hub's order
+  // (mobile/lib/setup-steps.ts), so the email and the app count the same.
   const items: Item[] = [
-    { done: Boolean(e.packRequestedAt), title: "Member pack address saved", hint: "posts when your badge goes live" },
-    { done: e.stripeChargesEnabled, title: "Set up payments", hint: "2 minutes with Stripe" },
     { done: liveTiers > 0, title: "Build your first plan", hint: `start from Boiler Care at ${examplePounds}` },
+    { done: e.stripeChargesEnabled, title: "Get paid", hint: "about 3 minutes with Stripe" },
     { done: Boolean(e.profilePublishedAt), title: "Get found on Google", hint: "your free profile page" },
     { done: Boolean(e.websiteConnectedAt), title: "Connect your website", hint: "sell plans there too" },
     { done: customerCount > 0, title: "Bring in your customers", hint: `each one worth up to ${wholePounds(perCustomer)} a year to you` },
+    { done: Boolean(e.inviteSharedAt) || referralCount > 0, title: "Invite engineers you know", hint: `earn ${REFERRAL_FIRST_YEAR_PERCENT}% of our fee on their plans` },
+    { done: Boolean(e.packRequestedAt), title: "Member pack", hint: "posts once your Gas Safe check is done" },
   ];
   const doneCount = items.filter((i) => i.done).length;
 
@@ -88,14 +90,14 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
   </td></tr>
 
   <tr><td align="center" style="padding:22px 32px 8px;">
-    <a href="${open("onboarding")}" style="display:block;background:${EMAIL.blue};color:#ffffff;text-decoration:none;font-weight:700;font-size:17px;line-height:52px;border-radius:12px;">Open TradeSura and finish setup</a>
+    ${emailButton(open("onboarding"), "Open TradeSura and finish setup")}
   </td></tr>
 
   <tr><td style="padding:22px 32px 4px;">
     <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${EMAIL.blue};text-transform:uppercase;padding-bottom:8px;">What happens next</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;line-height:20px;color:${EMAIL.ink};">
       <tr><td width="28" valign="top" style="color:${EMAIL.link};font-weight:700;padding:5px 0;">1</td><td style="padding:5px 0;">We check your Gas Safe registration, usually within 24 hours.</td></tr>
-      <tr><td width="28" valign="top" style="color:${EMAIL.link};font-weight:700;padding:5px 0;">2</td><td style="padding:5px 0;">Your <b>Gas Safe verified</b> badge goes live on your plans and profile.</td></tr>
+      <tr><td width="28" valign="top" style="color:${EMAIL.link};font-weight:700;padding:5px 0;">2</td><td style="padding:5px 0;">Your Gas Safe registration shows on your plans and profile.</td></tr>
       <tr><td width="28" valign="top" style="color:${EMAIL.link};font-weight:700;padding:5px 0;">3</td><td style="padding:5px 0;">Your member pack is posted, with QR boiler stickers that link each boiler to its Home Passport.</td></tr>
     </table>
   </td></tr>
@@ -140,7 +142,7 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
     subject: `Welcome to TradeSura, ${e.firstName || "there"}`,
     html: emailShell({
       title: `Welcome to TradeSura, ${e.firstName || "there"}`,
-      preheader: "Your free account is ready. Set up payments and build your first plan in about 10 minutes.",
+      preheader: "Your free account is ready. Build your first plan and set up payments in about 10 minutes.",
       rows,
       footerExtra,
     }),

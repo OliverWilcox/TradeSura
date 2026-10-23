@@ -87,7 +87,7 @@ const PACK: { icon: IconName; label: string }[] = [
 ];
 
 const SCRIPT =
-  "“I put all my customers on a care plan now — £12 a month, your annual service is included and you’re first in my diary. It takes a minute — shall we set you up now?”";
+  "“I put all my customers on a care plan now — £12 a month and you’re first in my diary. Your annual service comes with it once your third payment’s gone through. It takes a minute — shall we set you up now?”";
 
 const TIPS = [
   "Offer at every job, while you're still there.",

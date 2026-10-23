@@ -45,6 +45,25 @@ export function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+// A full-width button that also renders in Outlook for Windows, which
+// ignores padding and rounded corners on links: Outlook gets a VML
+// rounded rectangle, every other client gets the table-cell button.
+export function emailButton(href: string, label: string, opts: { width?: number; color?: string } = {}): string {
+  const width = opts.width ?? 536;
+  const color = opts.color ?? EMAIL.blue;
+  const text = escapeHtml(label);
+  return `<!--[if mso]>
+<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${href}" style="height:52px;v-text-anchor:middle;width:${width}px;" arcsize="23%" stroke="f" fillcolor="${color}">
+<w:anchorlock/><center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:17px;font-weight:bold;">${text}</center>
+</v:roundrect>
+<![endif]--><!--[if !mso]><!-- -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+<td align="center" bgcolor="${color}" style="background:${color};border-radius:12px;">
+<a href="${href}" style="display:block;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:17px;line-height:52px;border-radius:12px;">${text}</a>
+</td></tr></table>
+<!--<![endif]-->`;
+}
+
 export function emailShell(opts: {
   title: string;
   preheader: string;
@@ -57,7 +76,7 @@ export function emailShell(opts: {
   const width = opts.width ?? 600;
   const assets = emailAssetBase();
   return `<!doctype html>
-<html lang="en">
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
