@@ -10,7 +10,7 @@ import { Card, btnClass } from "@/components/ui";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Boiler service history", robots: { index: false } };
 
-const monthYear = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+const monthYear = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Europe/London" });
 
 // Section 4 — what a scan of the boiler sticker shows (usually the next
 // owner). Deliberately no address and no personal data: just who looks

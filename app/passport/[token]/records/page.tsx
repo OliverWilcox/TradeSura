@@ -7,7 +7,7 @@ import { PrintButton } from "@/components/print-button";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Home Passport records", robots: { index: false } };
 
-const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" });
 
 // Section 4 — "Download my records": a plain printable page (Save as PDF
 // from the browser's print dialog). Works the same LIVE or FROZEN — the

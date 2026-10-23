@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { brandName, perMonth, tradingNameOf } from "@/lib/engineer";
 import { CustomerShell } from "@/components/shells";
-import { Card, NotIncluded, Pill, RowLine } from "@/components/ui";
+import { Card, NotIncluded, Pill, RowLine, btnClass } from "@/components/ui";
 import { poundsFromPence } from "@/lib/plan-doc";
 import { resolvePlanTier } from "@/lib/plan-tier";
 
@@ -53,13 +53,13 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
           {plan.cancelRequestedAt && plan.cancelEffectiveAt && (
             <RowLine
               left="Plan ends"
-              right={plan.cancelEffectiveAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+              right={plan.cancelEffectiveAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" })}
             />
           )}
           {nextService && (
             <RowLine
               left="Annual service"
-              right={nextService.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
+              right={nextService.toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Europe/London" })}
             />
           )}
         </Card>
@@ -68,7 +68,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
         <Card className="text-center py-5">
           <p className="font-semibold">
             {plan.pausedUntil
-              ? `Paused until ${plan.pausedUntil.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`
+              ? `Paused until ${plan.pausedUntil.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" })}`
               : "Your plan is paused"}
           </p>
           <p className="text-xs text-muted mt-1">
@@ -78,9 +78,14 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
       ) : plan.status === "CANCELLED" ? (
         <Card className="text-center py-5">
           <p className="font-semibold">This plan is cancelled</p>
-          <p className="text-xs text-muted mt-1">
-            Changed your mind? Ask {brand} to send you a new signup link.
-          </p>
+          {/* Retention spec §2 — a one-tap Rejoin, not "ask your engineer". */}
+          {plan.rejoinToken ? (
+            <a href={`/rejoin/${plan.rejoinToken}`} className={`${btnClass()} mt-3 inline-block`}>
+              Rejoin {brand}
+            </a>
+          ) : (
+            <p className="text-xs text-muted mt-1">Changed your mind? Ask {brand} to send you a new signup link.</p>
+          )}
         </Card>
       ) : (
         <Card className="text-center py-5">
@@ -106,7 +111,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
                 c.code === "ANNUAL_SERVICE" && nextService ? (
                   <span className="font-mono text-[10px] uppercase text-faint">
                     NEXT:{" "}
-                    {nextService.toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
+                    {nextService.toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "Europe/London" })}
                   </span>
                 ) : undefined
               }

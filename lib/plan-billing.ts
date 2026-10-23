@@ -543,8 +543,7 @@ tap and your plan carries on as normal:</p>
   // Grace period reminders, from the engineer, on day 3 and day 7.
   const endsOn = new Date(now.getTime() + RESCUE_GRACE_DAYS * DAY_MS).toLocaleDateString("en-GB", {
     day: "numeric",
-    month: "long",
-  });
+    month: "long", timeZone: "Europe/London" });
   for (const day of RESCUE_REMINDER_DAYS) {
     const sendAfter = new Date(now.getTime() + day * DAY_MS);
     sendAfter.setHours(10, 0, 0, 0);

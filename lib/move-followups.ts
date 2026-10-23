@@ -27,7 +27,7 @@ export function letterAddress(p: { addressLine1: string; town: string | null; po
 }
 
 export function newOwnerLeadText(addressLine1: string, moveDate: Date): string {
-  const when = moveDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const when = moveDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
   return `New owner moving into ${addressLine1} around ${when} — the boiler's history is on the Home Passport; they may want a plan.`;
 }
 

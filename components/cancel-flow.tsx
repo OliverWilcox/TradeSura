@@ -22,7 +22,7 @@ const CANCEL_BTN =
 type Cheaper = { id: string; name: string; priceMonthlyPence: number; savingPence: number; lines?: string[] };
 
 const longDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" });
 
 function Ticks({ lines }: { lines: string[] }) {
   return (
@@ -187,8 +187,8 @@ export function CancelFlow(props: {
         <div className={`${CARD} text-center`}>
           <p className="font-semibold">This plan has ended</p>
           <p className={`text-[13px] mt-1 ${MUTED}`}>
-            No more payments will be taken. We&apos;ve emailed you to confirm. Changed your mind? Ask {props.brand} to
-            send you a new signup link.
+            No more payments will be taken. We&apos;ve emailed you to confirm. Changed your mind? Rejoin {props.brand}{" "}
+            in one tap from your plan page or that email.
           </p>
         </div>
         {backToPlan}
@@ -369,7 +369,9 @@ export function CancelFlow(props: {
                   type="date"
                   value={moveDate}
                   onChange={(e) => setMoveDate(e.target.value)}
-                  className="mt-1 block w-full rounded-lg border border-[#D5DDE8] px-3 py-2 text-[15px]"
+                  // iOS Safari gives date fields an intrinsic width that pushes
+                  // past the card; min-w-0 + appearance-none keep it inside.
+                  className="mt-1 block w-full min-w-0 max-w-full appearance-none rounded-lg border border-[#D5DDE8] bg-white px-3 py-2 text-[15px]"
                 />
               </label>
               <label className="block mt-3 text-[13px] font-semibold">

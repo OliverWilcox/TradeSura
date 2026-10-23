@@ -66,3 +66,13 @@ body {
 .font-mono {
   font-variant-numeric: tabular-nums;
 }
+
+/* iOS Safari zooms the page when a form field under 16px gets focus. On
+   phones every customer form field is at least 16px so nothing jumps. */
+@media (max-width: 640px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}

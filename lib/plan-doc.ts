@@ -37,8 +37,7 @@ export async function planDocumentEmailHtml(planId: string) {
   const coolingOffEnds = plan.coolingOffEndsAt?.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "long",
-    year: "numeric",
-  });
+    year: "numeric", timeZone: "Europe/London" });
 
   const clauseHtml = clauses
     .map((c) => `<h3 style="margin:14px 0 4px">${c.title}</h3><p style="margin:0">${c.bodyText}</p>`)

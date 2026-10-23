@@ -18,7 +18,7 @@ export default async function RatePage({ params }: { params: Promise<{ token: st
   });
   if (!rating) notFound();
   const brand = brandName(rating.engineer);
-  const when = rating.serviceRecord.doneAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const when = rating.serviceRecord.doneAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" });
 
   return (
     <CustomerShell tradingName={brand} legalLine={tradingNameOf(rating.engineer)} sub={`Service on ${when}`}>

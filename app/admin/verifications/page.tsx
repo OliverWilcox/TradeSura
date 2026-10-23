@@ -240,7 +240,7 @@ export default async function Verifications({
                 <div className="mt-2 font-mono text-base">Gas Safe {e.gasSafeNo}</div>
                 <Qualifications value={e.qualificationConfirmations} />
                 <div className="mt-2 text-muted">
-                  {e.email} · {e.phone} · signed up {e.createdAt.toLocaleString("en-GB")}
+                  {e.email} · {e.phone} · signed up {e.createdAt.toLocaleString("en-GB", { timeZone: "Europe/London" })}
                 </div>
                 <a
                   href="https://www.gassaferegister.co.uk/"
@@ -293,7 +293,7 @@ export default async function Verifications({
                 {e.firstName} {e.lastName} · {e.tradingName}
               </div>
               <div className="mt-1 whitespace-pre-line">{e.packAddress}</div>
-              <div className="mt-1 text-muted">Verified {e.gasSafeVerifiedAt?.toLocaleDateString("en-GB")}</div>
+              <div className="mt-1 text-muted">Verified {e.gasSafeVerifiedAt?.toLocaleDateString("en-GB", { timeZone: "Europe/London" })}</div>
             </div>
             <form action={markPosted}>
               <input type="hidden" name="key" value={key} />
@@ -332,7 +332,7 @@ function Qualifications({ value }: { value: unknown }) {
       {entries.map(([code, at]) => (
         <li key={code}>
           {CLAUSE_TEMPLATES.find((c) => c.code === code)?.title ?? code}: confirmed{" "}
-          {new Date(at).toLocaleDateString("en-GB")}
+          {new Date(at).toLocaleDateString("en-GB", { timeZone: "Europe/London" })}
         </li>
       ))}
     </ul>

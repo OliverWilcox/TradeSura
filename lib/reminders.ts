@@ -117,7 +117,7 @@ export async function queueServiceReminders(): Promise<number> {
       await sendSms({
         engineerId: plan.engineerId,
         to: plan.customer.phone,
-        body: `Hi ${plan.customer.firstName} — your annual service with ${brand} is due by ${due.toLocaleDateString("en-GB", { day: "numeric", month: "long" })}. Reply to this text to book it in.`,
+        body: `Hi ${plan.customer.firstName} — your annual service with ${brand} is due by ${due.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "Europe/London" })}. Reply to this text to book it in.`,
         messageClass: "TRANSACTIONAL",
         sendAfter,
         cancelKey,

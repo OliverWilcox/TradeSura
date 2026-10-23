@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   description: "Find your home's boiler service history by postcode.",
 };
 
-const monthYear = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+const monthYear = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Europe/London" });
 const input = "w-full border border-line rounded-[10px] px-3 py-2.5 text-sm bg-paper";
 
 // Section 4 backup — find a passport without the sticker. The visitor has to

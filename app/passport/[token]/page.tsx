@@ -12,8 +12,8 @@ import { setContactConsent } from "./actions";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Home Passport", robots: { index: false } };
 
-const monthYear = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
-const dayMonthYear = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const monthYear = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Europe/London" });
+const dayMonthYear = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London" });
 
 // Section 4 — the homeowner's view: the whole history of the home, from
 // every engineer, behind the private link only the homeowner holds.

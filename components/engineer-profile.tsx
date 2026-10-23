@@ -99,7 +99,7 @@ export function ProfilePhotos({ photos, brand }: { photos: string[]; brand: stri
   );
 }
 
-const monthYear = (d: Date) => d.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+const monthYear = (d: Date) => d.toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "Europe/London" });
 
 // All ratings, never filtered (UK fake-review rules), with the installer's reply.
 export function RatingsList({ ratings, firstName }: { ratings: PublicRating[]; firstName: string }) {

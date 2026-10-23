@@ -345,7 +345,7 @@ export default async function Retention({ searchParams }: { searchParams: Promis
                   <div className="font-semibold">{r.name}</div>
                   <div className="text-xs text-muted">
                     {r.town ?? "no town"}
-                    {r.leftAt ? ` · left ${r.leftAt.toLocaleDateString("en-GB")}` : ""}
+                    {r.leftAt ? ` · left ${r.leftAt.toLocaleDateString("en-GB", { timeZone: "Europe/London" })}` : ""}
                   </div>
                 </td>
                 <td className={td}>{r.live}</td>
@@ -427,7 +427,7 @@ export default async function Retention({ searchParams }: { searchParams: Promis
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <div>
                 <b>{r.stars}★</b> · {brandName(r.engineer)} · {r.customerName ?? "customer"} ·{" "}
-                {r.ratedAt?.toLocaleDateString("en-GB")}
+                {r.ratedAt?.toLocaleDateString("en-GB", { timeZone: "Europe/London" })}
               </div>
               <div className="text-xs">
                 {r.removedAt ? (
@@ -522,7 +522,7 @@ export default async function Retention({ searchParams }: { searchParams: Promis
                   </td>
                   <td className={td}>{listed}</td>
                   <td className={td}>{status}</td>
-                  <td className={td}>{t.publishedAt?.toLocaleDateString("en-GB") ?? "—"}</td>
+                  <td className={td}>{t.publishedAt?.toLocaleDateString("en-GB", { timeZone: "Europe/London" }) ?? "—"}</td>
                   <td className={td}>
                     <form action={setTown}>
                       <input type="hidden" name="key" value={key} />
@@ -549,7 +549,7 @@ export default async function Retention({ searchParams }: { searchParams: Promis
           const m = t.meta as Meta;
           return (
             <li key={t.id}>
-              {t.ts.toLocaleDateString("en-GB")} · {nameById.get(m?.engineerId ?? "") ?? m?.engineerId ?? "unknown"} ·{" "}
+              {t.ts.toLocaleDateString("en-GB", { timeZone: "Europe/London" })} · {nameById.get(m?.engineerId ?? "") ?? m?.engineerId ?? "unknown"} ·{" "}
               {m?.left ?? "?"} left
             </li>
           );
@@ -570,7 +570,7 @@ export default async function Retention({ searchParams }: { searchParams: Promis
               <div className="min-w-0">
                 <div className="whitespace-pre-line font-semibold">{m?.address ?? "Address missing"}</div>
                 <div className="mt-1 text-muted">
-                  Queued {l.ts.toLocaleDateString("en-GB")} · installer{" "}
+                  Queued {l.ts.toLocaleDateString("en-GB", { timeZone: "Europe/London" })} · installer{" "}
                   {nameById.get(m?.engineerId ?? "") ?? m?.engineerId ?? "unknown"}
                 </div>
               </div>

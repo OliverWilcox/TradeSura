@@ -172,7 +172,7 @@ export default async function Engineers({ searchParams }: { searchParams: Promis
                   <td className={td}>{stripeState(e)}</td>
                   <td className={`${td} text-right tabular-nums`}>{liveBy.get(e.id) ?? 0}</td>
                   <td className={`${td} text-right tabular-nums`}>{customersBy.get(e.id) ?? 0}</td>
-                  <td className={td}>{e.createdAt.toLocaleDateString("en-GB")}</td>
+                  <td className={td}>{e.createdAt.toLocaleDateString("en-GB", { timeZone: "Europe/London" })}</td>
                   <td className={td}>
                     {e.ownerId ? (
                       <span>
