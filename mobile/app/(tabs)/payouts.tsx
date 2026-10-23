@@ -189,7 +189,7 @@ export default function Payouts() {
                   <Micro>
                     {s?.nextPayout ? `Next payout · ${shortDate(s.nextPayout.arrivalDate)}` : "Next payout · Friday"}
                   </Micro>
-                  <Text className="mt-0.5 font-mono font-semibold text-3xl text-copper">
+                  <Text className="mt-0.5 tabular-nums font-semibold text-3xl text-copper">
                     {pounds(s?.nextPayout ? s.nextPayout.amountPence : weekToBank)}
                   </Text>
                 </View>
@@ -210,8 +210,8 @@ export default function Payouts() {
               </Text>
               {s && data.count > 0 && (
                 <Text className="mt-1 font-sans text-[11px] text-night-muted">
-                  <Text className="font-mono">{pounds(s.availablePence)}</Text> available ·{" "}
-                  <Text className="font-mono">{pounds(s.pendingPence)}</Text> still clearing
+                  <Text className="tabular-nums">{pounds(s.availablePence)}</Text> available ·{" "}
+                  <Text className="tabular-nums">{pounds(s.pendingPence)}</Text> still clearing
                 </Text>
               )}
               {data.stripeError && (
@@ -225,12 +225,12 @@ export default function Payouts() {
               <Micro className="mb-1.5">This month, transparently</Micro>
               <RowLine
                 left={`${data.month.count} collection${data.month.count === 1 ? "" : "s"} cleared`}
-                right={<Text className="font-mono text-sm text-ink">{pounds(data.month.collectedPence)}</Text>}
+                right={<Text className="tabular-nums text-sm text-ink">{pounds(data.month.collectedPence)}</Text>}
               />
               <RowLine
                 left="TradeSura fee (20%)"
                 right={
-                  <Text className="font-mono text-ink">
+                  <Text className="tabular-nums text-ink">
                     {data.month.feePence > 0 ? "−" : ""}
                     {pounds(data.month.feePence)}
                   </Text>
@@ -240,7 +240,7 @@ export default function Payouts() {
                 <RowLine
                   left="Referral bonus"
                   right={
-                    <Text className="font-mono font-semibold text-ok">
+                    <Text className="tabular-nums font-semibold text-ok">
                       ＋{pounds(data.referralBonusPence)}
                     </Text>
                   }
@@ -249,13 +249,13 @@ export default function Payouts() {
               <RowLine
                 left={<Text className="font-bold text-sm text-ink">To your bank</Text>}
                 right={
-                  <Text className="font-mono font-semibold text-copper">
+                  <Text className="tabular-nums font-semibold text-copper">
                     {pounds(data.month.toBankPence + data.referralBonusPence)}
                   </Text>
                 }
               />
               {data.bankLast4 && (
-                <RowLine left="Bank" right={<Text className="font-mono">···{data.bankLast4}</Text>} />
+                <RowLine left="Bank" right={<Text className="tabular-nums">···{data.bankLast4}</Text>} />
               )}
             </Card>
 
@@ -267,7 +267,7 @@ export default function Payouts() {
                     key={h.id}
                     left={shortDate(h.arrivalDate)}
                     right={
-                      <Text className="font-mono font-semibold text-copper">{pounds(h.amountPence)}</Text>
+                      <Text className="tabular-nums font-semibold text-copper">{pounds(h.amountPence)}</Text>
                     }
                   />
                 ))}
@@ -290,7 +290,7 @@ export default function Payouts() {
                   >
                     <View className="shrink">
                       <Text className="font-bold text-sm text-ink">
-                        {p.customerName} · <Text className="font-mono">{pounds(p.priceMonthlyPence)}</Text>
+                        {p.customerName} · <Text className="tabular-nums">{pounds(p.priceMonthlyPence)}</Text>
                       </Text>
                       <Micro>STRIPE RETRIES AUTOMATICALLY</Micro>
                     </View>
