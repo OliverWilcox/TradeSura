@@ -40,6 +40,8 @@ enum ActorType {
   ENGINEER
   CUSTOMER
   SYSTEM
+  // A TradeSura staff member acting through the admin API (lib/admin-api).
+  ADMIN
 }
 
 enum MessageClass {
@@ -618,6 +620,32 @@ model TownPage {
   heldAt      DateTime?
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
+}
+
+// Notes TradeSura staff keep about an engineer or customer, written through
+// the admin API. Never shown to the engineer or customer. The author is the
+// admin app's user (no Engineer row), so there's no foreign key.
+model AdminNote {
+  id          String    @id @default(cuid())
+  subjectType String // engineer | customer
+  subjectId   String
+  body        String
+  authorId    String
+  authorName  String
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  @@index([subjectType, subjectId, createdAt])
+}
+
+// Who is checking a waiting Gas Safe application in the admin app. A claim
+// lasts 15 minutes from the last refresh; while someone else holds a fresh
+// one, the application can't be decided (lib/admin/verifications.ts).
+model VerificationClaim {
+  engineerId String   @id
+  adminId    String
+  adminName  String
+  claimedAt  DateTime @default(now())
 }
 
 // Section 10 — admin-set numbers (e.g. "New to TradeSura" rating count,

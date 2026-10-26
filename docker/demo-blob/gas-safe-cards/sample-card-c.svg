@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="856" height="540" viewBox="0 0 856 540" role="img" aria-label="Sample Gas Safe ID card (demo data)">
+  <rect width="856" height="540" rx="32" fill="#ece7da"/>
+  <rect width="856" height="120" rx="32" fill="#ffcc00"/>
+  <rect y="88" width="856" height="32" fill="#ffcc00"/>
+  <text x="48" y="78" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="700" fill="#1a1a1a">Gas Safe ID card</text>
+  <text x="808" y="78" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#1a1a1a" text-anchor="end">SAMPLE</text>
+  <rect x="48" y="160" width="220" height="280" rx="16" fill="#d9d4c7"/>
+  <circle cx="158" cy="250" r="56" fill="#b9b2a2"/>
+  <rect x="78" y="320" width="160" height="96" rx="48" fill="#b9b2a2"/>
+  <text x="310" y="200" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#5c5546">Name</text>
+  <text x="310" y="236" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#1a1a1a">Example Fitter</text>
+  <text x="310" y="290" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#5c5546">Licence number</text>
+  <text x="310" y="326" font-family="Courier New, monospace" font-size="34" font-weight="700" fill="#1a1a1a">222 222 2</text>
+  <text x="310" y="380" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#5c5546">Expires</text>
+  <text x="310" y="416" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#1a1a1a">31/03/2028</text>
+  <text x="428" y="500" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#8a8170" text-anchor="middle">Fictional card for local demos. Not a real registration.</text>
+</svg>
