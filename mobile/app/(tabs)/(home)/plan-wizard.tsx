@@ -113,6 +113,8 @@ export default function PlanWizard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentId, setCurrentId] = useState<string | null>(tierId ?? null);
+  const idRef = useRef<string | null>(tierId ?? null);
+  const saveQueue = useRef<Promise<string | null>>(Promise.resolve(null));
   const [templates, setTemplates] = useState<Template[]>([]);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [starter, setStarter] = useState<string | null>(null);
@@ -425,24 +427,47 @@ export default function PlanWizard() {
   // "Draft saved" — every Next writes the draft, so leaving never loses work.
   // Returns the plan's id (null on failure) — state updates land too late
   // for the publish call that follows on Step 4.
-  async function saveDraft(): Promise<string | null> {
-    try {
-      let id = currentId;
-      if (id) {
-        await api(`/api/tiers/${id}`, { method: "PUT", body: payload() });
-      } else {
-        const created = await api<{ id: string }>("/api/tiers", { method: "POST", body: payload() });
-        id = created.id;
-        setCurrentId(id);
+  // A quiet save (Step 1's autosave) shows no errors: Next re-saves and
+  // reports anything wrong. Saves run one at a time against the same id, so
+  // an autosave in flight can't race a Next into making a second draft.
+  async function saveDraft(quiet = false): Promise<string | null> {
+    const run = async (): Promise<string | null> => {
+      try {
+        let id = idRef.current;
+        if (id) {
+          await api(`/api/tiers/${id}`, { method: "PUT", body: payload() });
+        } else {
+          const created = await api<{ id: string }>("/api/tiers", { method: "POST", body: payload() });
+          id = created.id;
+          idRef.current = id;
+          setCurrentId(id);
+        }
+        setSavedOnce(true);
+        setDirty(false);
+        return id;
+      } catch (e) {
+        if (!quiet && !showBlocked(e)) setError(e instanceof ApiError ? e.message : "Couldn't save your draft.");
+        return null;
       }
-      setSavedOnce(true);
-      setDirty(false);
-      return id;
-    } catch (e) {
-      if (!showBlocked(e)) setError(e instanceof ApiError ? e.message : "Couldn't save your draft.");
-      return null;
-    }
+    };
+    const next = saveQueue.current.then(run, run);
+    saveQueue.current = next;
+    return next;
   }
+
+  // Review 3 §3.4 — "Draft saved" on every step, Step 1 included: a new plan
+  // is saved shortly after the first change instead of waiting for Next.
+  const saveDraftRef = useRef(saveDraft);
+  useEffect(() => {
+    saveDraftRef.current = saveDraft;
+  });
+  useEffect(() => {
+    if (isEdit || step !== 1 || !dirty || serviceRuleError || rateError) return;
+    const t = setTimeout(() => {
+      saveDraftRef.current(true);
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [isEdit, dirty, step, selected, rates, pricePence, serviceRuleError, rateError]);
 
   // Review 3 P0 — Back goes to the previous step with everything kept; only
   // Step 1's Back leaves the wizard (the draft is saved at every Next).

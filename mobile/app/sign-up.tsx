@@ -1740,7 +1740,7 @@ export default function SignUp() {
                     </Pressable>
                   </View>
 
-                  {error && <Text className="mt-3 text-[14px] text-danger">{error}</Text>}
+                  {error && <Text className="mt-3 text-[14px] text-warn">{error}</Text>}
                   {duplicateGasSafe && (
                     <Link href="/sign-in" asChild>
                       <Pressable className="mt-1 py-1">
