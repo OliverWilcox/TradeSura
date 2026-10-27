@@ -98,9 +98,9 @@ export default function Onboarding() {
             <Text className="flex-1 text-[30px] font-extrabold leading-[36px] text-ink" numberOfLines={1} adjustsFontSizeToFit>
               Getting started
             </Text>
-            <View className="items-center justify-center" style={{ width: 72, height: 72 }}>
-              <RingMarkProgress size={72} progress={done / steps.length} />
-              <Text className="absolute text-[14px] font-semibold text-ink">
+            <View className="items-center justify-center" style={{ width: 80, height: 80 }}>
+              <RingMarkProgress size={80} progress={done / steps.length} />
+              <Text className="absolute text-[12.5px] font-semibold text-ink">
                 {done} of {steps.length}
               </Text>
             </View>

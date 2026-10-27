@@ -39,9 +39,8 @@ export function RingMark({ size = 32, color }: { size?: number; color?: string }
 
 /**
  * The ring mark as a progress indicator — the Getting started hub's
- * "n of 7". The real logo shape (arrow cuts and all), dimmed as the track,
- * with the two-tone mark revealed clockwise from 12 o'clock as steps are
- * done. Same geometry as RingMark, so it reads as the logo, not a circle.
+ * "n of 7". The real logo shape (arrow cuts and all): blue for the steps
+ * still to do, filling green clockwise as steps are done.
  */
 export function RingMarkProgress({ size = 96, progress }: { size?: number; progress: number }) {
   const target = Math.max(0, Math.min(1, progress));
@@ -66,11 +65,11 @@ export function RingMarkProgress({ size = 96, progress }: { size?: number; progr
           <Path d={wedge(shown)} />
         </ClipPath>
       </Defs>
-      <Path d={BLUE_D} fill="#ffffff" fillOpacity={0.14} />
-      <Path d={GREEN_D} fill="#ffffff" fillOpacity={0.14} />
+      <Path d={BLUE_D} fill={BRAND_BLUE} />
+      <Path d={GREEN_D} fill={BRAND_BLUE} />
       {shown > 0 && (
         <G clipPath="url(#ringmark-progress)">
-          <Path d={BLUE_D} fill={BRAND_BLUE} />
+          <Path d={BLUE_D} fill={BRAND_GREEN} />
           <Path d={GREEN_D} fill={BRAND_GREEN} />
         </G>
       )}
