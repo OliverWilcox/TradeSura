@@ -121,12 +121,13 @@ export default function Onboarding() {
           ))}
 
           {/* Part 5 — "How TradeSura works", never gated. */}
-          <Pressable onPress={() => router.push("/how-it-works")} className="py-1">
+          <Pressable onPress={() => router.push("/how-it-works")} className="items-center py-1">
             <Text className="text-[15px] font-semibold text-flame">How TradeSura works</Text>
           </Pressable>
 
-          <View className="items-start">
-            <StripeBadge caption="Paid out every Friday" height={22} light />
+          {/* The white outline badge, as on the welcome screen. */}
+          <View className="items-center">
+            <StripeBadge caption="Paid out every Friday" height={22} />
           </View>
 
           <Pressable
