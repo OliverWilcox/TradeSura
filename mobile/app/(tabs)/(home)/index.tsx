@@ -345,11 +345,8 @@ function OwnerHome() {
               </View>
             </Card>
 
-            {/* Part 6.6 — the action card cycles: Finish setup → first
-                customer → next best action. Never two "first"s at once.
-                With seven setup steps (some optional), setup only holds the
-                card until the plan and payments are done; the first offer
-                comes before the rest. */}
+            {/* Part 6.6 — the action cards: Finish setup, then the first
+                offer once the plan and payments are done. */}
             {/* Review 3 — a half-finished Stripe set-up is never a reset. */}
             <StripeStatusCard state={me?.stripeState} />
 
@@ -370,7 +367,9 @@ function OwnerHome() {
               </Card>
             )}
 
-            {!essentialsDone || (data.count > 0 && setupDone < steps.length) ? (
+            {/* The setup card stays until all seven steps are done (Review 3:
+                "Skip setup" → Home, where "Finish setup" brings them back). */}
+            {me?.role !== "staff" && setupDone < steps.length && (
               <Card>
                 <Micro>Get started</Micro>
                 <Text className="mt-1.5 text-[19px] font-bold text-ink">
@@ -381,7 +380,8 @@ function OwnerHome() {
                   Continue setup
                 </Button>
               </Card>
-            ) : data.count === 0 ? (
+            )}
+            {essentialsDone && data.count === 0 && (
               <Card>
                 <Micro>Get started</Micro>
                 <Text className="mt-1.5 text-[19px] font-bold text-ink">Send your first offer</Text>
@@ -395,7 +395,7 @@ function OwnerHome() {
                   Offer a plan
                 </Button>
               </Card>
-            ) : null}
+            )}
 
             {data.noPlan >= 5 && (
               <Card className="border-[rgba(242,184,75,.3)] bg-warn-tint">
