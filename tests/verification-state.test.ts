@@ -127,22 +127,23 @@ describe("gasSafeStatus", () => {
 });
 
 describe("paymentsStatus", () => {
-  it("active once charges are enabled", () => {
-    expect(
-      paymentsStatus({ stripeAccountId: "acct_1", stripeDetailsSubmitted: true, stripeChargesEnabled: true })
-        .text,
-    ).toBe("Payments — active, paid every Friday.");
+  const acct = { stripeAccountId: "acct_1", stripeDetailsSubmitted: true, stripeChargesEnabled: true, stripePayoutsEnabled: true };
+  it("active once Stripe can take payments and pay out", () => {
+    expect(paymentsStatus(acct).text).toBe("Payments — active, paid every Friday.");
   });
-  it("needs more information mid-onboarding", () => {
-    expect(
-      paymentsStatus({ stripeAccountId: "acct_1", stripeDetailsSubmitted: true, stripeChargesEnabled: false })
-        .tone,
-    ).toBe("amber");
+  it("not active while payouts are still off (matches the hub)", () => {
+    const s = paymentsStatus({ ...acct, stripePayoutsEnabled: false });
+    expect(s.tone).toBe("amber");
+    expect(s.text).toContain("Stripe needs more information");
+  });
+  it("half set up before the Stripe details are submitted", () => {
+    const s = paymentsStatus({ ...acct, stripeDetailsSubmitted: false, stripeChargesEnabled: false, stripePayoutsEnabled: false });
+    expect(s.text).toBe("Payments half set up — finish with Stripe →");
   });
   it("stays independent of the Gas Safe axis entirely", () => {
     // A Stripe-only fact — no Gas Safe fields even exist on the input type.
-    expect(paymentsStatus({ stripeAccountId: null, stripeDetailsSubmitted: false, stripeChargesEnabled: false }).text).toBe(
-      "Set up payments →",
-    );
+    expect(
+      paymentsStatus({ stripeAccountId: null, stripeDetailsSubmitted: false, stripeChargesEnabled: false, stripePayoutsEnabled: false }).text,
+    ).toBe("Set up payments →");
   });
 });

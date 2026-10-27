@@ -76,19 +76,20 @@ export function gasSafeStatus(
   return { tone: "amber", text: "Gas Safe check in progress — we'll let you know within 24 hours." };
 }
 
+// The same ladder as the hub and Home (lib/stripe.ts stripeSetupState):
+// "active" only once Stripe can both take payments and pay out, so Account
+// never says active while the hub still says half set up.
 export function paymentsStatus(
-  e: Pick<
-    EngineerVerification,
-    "stripeAccountId" | "stripeDetailsSubmitted" | "stripeChargesEnabled"
-  >,
+  e: Pick<EngineerVerification, "stripeAccountId" | "stripeDetailsSubmitted" | "stripeChargesEnabled"> & {
+    stripePayoutsEnabled: boolean;
+  },
 ): { tone: StandingTone; text: string } {
-  if (e.stripeAccountId && e.stripeChargesEnabled) {
+  if (!e.stripeAccountId) return { tone: "amber", text: "Set up payments →" };
+  if (e.stripeChargesEnabled && e.stripePayoutsEnabled) {
     return { tone: "quiet", text: "Payments — active, paid every Friday." };
   }
-  if (e.stripeAccountId && e.stripeDetailsSubmitted) {
-    return { tone: "amber", text: "Stripe needs more information to pay you — finish setup →" };
-  }
-  return { tone: "amber", text: "Set up payments →" };
+  if (!e.stripeDetailsSubmitted) return { tone: "amber", text: "Payments half set up — finish with Stripe →" };
+  return { tone: "amber", text: "Stripe needs more information to pay you — finish setup →" };
 }
 
 export function standingCopy(
