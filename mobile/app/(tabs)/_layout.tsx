@@ -127,7 +127,16 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
           // stack pop to its root when its own tab is tapped again ("tapping
           // Home pops back to the dashboard").
           const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
-          if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
+          if (!focused && !event.defaultPrevented) {
+            navigation.navigate(route.name);
+            // Coming from another tab, a tab opens at its first screen, not
+            // whatever page was left open inside it (e.g. Home → My plans →
+            // Customers → Home showed My plans).
+            const inner = (route as { state?: { key?: string; index?: number } }).state;
+            if (inner?.key && (inner.index ?? 0) > 0) {
+              navigation.dispatch({ type: "POP_TO_TOP", target: inner.key });
+            }
+          }
         }}
         accessibilityRole="tab"
         accessibilityState={{ selected: focused }}
