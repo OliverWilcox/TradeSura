@@ -70,13 +70,20 @@ export function RingMarkProgress({ size = 80, progress }: { size?: number; progr
         strokeWidth={OUTER_R - INNER_R}
         fill="none"
       />
-      {shown > 0.005 && shown < 0.999 && <Path d={greenArrow(shown)} fill={BRAND_GREEN} />}
+      {/* Outlined in the app background so the head and tail read as cut
+          gaps, like the logo's. On the outer and inner edges the outline
+          sits against the same background, so it doesn't show. */}
+      {shown > 0.005 && shown < 0.999 && (
+        <Path d={greenArrow(shown)} fill={BRAND_GREEN} stroke={APP_BG} strokeWidth={2.6} strokeLinejoin="miter" />
+      )}
     </Svg>
   );
 }
 
 // The logo's ring proportions (outer 50, inner 30.63) and its arrow cut:
 // the head's point and the tail's notch sit 12° on, at mid-radius.
+// The screen background (tailwind `bg`).
+const APP_BG = "#0b1a2e";
 const OUTER_R = 50;
 const INNER_R = 30.63;
 const MID_R = (OUTER_R + INNER_R) / 2;
