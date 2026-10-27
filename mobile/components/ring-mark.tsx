@@ -78,12 +78,17 @@ export function RingMarkProgress({ size = 96, progress }: { size?: number; progr
   );
 }
 
-// A pie slice from 12 o'clock, clockwise, big enough to cover the ring.
+// A pie slice, clockwise, big enough to cover the ring. It starts just past
+// the blue arrow head at 12 o'clock, so the fill doesn't open with a stray
+// blue sliver; the arrow head fills in last, when the ring completes.
+const START_DEG = 7;
 function wedge(p: number): string {
   if (p >= 0.999) return "M -60 -60 H 60 V 60 H -60 Z";
   const r = 60;
-  const a = p * 2 * Math.PI;
-  const x = (r * Math.sin(a)).toFixed(2);
-  const y = (-r * Math.cos(a)).toFixed(2);
-  return `M 0 0 L 0 ${-r} A ${r} ${r} 0 ${p > 0.5 ? 1 : 0} 1 ${x} ${y} Z`;
+  const at = (deg: number) => {
+    const a = (deg * Math.PI) / 180;
+    return `${(r * Math.sin(a)).toFixed(2)} ${(-r * Math.cos(a)).toFixed(2)}`;
+  };
+  const sweep = p * 360;
+  return `M 0 0 L ${at(START_DEG)} A ${r} ${r} 0 ${sweep > 180 ? 1 : 0} 1 ${at(START_DEG + sweep)} Z`;
 }

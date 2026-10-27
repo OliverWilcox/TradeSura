@@ -84,25 +84,23 @@ export default function Onboarding() {
     <View className="flex-1 bg-bg">
       <SafeAreaView edges={["top"]} className="flex-1">
         <ScrollView contentContainerClassName="gap-3 px-4 pb-8 pt-4">
-          <View className="flex-row items-start justify-between">
-            <View className="flex-1 flex-row items-center gap-1.5 pt-6">
-              <Pressable
-                onPress={leave}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel="Back"
-                className="h-8 w-8 items-center justify-center"
-              >
-                <Icon name="back" size={22} weight="semibold" />
-              </Pressable>
-              {/* One line on a 6.1" phone, as on the target. */}
-              <Text className="shrink text-[30px] font-extrabold leading-[36px] text-ink" numberOfLines={1} adjustsFontSizeToFit>
-                Getting started
-              </Text>
-            </View>
-            <View className="items-center justify-center" style={{ width: 96, height: 96 }}>
-              <RingMarkProgress size={96} progress={done / steps.length} />
-              <Text className="absolute text-[18px] font-semibold text-ink">
+          <Pressable
+            onPress={leave}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            className="-ml-1 h-8 w-8 items-center justify-center"
+          >
+            <Icon name="back" size={22} weight="semibold" />
+          </Pressable>
+          <View className="flex-row items-center justify-between gap-3">
+            {/* One line on a 6.1" phone, as on the target. */}
+            <Text className="flex-1 text-[30px] font-extrabold leading-[36px] text-ink" numberOfLines={1} adjustsFontSizeToFit>
+              Getting started
+            </Text>
+            <View className="items-center justify-center" style={{ width: 72, height: 72 }}>
+              <RingMarkProgress size={72} progress={done / steps.length} />
+              <Text className="absolute text-[14px] font-semibold text-ink">
                 {done} of {steps.length}
               </Text>
             </View>
