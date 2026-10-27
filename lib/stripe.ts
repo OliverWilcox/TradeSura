@@ -553,21 +553,20 @@ export function publishableKey(): string {
   return process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 }
 
-// Embedded Bacs checkout (C2). Creates the platform Customer and a
-// Subscription as a destination charge, and returns the client secret the
-// Payment Element needs — the customer never leaves the white-label page.
+// Embedded Bacs checkout (C2). Creates (or reuses) the platform Customer and
+// an embedded Stripe Checkout Session that sets up the plan's subscription as
+// a destination charge on behalf of the engineer. The form sits inside the
+// white-label page; the subscription only exists once the customer finishes.
 //
 // Section 1 — cooling-off: no collection until 14 days after sign-up. The
 // subscription starts with a trial ending then, so the first real invoice
-// (the first collection) is created at trial_end. With a trial and
-// default_incomplete, Stripe returns a pending_setup_intent instead of a
-// payment: the Payment Element confirms that SetupIntent (stripe.confirmSetup),
-// which sets up the Bacs mandate up front without taking anything. Verified
-// against stripe@22.6.0 SubscriptionCreateParams (trial_end,
-// trial_settings.end_behavior.missing_payment_method, pending_setup_intent).
-// A checkout abandoned before the mandate is cancelled by Stripe at trial
-// end rather than invoicing someone who never signed up.
-export async function createEmbeddedSubscription(opts: {
+// (the first collection) is created at trial_end. Checkout collects the Bacs
+// mandate for the trial; Stripe won't let this account create Bacs mandates
+// with a bare SetupIntent (27 Oct, test mode: "isn't configured to directly
+// use SetupIntents to create Mandates for Bacs Direct Debits"), which is why
+// sign-up goes through Checkout. checkout.session.completed then stores the
+// subscription and activates the plan (completeSignupCheckout).
+export async function createSignupCheckout(opts: {
   engineerAccountId: string;
   priceMonthlyPence: number;
   billingInterval?: BillingInterval;
@@ -578,12 +577,13 @@ export async function createEmbeddedSubscription(opts: {
   existingStripeCustomerId?: string | null;
   planId: string;
   planRef: string;
+  /** Where Checkout sends the customer when they finish ({CHECKOUT_SESSION_ID} allowed). */
+  returnUrl: string;
   /** Win-back "first month free": extra months before the first collection. */
   extraFreeMonths?: number;
-}): Promise<{ subscriptionId: string; customerId: string; clientSecret: string; trialEnd: Date }> {
+}): Promise<{ sessionId: string; customerId: string; clientSecret: string; trialEnd: Date }> {
   const stripe = getStripe();
   const interval = billingIntervalOf(opts.billingInterval);
-
   const customerId =
     opts.existingStripeCustomerId ??
     (
@@ -595,55 +595,60 @@ export async function createEmbeddedSubscription(opts: {
       })
     ).id;
 
-  const price = await stripe.prices.create({
-    currency: "gbp",
-    // Yearly = 12 months for the price of 11, charged in one collection.
-    unit_amount: chargePence(opts.priceMonthlyPence, interval),
-    recurring: { interval },
-    product_data: { name: opts.productName },
-  });
-
   const trialEnd = addMonths(coolingOffEnd(new Date()), opts.extraFreeMonths ?? 0);
-  const subscription = await stripe.subscriptions.create({
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription",
+    ui_mode: "embedded_page",
     customer: customerId,
-    items: [{ price: price.id }],
-    payment_behavior: "default_incomplete",
-    payment_settings: {
-      payment_method_types: ["bacs_debit"],
-      save_default_payment_method: "on_subscription",
+    payment_method_types: ["bacs_debit"],
+    line_items: [
+      {
+        price_data: {
+          currency: "gbp",
+          // Yearly = 12 months for the price of 11, charged in one collection.
+          unit_amount: chargePence(opts.priceMonthlyPence, interval),
+          recurring: { interval },
+          product_data: { name: opts.productName },
+        },
+        quantity: 1,
+      },
+    ],
+    subscription_data: {
+      trial_end: Math.floor(trialEnd.getTime() / 1000),
+      trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
+      // No flat application_fee_percent here — the invoice.created webhook
+      // sets application_fee_amount per invoice (20%, rounded down), so every
+      // collection (monthly or yearly) gets it before finalization.
+      transfer_data: { destination: opts.engineerAccountId },
+      on_behalf_of: opts.engineerAccountId,
+      metadata: { planId: opts.planId, planRef: opts.planRef, billingInterval: interval },
     },
-    trial_end: Math.floor(trialEnd.getTime() / 1000),
-    trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
-    // No flat application_fee_percent here — the invoice.created webhook sets
-    // application_fee_amount per invoice (20%, rounded down), so every
-    // collection (monthly or yearly) gets it before finalization.
-    transfer_data: { destination: opts.engineerAccountId },
-    on_behalf_of: opts.engineerAccountId,
-    metadata: { planId: opts.planId, planRef: opts.planRef, billingInterval: interval },
-    expand: ["pending_setup_intent", "latest_invoice.confirmation_secret"],
+    metadata: { planId: opts.planId, purpose: "signup" },
+    return_url: opts.returnUrl,
   });
+  if (!session.client_secret) throw new Error("Stripe did not return a checkout secret");
+  return { sessionId: session.id, customerId, clientSecret: session.client_secret, trialEnd };
+}
 
-  let secret: string | undefined;
-  const setup = subscription.pending_setup_intent;
-  if (setup && typeof setup !== "string") {
-    secret = setup.client_secret ?? undefined;
-    // Lets the setup_intent.succeeded webhook find the plan without a lookup.
-    await stripe.setupIntents.update(setup.id, {
-      metadata: { planId: opts.planId, purpose: "signup" },
-    });
-  } else {
-    // Defensive: a subscription that came back without a trial still wants
-    // its first payment confirmed the old way.
-    const invoice = subscription.latest_invoice;
-    secret =
-      invoice && typeof invoice !== "string"
-        ? (invoice as unknown as { confirmation_secret?: { client_secret?: string } }).confirmation_secret
-            ?.client_secret
-        : undefined;
-  }
-  if (!secret) throw new Error("Stripe did not return a confirmation secret");
+// The finished sign-up Checkout for a plan, if there is one: the
+// subscription it created and the Bacs payment method it saved.
+export async function completedSignupCheckout(
+  customerId: string,
+  planId: string,
+): Promise<{ subscriptionId: string; paymentMethodId: string | null } | null> {
+  const list = await getStripe().checkout.sessions.list({ customer: customerId, limit: 10 });
+  const done = list.data.find((cs) => cs.metadata?.planId === planId && cs.status === "complete");
+  return done ? signupCheckoutResult(done) : null;
+}
 
-  return { subscriptionId: subscription.id, customerId, clientSecret: secret, trialEnd };
+export async function signupCheckoutResult(
+  session: Stripe.Checkout.Session,
+): Promise<{ subscriptionId: string; paymentMethodId: string | null } | null> {
+  const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+  if (!subscriptionId) return null;
+  const sub = await getStripe().subscriptions.retrieve(subscriptionId);
+  const pm = sub.default_payment_method;
+  return { subscriptionId, paymentMethodId: typeof pm === "string" ? pm : (pm?.id ?? null) };
 }
 
 // Poll fallback for local dev without a webhook tunnel. Returns whether the
@@ -661,38 +666,44 @@ export async function subscriptionPaid(
   return { paid, customerId: typeof sub.customer === "string" ? sub.customer : null };
 }
 
-// Poll fallback for the cooling-off signup: has the customer confirmed the
-// Bacs mandate (the SetupIntent we tagged with this plan) yet?
-export async function signupMandateConfirmed(
-  customerId: string,
-  planId: string,
-): Promise<{ confirmed: boolean; paymentMethodId: string | null; mandateId: string | null }> {
-  const list = await getStripe().setupIntents.list({ customer: customerId, limit: 10 });
-  const si = list.data.find((s) => s.metadata?.planId === planId && s.status === "succeeded");
-  if (!si) return { confirmed: false, paymentMethodId: null, mandateId: null };
-  return {
-    confirmed: true,
-    paymentMethodId: typeof si.payment_method === "string" ? si.payment_method : (si.payment_method?.id ?? null),
-    mandateId: typeof si.mandate === "string" ? si.mandate : (si.mandate?.id ?? null),
-  };
-}
-
 // Section 3 — failed payment rescue: a fresh Bacs mandate on the same
 // platform customer, on behalf of the engineer as the original mandate was.
-export async function createRescueSetupIntent(opts: {
+// Embedded Checkout in setup mode, for the same reason as sign-up (no bare
+// Bacs SetupIntents on this account); the SetupIntent it makes carries the
+// rescue metadata, and checkout.session.completed finishes the rescue.
+export async function createRescueCheckout(opts: {
   customerId: string;
   engineerAccountId: string;
   planId: string;
 }): Promise<{ id: string; clientSecret: string }> {
-  const si = await getStripe().setupIntents.create({
+  const cs = await getStripe().checkout.sessions.create({
+    mode: "setup",
+    ui_mode: "embedded_page",
+    currency: "gbp",
     customer: opts.customerId,
     payment_method_types: ["bacs_debit"],
-    usage: "off_session",
-    on_behalf_of: opts.engineerAccountId,
+    setup_intent_data: {
+      on_behalf_of: opts.engineerAccountId,
+      metadata: { planId: opts.planId, purpose: "rescue" },
+    },
     metadata: { planId: opts.planId, purpose: "rescue" },
+    // Bacs never leaves the page; the form's onComplete finishes the rescue.
+    redirect_on_completion: "never",
   });
-  if (!si.client_secret) throw new Error("Stripe did not return a setup secret");
-  return { id: si.id, clientSecret: si.client_secret };
+  if (!cs.client_secret) throw new Error("Stripe did not return a checkout secret");
+  return { id: cs.id, clientSecret: cs.client_secret };
+}
+
+// The rescue Checkout's saved Bacs details, once the customer finishes.
+export async function rescueCheckoutResult(
+  session: Stripe.Checkout.Session,
+): Promise<{ paymentMethodId: string; mandateId: string | null } | null> {
+  const siId = typeof session.setup_intent === "string" ? session.setup_intent : session.setup_intent?.id;
+  if (!siId) return null;
+  const si = await getStripe().setupIntents.retrieve(siId);
+  const pm = typeof si.payment_method === "string" ? si.payment_method : si.payment_method?.id;
+  if (!pm) return null;
+  return { paymentMethodId: pm, mandateId: typeof si.mandate === "string" ? si.mandate : (si.mandate?.id ?? null) };
 }
 
 export async function cancelStripeSubscription(subscriptionId: string) {

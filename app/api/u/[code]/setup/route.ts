@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
-import { createRescueSetupIntent, publishableKey } from "@/lib/stripe";
+import { createRescueCheckout, publishableKey } from "@/lib/stripe";
 import { paymentOutstanding } from "@/lib/plan-billing";
 
 // Retention spec §3 — tradesura.com/u/{code}: start a new Bacs Direct Debit
 // for a plan with a failed payment. Created on tap, not on page view, so link
-// previews in the customer's messaging app don't make SetupIntents.
+// previews in the customer's messaging app don't open Checkout sessions.
 export async function POST(_req: Request, ctx: { params: Promise<{ code: string }> }) {
   const { code } = await ctx.params;
   const plan = await prisma.plan.findUnique({
@@ -24,7 +24,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ code: string 
     return NextResponse.json({ error: "Couldn't start the Direct Debit setup. Please contact your engineer." }, { status: 409 });
   }
   try {
-    const si = await createRescueSetupIntent({
+    const cs = await createRescueCheckout({
       customerId: plan.stripeCustomerId,
       engineerAccountId: plan.engineer.stripeAccountId,
       planId: plan.id,
@@ -33,9 +33,9 @@ export async function POST(_req: Request, ctx: { params: Promise<{ code: string 
       planId: plan.id,
       engineerId: plan.engineerId,
     });
-    return NextResponse.json({ clientSecret: si.clientSecret, publishableKey: publishableKey() });
+    return NextResponse.json({ clientSecret: cs.clientSecret, sessionId: cs.id, publishableKey: publishableKey() });
   } catch (err) {
-    console.error("[rescue] setup intent failed:", err);
+    console.error("[rescue] checkout failed:", err);
     return NextResponse.json({ error: "Couldn't start the Direct Debit setup. Try again in a minute." }, { status: 502 });
   }
 }

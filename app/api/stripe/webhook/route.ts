@@ -9,6 +9,7 @@ import { alertIfStripeNeedsMore } from "@/lib/stripe-onboarding";
 import { sendFirstPayoutEmail } from "@/lib/account-emails";
 import {
   completePaymentRescue,
+  completeSignupCheckout,
   confirmSignupMandate,
   recordClearedPayment,
   settleEndedSubscription,
@@ -20,6 +21,8 @@ import {
   getConnectAccountStatus,
   getStripe,
   computeApplicationFeePence,
+  rescueCheckoutResult,
+  signupCheckoutResult,
 } from "@/lib/stripe";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
@@ -216,6 +219,23 @@ async function handleEvent(event: Stripe.Event) {
     // A Bacs mandate was confirmed on one of our SetupIntents: the sign-up
     // (cooling-off starts now; nothing is collected until it ends) or a
     // rescue (new bank details — retry what's owed).
+    // Sign-up and the failed-payment rescue both collect the Bacs mandate
+    // with embedded Checkout (lib/stripe.ts createSignupCheckout).
+    case "checkout.session.completed": {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const planId = session.metadata?.planId;
+      if (!planId || session.status !== "complete") return;
+      const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
+      if (session.metadata?.purpose === "signup") {
+        const done = await signupCheckoutResult(session);
+        if (done) await completeSignupCheckout(planId, { ...done, customerId });
+      } else if (session.metadata?.purpose === "rescue") {
+        const done = await rescueCheckoutResult(session);
+        if (done) await completePaymentRescue(planId, { paymentMethodId: done.paymentMethodId, mandateId: done.mandateId ?? undefined });
+      }
+      return;
+    }
+
     case "setup_intent.succeeded": {
       const si = event.data.object as Stripe.SetupIntent;
       const planId = si.metadata?.planId;

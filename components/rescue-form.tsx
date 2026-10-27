@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
-import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
 import { Card, btnClass } from "@/components/ui";
 
 type Props = {
@@ -18,10 +18,11 @@ type Props = {
 // Retention spec §3 — one step: the customer's new bank details become a new
 // Bacs Direct Debit, and the missed payment is collected again from it.
 export function RescueForm(props: Props) {
-  const [started, setStarted] = useState<{ clientSecret: string; publishableKey: string } | null>(null);
+  const [started, setStarted] = useState<{ clientSecret: string; sessionId: string; publishableKey: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const finished = useCallback(() => setDone(true), []);
 
   async function start() {
     setBusy(true);
@@ -62,7 +63,7 @@ export function RescueForm(props: Props) {
         </p>
       </div>
       {started ? (
-        <RescueElements {...props} {...started} onDone={() => setDone(true)} />
+        <RescueElements {...props} {...started} onDone={finished} />
       ) : (
         <>
           {error && <p className="text-sm text-danger">{error}</p>}
@@ -83,87 +84,32 @@ export function RescueForm(props: Props) {
   );
 }
 
-function RescueElements(props: Props & { clientSecret: string; publishableKey: string; onDone: () => void }) {
+// Stripe's embedded Checkout (setup mode) collects the new bank details and
+// mandate in place; on completion we finish the rescue straight away rather
+// than wait for the webhook (which does the same, idempotently).
+function RescueElements(props: Props & { clientSecret: string; sessionId: string; publishableKey: string; onDone: () => void }) {
   const stripePromise = useMemo(() => loadStripe(props.publishableKey), [props.publishableKey]);
-  return (
-    <Elements
-      stripe={stripePromise}
-      options={{
-        clientSecret: props.clientSecret,
-        // Same treatment as the sign-up checkout (components/embedded-checkout.tsx).
-        appearance: {
-          theme: "night",
-          variables: {
-            colorPrimary: "#5FA3F0",
-            colorBackground: "#193150",
-            colorText: "#F3F7FB",
-            colorTextSecondary: "#9FB6D0",
-            colorDanger: "#FF6B6B",
-            borderRadius: "12px",
-          },
-        },
-      }}
-    >
-      <RescueConfirm {...props} />
-    </Elements>
+  const { code, sessionId, onDone } = props;
+  const options = useMemo(
+    () => ({
+      clientSecret: props.clientSecret,
+      onComplete: () => {
+        fetch(`/api/u/${code}/complete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        })
+          .catch(() => {})
+          .finally(onDone);
+      },
+    }),
+    [props.clientSecret, code, sessionId, onDone],
   );
-}
-
-function RescueConfirm(props: Props & { onDone: () => void }) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [agreed, setAgreed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!stripe || !elements) return;
-    setBusy(true);
-    setError(null);
-    const { error: submitError } = await elements.submit();
-    if (submitError) {
-      setBusy(false);
-      setError(submitError.message ?? "Check your details and try again.");
-      return;
-    }
-    const { error: confirmError, setupIntent } = await stripe.confirmSetup({
-      elements,
-      confirmParams: { return_url: window.location.href },
-      redirect: "if_required",
-    });
-    if (confirmError) {
-      setBusy(false);
-      setError(confirmError.message ?? "That didn't go through. Please try again.");
-      return;
-    }
-    if (setupIntent) {
-      await fetch(`/api/u/${props.code}/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ setupIntentId: setupIntent.id }),
-      }).catch(() => {});
-    }
-    props.onDone();
-  }
-
   return (
-    <form onSubmit={submit} className="flex flex-col gap-3">
-      <p className="text-sm font-semibold">Direct Debit details</p>
-      <PaymentElement options={{ layout: "tabs" }} />
-      <label className="flex gap-2 text-xs text-muted items-start">
-        <input
-          type="checkbox"
-          checked={agreed}
-          onChange={(e) => setAgreed(e.target.checked)}
-          className="mt-0.5 h-4 w-4 accent-[#5FA3F0]"
-        />
-        I agree to the Direct Debit mandate.
-      </label>
-      {error && <p className="text-sm text-danger">{error}</p>}
-      <button type="submit" disabled={busy || !agreed || !stripe} className={btnClass()}>
-        {busy ? "Setting up your Direct Debit…" : `Set up Direct Debit and pay ${props.amountLabel}`}
-      </button>
-    </form>
+    <div className="overflow-hidden rounded-2xl">
+      <EmbeddedCheckoutProvider stripe={stripePromise} options={options}>
+        <EmbeddedCheckout />
+      </EmbeddedCheckoutProvider>
+    </div>
   );
 }

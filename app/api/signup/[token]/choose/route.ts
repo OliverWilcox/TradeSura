@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { isLandlordPlan } from "@/lib/clauses";
 import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
-import { createEmbeddedSubscription, ensureRecipientConfiguration, isMissingDestination, publishableKey } from "@/lib/stripe";
+import { createSignupCheckout, ensureRecipientConfiguration, isMissingDestination, publishableKey } from "@/lib/stripe";
 import { snapshotTier } from "@/lib/plan-tier";
 import { appUrl } from "@/lib/app-url";
 import type { Prisma } from "@/lib/generated/prisma/client";
@@ -68,7 +68,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   const base = `${appUrl()}/p/${plan.engineer.slug}/signup/${token}`;
 
   try {
-    const sub = await createEmbeddedSubscription({
+    const sub = await createSignupCheckout({
       engineerAccountId: plan.engineer.stripeAccountId,
       priceMonthlyPence: tier.priceMonthlyPence,
       billingInterval: parsed.data.billingInterval,
@@ -79,11 +79,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       existingStripeCustomerId: plan.customer.stripeCustomerId,
       planId: plan.id,
       planRef: plan.ref,
+      returnUrl: `${base}/confirmed?cs={CHECKOUT_SESSION_ID}`,
     });
     await prisma.plan.update({
       where: { id: plan.id },
       data: {
-        stripeSubscriptionId: sub.subscriptionId,
         stripeCustomerId: sub.customerId,
         mandateStatus: "pending",
         // Provisional: confirmSignupMandate restarts it when the mandate lands.

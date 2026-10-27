@@ -396,6 +396,19 @@ export async function confirmSignupMandate(
   });
 }
 
+// The sign-up Checkout finished (webhook or the confirmed page's poll):
+// remember the subscription it created, then the mandate is in place.
+export async function completeSignupCheckout(
+  planId: string,
+  ids: { subscriptionId: string; paymentMethodId: string | null; customerId?: string | null },
+): Promise<void> {
+  await prisma.plan.updateMany({
+    where: { id: planId, stripeSubscriptionId: null },
+    data: { stripeSubscriptionId: ids.subscriptionId },
+  });
+  await confirmSignupMandate(planId, { paymentMethodId: ids.paymentMethodId, customerId: ids.customerId });
+}
+
 // invoice.paid with money in it. The first one after cooling-off is the
 // service start date; the count unlocks the annual service at 3. A payment
 // clearing after a failure is a rescue.

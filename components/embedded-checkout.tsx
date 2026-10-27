@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import { loadStripe } from "@stripe/stripe-js";
-import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { EmbeddedCheckoutProvider, EmbeddedCheckout as StripeEmbeddedCheckout } from "@stripe/react-stripe-js";
 import { AddressLookup, type AddressValue } from "@/components/address-lookup";
 import { Card, btnClass } from "@/components/ui";
 import { perMonth } from "@/lib/engineer";
@@ -16,16 +16,17 @@ function priceFor(priceLabel: string, interval: BillingInterval | undefined, vat
   return perMonth(priceLabel, vat, monthlyPlain);
 }
 
-// C2 — the embedded Bacs Direct Debit form. Stays on the engineer's
-// white-label page; the Payment Element collects name / sort code / account
-// number and the mandate. Retention spec §1: the client secret is normally a
-// SetupIntent's (the subscription starts with a 14-day cooling-off trial), so
-// confirming sets up the mandate and takes nothing.
+// C2 — the Bacs Direct Debit step, on the engineer's white-label page. Our
+// part first (address, the plan summary with the full price, the terms and
+// landlord ticks), then Stripe's embedded Checkout collects the bank details
+// and the mandate in place. Retention spec §1: the subscription starts with
+// a 14-day cooling-off trial, so nothing is taken today. Checkout sends the
+// customer to the confirmed page when they finish.
 function CheckoutForm({
   clientSecret,
+  publishableKey,
   billingInterval,
   signupToken,
-  confirmedUrl,
   planName,
   priceLabel,
   engineerName,
@@ -33,17 +34,17 @@ function CheckoutForm({
   landlord,
 }: {
   clientSecret: string;
+  publishableKey: string;
   billingInterval?: BillingInterval;
   signupToken: string;
-  confirmedUrl: string;
   planName: string;
   priceLabel: string;
   engineerName: string;
   vatRegistered?: boolean;
   landlord?: boolean;
 }) {
-  const stripe = useStripe();
-  const elements = useElements();
+  const stripePromise = useMemo(() => loadStripe(publishableKey), [publishableKey]);
+  const [bankStep, setBankStep] = useState(false);
   const [address, setAddress] = useState<AddressValue>({ line1: "", town: "", postcode: "" });
   const [agreed, setAgreed] = useState(false);
   const [propertyLet, setPropertyLet] = useState(false);
@@ -52,7 +53,6 @@ function CheckoutForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!stripe || !elements) return;
     setBusy(true);
     setError(null);
 
@@ -72,13 +72,6 @@ function CheckoutForm({
       return;
     }
 
-    const { error: submitError } = await elements.submit();
-    if (submitError) {
-      setBusy(false);
-      setError(submitError.message ?? "Check your details and try again.");
-      return;
-    }
-
     // Review #18 — record which terms version they actually agreed to. The
     // checkbox already gates this button; this is what makes that agreement
     // a real record instead of just a UI gesture.
@@ -94,18 +87,30 @@ function CheckoutForm({
       return;
     }
 
-    const confirmParams = { return_url: confirmedUrl };
-    const { error: confirmError } = clientSecret.startsWith("seti_")
-      ? await stripe.confirmSetup({ elements, confirmParams, redirect: "if_required" })
-      : await stripe.confirmPayment({ elements, confirmParams, redirect: "if_required" });
+    setBusy(false);
+    setBankStep(true);
+  }
 
-    if (confirmError) {
-      setBusy(false);
-      setError(confirmError.message ?? "That didn't go through. Please try again — if it keeps happening, contact your engineer.");
-      return;
-    }
-    // Bacs confirms inline (no redirect) — send them to the confirmation page.
-    window.location.assign(confirmedUrl);
+  if (bankStep) {
+    return (
+      <div className="flex flex-col gap-3">
+        <div>
+          <h2 className="font-sans font-semibold text-lg">Your Direct Debit details</h2>
+          <p className="text-sm text-muted">
+            {planName} · {priceFor(priceLabel, billingInterval, vatRegistered)} · with {engineerName}. {FIRST_PAYMENT_LINE}
+          </p>
+        </div>
+        {/* Stripe's form, in place (sort code, account number, mandate). */}
+        <div className="overflow-hidden rounded-2xl">
+          <EmbeddedCheckoutProvider stripe={stripePromise} options={{ clientSecret }}>
+            <StripeEmbeddedCheckout />
+          </EmbeddedCheckoutProvider>
+        </div>
+        <button type="button" onClick={() => setBankStep(false)} className="text-sm text-muted underline">
+          Back
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -119,8 +124,6 @@ function CheckoutForm({
         </p>
       </div>
       <AddressLookup signupToken={signupToken} value={address} onChange={setAddress} />
-      <p className="text-sm font-semibold">Direct Debit details</p>
-      <PaymentElement options={{ layout: "tabs" }} />
 
       <Card className="bg-flame-tint border-flame-tint text-[12.5px]">
         <b>Protected by the Direct Debit Guarantee.</b>{" "}
@@ -167,8 +170,8 @@ function CheckoutForm({
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {/* Part 15.2 — one white button; green on this page is prices only. */}
-      <button type="submit" disabled={busy || !agreed || (landlord && !propertyLet) || !stripe} className={btnClass()}>
-        {busy ? "Setting up your Direct Debit…" : "Set up my plan"}
+      <button type="submit" disabled={busy || !agreed || (landlord && !propertyLet)} className={btnClass()}>
+        {busy ? "One moment…" : "Continue to Direct Debit"}
       </button>
       <p className="text-center text-[11px] text-faint">Cancel anytime.</p>
       {/* Build Review 3 §3 — the official "Powered by Stripe" badge, never
@@ -188,6 +191,7 @@ function CheckoutForm({
 export function EmbeddedCheckout(props: {
   clientSecret: string;
   publishableKey: string;
+  /** Checkout's return_url (set server-side) already points here. */
   confirmedUrl: string;
   planName: string;
   priceLabel: string;
@@ -197,43 +201,5 @@ export function EmbeddedCheckout(props: {
   landlord?: boolean;
   billingInterval?: BillingInterval;
 }) {
-  const stripePromise = useMemo(
-    () => loadStripe(props.publishableKey),
-    [props.publishableKey],
-  );
-
-  return (
-    <Elements
-      stripe={stripePromise}
-      options={{
-        clientSecret: props.clientSecret,
-        // The page around this is dark navy (v2) — Stripe's light "stripe"
-        // theme would float as a bright white box, so start from "night" and
-        // match our exact tokens rather than its defaults.
-        appearance: {
-          theme: "night",
-          variables: {
-            colorPrimary: "#5FA3F0",
-            colorBackground: "#193150",
-            colorText: "#F3F7FB",
-            colorTextSecondary: "#9FB6D0",
-            colorDanger: "#FF6B6B",
-            borderRadius: "12px",
-          },
-        },
-      }}
-    >
-      <CheckoutForm
-        clientSecret={props.clientSecret}
-        billingInterval={props.billingInterval}
-        signupToken={props.signupToken}
-        confirmedUrl={props.confirmedUrl}
-        planName={props.planName}
-        priceLabel={props.priceLabel}
-        engineerName={props.engineerName}
-        landlord={props.landlord}
-        vatRegistered={props.vatRegistered}
-      />
-    </Elements>
-  );
+  return <CheckoutForm {...props} />;
 }
