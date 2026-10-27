@@ -5,7 +5,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
 import { setupSteps, type SetupStep } from "@/lib/setup-steps";
 import { Icon } from "@/components/icon";
-import { RingProgress } from "@/components/ring-progress";
+import { RingMarkProgress } from "@/components/ring-mark";
 import { StripeBadge } from "@/components/stripe-badge";
 import { StripeStatusCard } from "@/components/stripe-status-card";
 
@@ -72,17 +72,36 @@ export default function Onboarding() {
   const rejected = Boolean(me?.gasSafeRejectedAt) && !verified;
   const inReview = Boolean(me?.gasSafeReviewRequestedAt) && !verified && !rejected;
 
+  // Back = the way in: Home's "Finish setup" card, or straight after sign-up
+  // (no history), where it does what "Skip setup for now" does.
+  function leave() {
+    if (router.canGoBack()) return router.back();
+    if (!me?.stripeConnected) skipStripe();
+    router.replace("/");
+  }
+
   return (
     <View className="flex-1 bg-bg">
       <SafeAreaView edges={["top"]} className="flex-1">
         <ScrollView contentContainerClassName="gap-3 px-4 pb-8 pt-4">
           <View className="flex-row items-start justify-between">
-            {/* One line on a 6.1" phone, as on the target. */}
-            <Text className="flex-1 pt-6 text-[30px] font-extrabold leading-[36px] text-ink" numberOfLines={1} adjustsFontSizeToFit>
-              Getting started
-            </Text>
+            <View className="flex-1 flex-row items-center gap-1.5 pt-6">
+              <Pressable
+                onPress={leave}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Back"
+                className="h-8 w-8 items-center justify-center"
+              >
+                <Icon name="back" size={22} weight="semibold" />
+              </Pressable>
+              {/* One line on a 6.1" phone, as on the target. */}
+              <Text className="shrink text-[30px] font-extrabold leading-[36px] text-ink" numberOfLines={1} adjustsFontSizeToFit>
+                Getting started
+              </Text>
+            </View>
             <View className="items-center justify-center" style={{ width: 96, height: 96 }}>
-              <RingProgress size={96} strokeWidth={12} progress={done / steps.length} />
+              <RingMarkProgress size={96} progress={done / steps.length} />
               <Text className="absolute text-[18px] font-semibold text-ink">
                 {done} of {steps.length}
               </Text>

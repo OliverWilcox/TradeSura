@@ -1,4 +1,6 @@
-import Svg, { Path } from "react-native-svg";
+import { useEffect, useState } from "react";
+import { Animated, Easing } from "react-native";
+import Svg, { ClipPath, Defs, G, Path } from "react-native-svg";
 
 // The TradeSura ring mark, as real vector geometry rather than a raster
 // image. 22 Sept rebrand: the sharp-cut ring replaced the old soft
@@ -33,4 +35,55 @@ export function RingMark({ size = 32, color }: { size?: number; color?: string }
       <Path d={GREEN_D} fill={color ?? BRAND_GREEN} />
     </Svg>
   );
+}
+
+/**
+ * The ring mark as a progress indicator — the Getting started hub's
+ * "n of 7". The real logo shape (arrow cuts and all), dimmed as the track,
+ * with the two-tone mark revealed clockwise from 12 o'clock as steps are
+ * done. Same geometry as RingMark, so it reads as the logo, not a circle.
+ */
+export function RingMarkProgress({ size = 96, progress }: { size?: number; progress: number }) {
+  const target = Math.max(0, Math.min(1, progress));
+  const [shown, setShown] = useState(0);
+  const [anim] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    const id = anim.addListener(({ value }) => setShown(value));
+    Animated.timing(anim, {
+      toValue: target,
+      duration: 900,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+    return () => anim.removeListener(id);
+  }, [target, anim]);
+
+  return (
+    <Svg width={size} height={size} viewBox="-50 -50 100 100">
+      <Defs>
+        <ClipPath id="ringmark-progress">
+          <Path d={wedge(shown)} />
+        </ClipPath>
+      </Defs>
+      <Path d={BLUE_D} fill="#ffffff" fillOpacity={0.14} />
+      <Path d={GREEN_D} fill="#ffffff" fillOpacity={0.14} />
+      {shown > 0 && (
+        <G clipPath="url(#ringmark-progress)">
+          <Path d={BLUE_D} fill={BRAND_BLUE} />
+          <Path d={GREEN_D} fill={BRAND_GREEN} />
+        </G>
+      )}
+    </Svg>
+  );
+}
+
+// A pie slice from 12 o'clock, clockwise, big enough to cover the ring.
+function wedge(p: number): string {
+  if (p >= 0.999) return "M -60 -60 H 60 V 60 H -60 Z";
+  const r = 60;
+  const a = p * 2 * Math.PI;
+  const x = (r * Math.sin(a)).toFixed(2);
+  const y = (-r * Math.cos(a)).toFixed(2);
+  return `M 0 0 L 0 ${-r} A ${r} ${r} 0 ${p > 0.5 ? 1 : 0} 1 ${x} ${y} Z`;
 }
