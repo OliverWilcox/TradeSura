@@ -6,6 +6,7 @@ import { recordReferralEarning } from "@/lib/referral";
 import { activatePlan } from "@/lib/activate";
 import { sendPushNotification } from "@/lib/push";
 import { alertIfStripeNeedsMore } from "@/lib/stripe-onboarding";
+import { sendFirstPayoutEmail } from "@/lib/account-emails";
 import {
   completePaymentRescue,
   confirmSignupMandate,
@@ -297,6 +298,8 @@ async function handleEvent(event: Stripe.Event) {
         `£${(payout.amount / 100).toFixed(2)} should now be in your bank.`,
         { url: "/payouts" },
       );
+      // Build Review 3 §8 — the first Friday payout gets an email (once).
+      await sendFirstPayoutEmail(engineer.id, payout.amount);
       return;
     }
 

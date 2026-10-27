@@ -11,6 +11,7 @@ import { FIRST_PAYMENT_LINE, billingIntervalOf, chargePence, priceLine } from "@
 import { attachPlanToPassport } from "@/lib/passport";
 import { queueWelcomeTouches } from "@/lib/welcome-touches";
 import { firstCustomerPath, firstMemberYearlyPence } from "@/lib/first-member";
+import { sendFirstCustomerEmail } from "@/lib/account-emails";
 
 // Idempotent: safe to call again if Stripe retries the webhook, or if the
 // confirmed-page poll and the webhook both land.
@@ -110,6 +111,15 @@ export async function activatePlan(
         : `/customer/${plan.customerId}`,
     },
   );
+  // Build Review 3 §8 — the first customer is an account email too.
+  if (isFirst) {
+    await sendFirstCustomerEmail(
+      plan.engineerId,
+      `${plan.customer.firstName} ${plan.customer.lastName}`,
+      plan.tier?.name ?? "your plan",
+      firstMemberYearlyPence(plan.priceMonthlyPence ?? 0, plan.billingInterval),
+    ).catch((err) => console.error("[activate] first customer email failed:", err));
+  }
   // Section 8 — the staff engineer who signed them up hears too, with no £.
   if (plan.soldById) {
     await sendPushNotification(

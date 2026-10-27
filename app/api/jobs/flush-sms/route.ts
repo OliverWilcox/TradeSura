@@ -6,6 +6,7 @@ import { queueServiceReminders } from "@/lib/reminders";
 import { applyDuePriceReviews } from "@/lib/price-review";
 import { endUnpaidPlans, resumeDuePausedPlans } from "@/lib/plan-billing";
 import { moveFollowUps } from "@/lib/move-followups";
+import { sendSetupNudges } from "@/lib/account-emails";
 
 // Queue due service reminders (Part 11's 30/14/3 engine), apply due price
 // reviews, then flush the SMS
@@ -21,8 +22,10 @@ async function run() {
   const unpaidPlansEnded = await endUnpaidPlans();
   // Retention §4 — a week after a consented move: new-owner lead + letter.
   const moves = await moveFollowUps();
+  // Build Review 3 §8 — day 1 "payments not set up", day 3 "no plan yet".
+  const setupNudges = await sendSetupNudges();
   const sent = await flushSmsQueue();
-  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves });
+  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves, setupNudges });
 }
 
 // Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
