@@ -33,6 +33,7 @@ vi.mock("@/lib/activate", () => ({ activatePlan: vi.fn() }));
 
 import {
   addMonths,
+  annualServiceFrom,
   annualServiceUnlocked,
   cancelAtPeriodEnd,
   chargePence,
@@ -64,6 +65,22 @@ describe("annual service unlocks after the 3rd payment", () => {
   it("yearly: the one payment covers the year", () => {
     expect(annualServiceUnlocked({ paymentsCleared: 0, billingInterval: "year" })).toBe(false);
     expect(annualServiceUnlocked({ paymentsCleared: 1, billingInterval: "year" })).toBe(true);
+  });
+});
+
+describe("when the annual service opens (portal)", () => {
+  const coolingOffEndsAt = new Date("2026-11-10T12:00:00Z");
+  it("monthly: the month of the 3rd collection, not a year after joining", () => {
+    const d = annualServiceFrom({ coolingOffEndsAt, activatedAt: new Date("2026-10-27T12:00:00Z") });
+    expect(d?.toISOString().slice(0, 10)).toBe("2027-01-10");
+  });
+  it("yearly: the first collection", () => {
+    const d = annualServiceFrom({ coolingOffEndsAt, activatedAt: null, billingInterval: "year" });
+    expect(d?.toISOString().slice(0, 10)).toBe("2026-11-10");
+  });
+  it("falls back to 14 days after activation", () => {
+    const d = annualServiceFrom({ coolingOffEndsAt: null, activatedAt: new Date("2026-10-27T12:00:00Z") });
+    expect(d?.toISOString().slice(0, 7)).toBe("2027-01");
   });
 });
 

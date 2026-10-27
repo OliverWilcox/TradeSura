@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { EMERGENCY_LINE } from "@/lib/compliance/interlock";
 import { resolvePlanTier } from "@/lib/plan-tier";
 import { appUrl } from "@/lib/app-url";
-import { perMonth, tradingNameOf } from "@/lib/engineer";
+import { tradingNameOf } from "@/lib/engineer";
 import { FIRST_PAYMENT_LINE, billingIntervalOf, priceLine } from "@/lib/billing-interval";
 
 export function poundsFromPence(pence: number): string {
@@ -31,7 +31,6 @@ export async function planDocumentEmailHtml(planId: string) {
   const { plan, tier, clauses } = await getPlanDocument(planId);
   const brand = plan.engineer.tradingName?.trim() || plan.engineer.legalName?.trim() || "Your engineer";
   const legalLine = tradingNameOf(plan.engineer);
-  const price = poundsFromPence(plan.priceMonthlyPence ?? 0);
   const portalUrl = `${appUrl()}/portal/${plan.portalToken}`;
   const yearly = billingIntervalOf(plan.billingInterval) === "year";
   const coolingOffEnds = plan.coolingOffEndsAt?.toLocaleDateString("en-GB", {
@@ -51,7 +50,7 @@ export async function planDocumentEmailHtml(planId: string) {
 <div style="font-family:sans-serif;max-width:560px">
   <h1 style="margin-bottom:2px">${brand} Care Plans</h1>
   <p style="color:#5E6975;margin-top:0">Plan ${plan.ref} · ${plan.customer.firstName} ${plan.customer.lastName}</p>
-  <p><b>You're on the ${tier?.name ?? ""} plan</b> — ${yearly ? priceLine(plan.priceMonthlyPence ?? 0, "year", plan.engineer.vatRegistered) : perMonth(price, plan.engineer.vatRegistered, "/month")} by Direct Debit.
+  <p><b>You're on the ${tier?.name ?? ""} plan</b> — ${priceLine(plan.priceMonthlyPence ?? 0, plan.billingInterval, plan.engineer.vatRegistered)} by Direct Debit.
   ${FIRST_PAYMENT_LINE}</p>
   <p>${yearly ? "Your annual service can be booked once your yearly payment has cleared." : "Your annual service can be booked once your third monthly payment has cleared."}
   Everything else starts from your first payment.</p>

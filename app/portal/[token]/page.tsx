@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { brandName, perMonth, tradingNameOf } from "@/lib/engineer";
+import { brandName, tradingNameOf } from "@/lib/engineer";
 import { CustomerShell } from "@/components/shells";
 import { Card, NotIncluded, Pill, RowLine, btnClass } from "@/components/ui";
-import { poundsFromPence } from "@/lib/plan-doc";
+import { annualServiceFrom, annualServiceUnlocked, priceLine } from "@/lib/plan-billing";
 import { resolvePlanTier } from "@/lib/plan-tier";
 
 export default async function PortalPage({ params }: { params: Promise<{ token: string }> }) {
@@ -21,14 +21,20 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   if (!plan) notFound();
 
   const brand = brandName(plan.engineer);
-  const firstName = plan.engineer.gasSafeName?.split(" ").at(-1) ?? brand;
+  // "Your engineer: Dave · Dave's Heating"; just the business when there's
+  // no first name, never the business twice.
+  const engineerFirst = plan.engineer.firstName?.trim();
+  const engineerLine = engineerFirst && engineerFirst !== brand ? `${engineerFirst} · ${brand}` : brand;
   // The plan as the customer agreed it (snapshot), else the live tier.
   const tier = resolvePlanTier(plan);
   const clauses = tier?.clauses ?? [];
   const property = plan.customer.properties[0];
-  const nextService = plan.activatedAt
-    ? new Date(new Date(plan.activatedAt).setFullYear(plan.activatedAt.getFullYear() + 1))
-    : null;
+  // Retention spec §1 — the annual service opens after the 3rd monthly
+  // payment (1st yearly), not a year after joining.
+  const serviceOpen = annualServiceUnlocked(plan);
+  const serviceFrom = annualServiceFrom(plan);
+  const monthYear = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Europe/London" });
+  const serviceLine = serviceOpen ? "Ready to book" : serviceFrom ? `From ${monthYear(serviceFrom)}` : null;
 
   return (
     <CustomerShell
@@ -43,8 +49,8 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
             <p className="font-semibold">
               {tier?.name} — {brand}
             </p>
-            <span className="font-mono font-semibold">
-              {perMonth(poundsFromPence(plan.priceMonthlyPence ?? 0), plan.engineer.vatRegistered, "/mo")}
+            <span className="font-semibold">
+              {priceLine(plan.priceMonthlyPence ?? 0, plan.billingInterval, plan.engineer.vatRegistered)}
             </span>
           </div>
           <div className="h-px bg-line-strong my-2.5" />
@@ -56,12 +62,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
               right={plan.cancelEffectiveAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" })}
             />
           )}
-          {nextService && (
-            <RowLine
-              left="Annual service"
-              right={nextService.toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Europe/London" })}
-            />
-          )}
+          {serviceLine && <RowLine left="Annual service" right={serviceLine} />}
         </Card>
       ) : plan.status === "PAUSED" ? (
         // Retention spec §2 — pause = no collections, no benefits, restarts on its own.
@@ -108,11 +109,8 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
                 </>
               }
               right={
-                c.code === "ANNUAL_SERVICE" && nextService ? (
-                  <span className="font-mono text-[10px] uppercase text-faint">
-                    NEXT:{" "}
-                    {nextService.toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "Europe/London" })}
-                  </span>
+                c.code === "ANNUAL_SERVICE" && serviceLine ? (
+                  <span className="text-[11.5px] text-faint">{serviceLine}</span>
                 ) : undefined
               }
             />
@@ -143,7 +141,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
       )}
 
       <p className="text-xs text-muted text-center">
-        Your engineer: {firstName} · {brand}
+        Your engineer: {engineerLine}
       </p>
     </CustomerShell>
   );

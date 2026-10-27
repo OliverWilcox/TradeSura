@@ -56,6 +56,20 @@ export function annualServiceUnlocked(plan: {
   return plan.paymentsCleared >= ANNUAL_SERVICE_AFTER_PAYMENTS;
 }
 
+// When the annual service becomes available: the month of the 3rd monthly
+// collection (the 1st for yearly). The first collection is the end of the
+// 14-day cooling-off.
+export function annualServiceFrom(plan: {
+  billingInterval?: string | null;
+  coolingOffEndsAt: Date | null;
+  activatedAt: Date | null;
+}): Date | null {
+  const first = plan.coolingOffEndsAt ?? (plan.activatedAt ? coolingOffEnd(plan.activatedAt) : null);
+  if (!first) return null;
+  if (billingIntervalOf(plan.billingInterval) === "year") return first;
+  return addMonths(first, ANNUAL_SERVICE_AFTER_PAYMENTS - 1);
+}
+
 // A failed collection that hasn't been recovered yet. Service booking and
 // reminders hold while this is true.
 export function paymentOutstanding(plan: { paymentFailedAt: Date | null }): boolean {

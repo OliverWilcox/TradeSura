@@ -50,7 +50,9 @@
   --color-on-light: #0f2140;
   --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --font-disp: "Segoe UI", system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  /* Build Review 3 §3.6 — no typewriter font anywhere; `font-mono` keeps
+     its tabular figures (below) on the normal font. */
+  --font-mono: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 }
 
 body {
