@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Animated, Easing } from "react-native";
-import Svg, { ClipPath, Defs, G, Path } from "react-native-svg";
+import Svg, { Circle, Path } from "react-native-svg";
 
 // The TradeSura ring mark, as real vector geometry rather than a raster
 // image. 22 Sept rebrand: the sharp-cut ring replaced the old soft
@@ -38,11 +38,12 @@ export function RingMark({ size = 32, color }: { size?: number; color?: string }
 }
 
 /**
- * The ring mark as a progress indicator — the Getting started hub's
- * "n of 7". The real logo shape (arrow cuts and all): blue for the steps
- * still to do, filling green clockwise as steps are done.
+ * The Getting started hub's "n of 7": a plain blue ring with the logo's
+ * green arrow growing clockwise from 12 o'clock as steps are done (tail
+ * notch and arrow head cut like the logo's own green arc). At 7 of 7 the
+ * head meets its tail and the ring is all green.
  */
-export function RingMarkProgress({ size = 96, progress }: { size?: number; progress: number }) {
+export function RingMarkProgress({ size = 80, progress }: { size?: number; progress: number }) {
   const target = Math.max(0, Math.min(1, progress));
   const [shown, setShown] = useState(0);
   const [anim] = useState(() => new Animated.Value(0));
@@ -60,40 +61,48 @@ export function RingMarkProgress({ size = 96, progress }: { size?: number; progr
 
   return (
     <Svg width={size} height={size} viewBox="-50 -50 100 100">
-      <Defs>
-        <ClipPath id="ringmark-progress">
-          <Path d={wedge(shown)} />
-        </ClipPath>
-      </Defs>
-      <Path d={BLUE_D} fill={BRAND_BLUE} />
-      <Path d={GREEN_D} fill={BRAND_BLUE} />
-      {shown > 0 && (
-        <G clipPath="url(#ringmark-progress)">
-          <Path d={BLUE_D} fill={BRAND_GREEN} />
-          <Path d={GREEN_D} fill={BRAND_GREEN} />
-        </G>
-      )}
+      {/* All done: a plain green ring (no blue edge peeking out). */}
+      <Circle
+        cx={0}
+        cy={0}
+        r={MID_R}
+        stroke={shown >= 0.999 ? BRAND_GREEN : BRAND_BLUE}
+        strokeWidth={OUTER_R - INNER_R}
+        fill="none"
+      />
+      {shown > 0.005 && shown < 0.999 && <Path d={greenArrow(shown)} fill={BRAND_GREEN} />}
     </Svg>
   );
 }
 
-// A pie slice, clockwise, big enough to cover the ring. It starts just past
-// the blue arrow head at 12 o'clock, so the fill doesn't open with a stray
-// blue sliver; the arrow head fills in last, when the ring completes.
-const START_DEG = 7;
-const JOIN_DEG = 132;
-function wedge(p: number): string {
-  if (p >= 0.999) return "M -60 -60 H 60 V 60 H -60 Z";
-  const r = 60;
-  const at = (deg: number) => {
-    const a = (deg * Math.PI) / 180;
-    return `${(r * Math.sin(a)).toFixed(2)} ${(-r * Math.cos(a)).toFixed(2)}`;
-  };
-  let sweep = p * 360;
-  // The lower-right join (green arc ends ~119°, its arrow head reaches
-  // ~131°). A fill edge just short of it leaves a blue sliver beside the
-  // arrow cut that looks broken, so it runs on to the join instead.
-  const end = START_DEG + sweep;
-  if (end > JOIN_DEG - 30 && end < JOIN_DEG) sweep = JOIN_DEG - START_DEG;
-  return `M 0 0 L ${at(START_DEG)} A ${r} ${r} 0 ${sweep > 180 ? 1 : 0} 1 ${at(START_DEG + sweep)} Z`;
+// The logo's ring proportions (outer 50, inner 30.63) and its arrow cut:
+// the head's point and the tail's notch sit 12° on, at mid-radius.
+const OUTER_R = 50;
+const INNER_R = 30.63;
+const MID_R = (OUTER_R + INNER_R) / 2;
+const ARROW_DEG = 12;
+const START_DEG = -2;
+const MIN_SPAN = ARROW_DEG + 4;
+
+function pt(r: number, deg: number): string {
+  const a = (deg * Math.PI) / 180;
+  return `${(r * Math.sin(a)).toFixed(2)} ${(-r * Math.cos(a)).toFixed(2)}`;
+}
+
+function greenArrow(p: number): string {
+  // Span of the body (tail edge → head base); at 1 the head's point lands
+  // in the tail's notch and the ring closes.
+  const span = MIN_SPAN + p * (360 - MIN_SPAN);
+  const a0 = START_DEG;
+  const a1 = START_DEG + Math.min(span, 359.9);
+  const large = a1 - a0 > 180 ? 1 : 0;
+  return [
+    `M ${pt(OUTER_R, a0)}`,
+    `A ${OUTER_R} ${OUTER_R} 0 ${large} 1 ${pt(OUTER_R, a1)}`,
+    `L ${pt(MID_R, a1 + ARROW_DEG)}`,
+    `L ${pt(INNER_R, a1)}`,
+    `A ${INNER_R} ${INNER_R} 0 ${large} 0 ${pt(INNER_R, a0)}`,
+    `L ${pt(MID_R, a0 + ARROW_DEG)}`,
+    "Z",
+  ].join(" ");
 }
