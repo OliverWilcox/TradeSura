@@ -1,54 +1,23 @@
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { displayName } from "@/lib/engineer";
-import { normaliseUkPhone } from "@/lib/phone";
 import { deleteOwnerAccount, deleteStaffAccount } from "@/lib/delete-account";
 import { adminEvent } from "@/lib/admin-api/audit";
-import { AdminApiError } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
-import { engineerStatus } from "@/lib/admin/engineers";
+import { engineerSearch, engineerStatus, STATUS_WHERE, type EngineerStatus } from "@/lib/admin/engineers";
+import { customerSearch } from "@/lib/admin/customers";
 import { personName, verificationStatus } from "@/lib/admin/verifications";
 import { maskEmail, maskPhone } from "@/lib/admin/mask";
 
-// Finding someone's accounts by the emails and mobile numbers they used, and
-// deleting them: for a tester who wants to sign up again, or anyone who asks
-// to be removed. An engineer is deleted exactly as the app's own "Delete my
-// account" does it (lib/delete-account.ts): the row is anonymised, not
-// removed, so plans, payments and fees stay for the accounts, and the email,
-// mobile, Gas Safe number and Apple ID are free for a new sign-up. Like the
-// app, it's refused while customers are on a live plan. A customer is removed
-// the way an owner's deletion removes their customers: homes gone, name and
-// contact details scrubbed, plan records kept.
-
-export type Identifiers = { emails: string[]; phones: string[] };
-
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/** Emails (lowercased) and UK numbers (as E.164). Anything else is refused, naming it. */
-export function parseIdentifiers(values: string[]): Identifiers {
-  const emails = new Set<string>();
-  const phones = new Set<string>();
-  for (const raw of values) {
-    const value = raw.trim();
-    const phone = value.includes("@") ? null : normaliseUkPhone(value);
-    if (EMAIL.test(value)) emails.add(value.toLowerCase());
-    else if (phone) phones.add(phone);
-    else throw new AdminApiError(400, "VALIDATION", `“${value.slice(0, 60)}” isn't an email address or a UK phone number.`, { identifiers: ["Enter email addresses or UK phone numbers."] });
-  }
-  return { emails: [...emails], phones: [...phones] };
-}
-
-function contactWhere({ emails, phones }: Identifiers) {
-  return [...emails.map((email) => ({ email: { equals: email, mode: "insensitive" as const } })), ...(phones.length ? [{ phone: { in: phones } }] : [])];
-}
-
-/** Which of the identifiers this person's details are. */
-function matchedBy(ids: Identifiers, person: { email: string | null; phone: string | null }) {
-  return [
-    ...ids.emails.filter((e) => e === person.email?.toLowerCase()),
-    ...ids.phones.filter((p) => p === person.phone),
-  ];
-}
+// Every engineer and customer account, to find and delete: for a tester who
+// wants to sign up again, or anyone who asks to be removed. An engineer is
+// deleted exactly as the app's own "Delete my account" does it
+// (lib/delete-account.ts): the row is anonymised, not removed, so plans,
+// payments and fees stay for the accounts, and the email, mobile, Gas Safe
+// number and Apple ID are free for a new sign-up. Like the app, it's refused
+// while customers are on a live plan. A customer is removed the way an
+// owner's deletion removes their customers: homes gone, name and contact
+// details scrubbed, plan records kept.
 
 /**
  * Open plans: live ones block deleting (customers are paying by Direct Debit);
@@ -58,6 +27,11 @@ function matchedBy(ids: Identifiers, person: { email: string | null; phone: stri
 type PlanCounts = { live: number; ending: number; pending: number };
 
 const noPlans = (): PlanCounts => ({ live: 0, ending: 0, pending: 0 });
+
+/** A plan customers are paying for that hasn't been cancelled: it stops an owner being deleted. */
+const LIVE_PLAN = { status: { in: ["ACTIVE", "PAUSED"] }, cancelRequestedAt: null } satisfies Prisma.PlanWhereInput;
+/** Any plan that hasn't ended: it stops a customer being deleted. */
+const OPEN_PLAN = { status: { in: ["ACTIVE", "PAUSED"] } } satisfies Prisma.PlanWhereInput;
 
 async function openPlans(where: Prisma.PlanWhereInput, keyOf: (p: { engineerId: string; customerId: string }) => string) {
   const plans = await prisma.plan.findMany({
@@ -93,6 +67,15 @@ function customerBlocker(plans: PlanCounts) {
   return open === 1 ? "On a plan that hasn't ended yet. They can be deleted once it has." : `On ${open} plans that haven't ended yet. They can be deleted once those have.`;
 }
 
+/**
+ * Several searches at once, separated by commas or semicolons, so a person's
+ * emails and mobile can be found together. Each is matched as the engineer
+ * and customer lists match a search (contact details only whole).
+ */
+function searchTerms(q: string | undefined) {
+  return (q ?? "").split(/[,;]/).map((t) => t.trim()).filter(Boolean).slice(0, 20);
+}
+
 const ENGINEER_SELECT = {
   id: true,
   email: true,
@@ -115,66 +98,110 @@ const ENGINEER_SELECT = {
   _count: { select: { staff: { where: { deletedAt: null } }, customers: true } },
 } satisfies Prisma.EngineerSelect;
 
-/**
- * Every engineer (owner or staff) and customer whose email or phone is one of
- * these, with what deleting each would do. Contact details stay masked; each
- * row says which of the given identifiers it matched.
- */
-export async function lookupAccounts(ids: Identifiers) {
-  const where = contactWhere(ids);
-  const [engineers, customers] = await Promise.all([
-    prisma.engineer.findMany({ where: { deletedAt: null, OR: where }, select: ENGINEER_SELECT, orderBy: { createdAt: "asc" } }),
-    prisma.customer.findMany({
-      where: { engineer: { deletedAt: null }, OR: where },
-      select: { id: true, firstName: true, lastName: true, email: true, phone: true, createdAt: true, engineer: { select: { id: true, tradingName: true, legalName: true, slug: true } } },
-      orderBy: { createdAt: "asc" },
-    }),
-  ]);
-  const owners = engineers.filter((e) => !e.ownerId).map((e) => e.id);
-  const [byEngineer, byCustomer] = await Promise.all([
-    owners.length ? openPlans({ engineerId: { in: owners } }, (p) => p.engineerId) : new Map<string, PlanCounts>(),
-    customers.length ? openPlans({ customerId: { in: customers.map((c) => c.id) } }, (p) => p.customerId) : new Map<string, PlanCounts>(),
-  ]);
+const CUSTOMER_SELECT = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  phone: true,
+  createdAt: true,
+  engineer: { select: { id: true, tradingName: true, legalName: true, slug: true } },
+} satisfies Prisma.CustomerSelect;
 
-  return {
-    engineers: engineers.map((e) => {
-      // Staff sell inside the owner's business: plans and customers are the owner's.
-      const plans = byEngineer.get(e.id) ?? noPlans();
-      return {
-        id: e.id,
-        role: e.ownerId ? ("staff" as const) : ("owner" as const),
-        name: personName(e),
-        business: displayName(e.owner ?? e),
-        ownerId: e.ownerId,
-        email: maskEmail(e.email),
-        phone: e.phone ? maskPhone(e.phone) : null,
-        matched: matchedBy(ids, e),
-        status: engineerStatus(e),
-        verification: verificationStatus(e),
-        joinedAt: e.createdAt.toISOString(),
-        staff: e.ownerId ? 0 : e._count.staff,
-        customers: e.ownerId ? 0 : e._count.customers,
-        plans,
-        stripeAccount: !e.ownerId && !!e.stripeAccountId,
-        blocked: e.ownerId ? null : engineerBlocker(plans),
-      };
-    }),
-    customers: customers.map((c) => {
-      const plans = byCustomer.get(c.id) ?? noPlans();
-      return {
-        id: c.id,
-        name: personName(c),
-        engineer: { id: c.engineer.id, business: displayName(c.engineer) },
-        email: c.email ? maskEmail(c.email) : null,
-        phone: maskPhone(c.phone),
-        matched: matchedBy(ids, c),
-        addedAt: c.createdAt.toISOString(),
-        plans,
-        blocked: customerBlocker(plans),
-      };
-    }),
-    unmatched: [...ids.emails, ...ids.phones].filter((v) => !engineers.some((e) => matchedBy(ids, e).includes(v)) && !customers.some((c) => matchedBy(ids, c).includes(v))),
-  };
+export type EngineerAccountQuery = {
+  q?: string;
+  role?: "owner" | "staff";
+  status?: EngineerStatus;
+  /** yes: can be deleted now; no: an owner with a live customer plan. */
+  deletable?: "yes" | "no";
+  joinedFrom?: Date;
+  joinedTo?: Date;
+  dir?: "asc" | "desc";
+  page: number;
+  size: number;
+};
+
+/** Engineer accounts (owners and staff), newest first, with what deleting each would do. Contact details masked. */
+export async function listEngineerAccounts(q: EngineerAccountQuery) {
+  const and: Prisma.EngineerWhereInput[] = [{ deletedAt: null }];
+  const terms = searchTerms(q.q);
+  if (terms.length) and.push({ OR: terms.map(engineerSearch) });
+  if (q.role) and.push(q.role === "staff" ? { ownerId: { not: null } } : { ownerId: null });
+  if (q.status) and.push(STATUS_WHERE[q.status]);
+  // Staff never have plans of their own, so they can always go.
+  if (q.deletable === "yes") and.push({ OR: [{ ownerId: { not: null } }, { plans: { none: LIVE_PLAN } }] });
+  if (q.deletable === "no") and.push({ ownerId: null, plans: { some: LIVE_PLAN } });
+  if (q.joinedFrom || q.joinedTo) and.push({ createdAt: { ...(q.joinedFrom ? { gte: q.joinedFrom } : {}), ...(q.joinedTo ? { lt: q.joinedTo } : {}) } });
+  const where = { AND: and };
+  const [rows, total] = await Promise.all([
+    prisma.engineer.findMany({ where, orderBy: [{ createdAt: q.dir ?? "desc" }, { id: "asc" }], skip: (q.page - 1) * q.size, take: q.size, select: ENGINEER_SELECT }),
+    prisma.engineer.count({ where }),
+  ]);
+  const owners = rows.filter((e) => !e.ownerId).map((e) => e.id);
+  const byEngineer = owners.length ? await openPlans({ engineerId: { in: owners } }, (p) => p.engineerId) : new Map<string, PlanCounts>();
+  const items = rows.map((e) => {
+    // Staff sell inside the owner's business: plans and customers are the owner's.
+    const plans = byEngineer.get(e.id) ?? noPlans();
+    return {
+      id: e.id,
+      role: e.ownerId ? ("staff" as const) : ("owner" as const),
+      name: personName(e),
+      business: displayName(e.owner ?? e),
+      ownerId: e.ownerId,
+      email: maskEmail(e.email),
+      phone: e.phone ? maskPhone(e.phone) : null,
+      status: engineerStatus(e),
+      verification: verificationStatus(e),
+      joinedAt: e.createdAt.toISOString(),
+      staff: e.ownerId ? 0 : e._count.staff,
+      customers: e.ownerId ? 0 : e._count.customers,
+      plans,
+      stripeAccount: !e.ownerId && !!e.stripeAccountId,
+      blocked: e.ownerId ? null : engineerBlocker(plans),
+    };
+  });
+  return { items, page: q.page, size: q.size, total };
+}
+
+export type CustomerAccountQuery = {
+  q?: string;
+  /** yes: can be deleted now; no: on a plan that hasn't ended. */
+  deletable?: "yes" | "no";
+  addedFrom?: Date;
+  addedTo?: Date;
+  dir?: "asc" | "desc";
+  page: number;
+  size: number;
+};
+
+/** Customers on every engineer's book, newest first, with what deleting each would do. Contact details masked. */
+export async function listCustomerAccounts(q: CustomerAccountQuery) {
+  const and: Prisma.CustomerWhereInput[] = [{ engineer: { deletedAt: null } }];
+  const terms = searchTerms(q.q);
+  if (terms.length) and.push({ OR: terms.map(customerSearch) });
+  if (q.deletable === "yes") and.push({ plans: { none: OPEN_PLAN } });
+  if (q.deletable === "no") and.push({ plans: { some: OPEN_PLAN } });
+  if (q.addedFrom || q.addedTo) and.push({ createdAt: { ...(q.addedFrom ? { gte: q.addedFrom } : {}), ...(q.addedTo ? { lt: q.addedTo } : {}) } });
+  const where = { AND: and };
+  const [rows, total] = await Promise.all([
+    prisma.customer.findMany({ where, orderBy: [{ createdAt: q.dir ?? "desc" }, { id: "asc" }], skip: (q.page - 1) * q.size, take: q.size, select: CUSTOMER_SELECT }),
+    prisma.customer.count({ where }),
+  ]);
+  const byCustomer = rows.length ? await openPlans({ customerId: { in: rows.map((c) => c.id) } }, (p) => p.customerId) : new Map<string, PlanCounts>();
+  const items = rows.map((c) => {
+    const plans = byCustomer.get(c.id) ?? noPlans();
+    return {
+      id: c.id,
+      name: personName(c),
+      engineer: { id: c.engineer.id, business: displayName(c.engineer) },
+      email: c.email ? maskEmail(c.email) : null,
+      phone: maskPhone(c.phone),
+      addedAt: c.createdAt.toISOString(),
+      plans,
+      blocked: customerBlocker(plans),
+    };
+  });
+  return { items, page: q.page, size: q.size, total };
 }
 
 export type DeleteOutcome = "deleted" | "gone" | "refused" | "failed";
@@ -188,8 +215,8 @@ async function closeAdminRecords(subjectType: "engineer" | "customer", id: strin
   if (subjectType === "engineer") await db.verificationClaim.deleteMany({ where: { engineerId: id } });
 }
 
-/** One delete request: who asked and why, names as they were before anything was deleted, and owners deleted so far. */
-type Run = { admin: AdminPrincipal; reason: string; names: Map<string, string>; deletedOwners: Map<string, string> };
+/** One delete request: who asked and why (if they said), names as they were before anything was deleted, and owners deleted so far. */
+type Run = { admin: AdminPrincipal; reason?: string; names: Map<string, string>; deletedOwners: Map<string, string> };
 
 async function deleteEngineer(run: Run, id: string): Promise<DeleteResultItem> {
   const e = await prisma.engineer.findUnique({ where: { id }, select: { ...ENGINEER_SELECT, deletedAt: true } });
@@ -262,7 +289,7 @@ async function deleteCustomer(run: Run, id: string): Promise<DeleteResultItem> {
  * customers are reported as deleted with them. Each stands alone: one that's
  * refused or fails doesn't stop the rest.
  */
-export async function deleteAccounts(admin: AdminPrincipal, input: { engineerIds: string[]; customerIds: string[]; reason: string }) {
+export async function deleteAccounts(admin: AdminPrincipal, input: { engineerIds: string[]; customerIds: string[]; reason?: string }) {
   const engineerIds = [...new Set(input.engineerIds)];
   const customerIds = [...new Set(input.customerIds)];
   // Names first: deleting an owner scrubs their staff and customers.
