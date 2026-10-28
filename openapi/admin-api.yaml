@@ -411,6 +411,68 @@ components:
       type: object
       required: [count, grossPence, refundedPence, claimedPence, netPence, feePence]
       properties: { count: { type: integer }, grossPence: { type: integer }, refundedPence: { type: integer }, claimedPence: { type: integer }, netPence: { type: integer }, feePence: { type: integer } }
+    OpenPlans:
+      type: object
+      description: "live: collecting, blocks deleting. ending: cancelled, running out the paid month. pending: offers not taken up (withdrawn on delete)."
+      required: [live, ending, pending]
+      properties: { live: { type: integer }, ending: { type: integer }, pending: { type: integer } }
+    AccountLookup:
+      type: object
+      required: [engineers, customers, unmatched]
+      properties:
+        engineers:
+          type: array
+          items:
+            type: object
+            required: [id, role, name, business, ownerId, email, phone, matched, status, verification, joinedAt, staff, customers, plans, stripeAccount, blocked]
+            properties:
+              id: { type: string }
+              role: { type: string, enum: [owner, staff] }
+              name: { type: string }
+              business: { type: string, description: The owner's business for staff }
+              ownerId: { type: [string, "null"] }
+              email: { type: string, description: Masked }
+              phone: { type: [string, "null"], description: Masked }
+              matched: { type: array, items: { type: string }, description: Which of the identifiers (normalised) this account uses }
+              status: { $ref: "#/components/schemas/EngineerStatus" }
+              verification: { $ref: "#/components/schemas/VerificationStatus" }
+              joinedAt: { type: string, format: date-time }
+              staff: { type: integer, description: Staff accounts deleted with an owner }
+              customers: { type: integer, description: Customers scrubbed with an owner }
+              plans: { $ref: "#/components/schemas/OpenPlans" }
+              stripeAccount: { type: boolean, description: Has a Stripe Connect account, left open for TradeSura to close }
+              blocked: { type: [string, "null"], description: Why it can't be deleted yet }
+        customers:
+          type: array
+          items:
+            type: object
+            required: [id, name, engineer, email, phone, matched, addedAt, plans, blocked]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              engineer: { type: object, required: [id, business], properties: { id: { type: string }, business: { type: string } } }
+              email: { type: [string, "null"], description: Masked }
+              phone: { type: string, description: Masked }
+              matched: { type: array, items: { type: string } }
+              addedAt: { type: string, format: date-time }
+              plans: { $ref: "#/components/schemas/OpenPlans" }
+              blocked: { type: [string, "null"] }
+        unmatched: { type: array, items: { type: string }, description: Identifiers no account uses }
+    DeletedAccounts:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [type, id, name, outcome, message]
+            properties:
+              type: { type: string, enum: [engineer, customer] }
+              id: { type: string }
+              name: { type: string }
+              outcome: { type: string, enum: [deleted, gone, refused, failed], description: "gone: already deleted, or no such record" }
+              message: { type: string, description: Written for admins }
   responses:
     Error:
       description: See the Error schema.
@@ -853,4 +915,43 @@ paths:
       parameters: [{ $ref: "#/components/parameters/customerId" }, { $ref: "#/components/parameters/noteId" }]
       responses:
         "200": { description: Removed, content: { application/json: { schema: { $ref: "#/components/schemas/Ok" } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /accounts/lookup:
+    post:
+      summary: Every engineer (owner or staff) and customer using these emails or UK phone numbers, with what deleting each would do. A POST so contact details stay out of URLs. Needs data:delete.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [identifiers]
+              properties:
+                identifiers: { type: array, minItems: 1, maxItems: 20, items: { type: string, minLength: 3, maxLength: 254 }, description: Emails or UK phone numbers in any common spelling; anything else is a 400 }
+      responses:
+        "200": { description: Matches, content: { application/json: { schema: { $ref: "#/components/schemas/AccountLookup" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /accounts/delete:
+    post:
+      summary: >-
+        Delete engineers and customers. An engineer is deleted as the app's "Delete my account" does it: anonymised, so the
+        email, mobile, Gas Safe number and Apple ID can sign up again; an owner takes their staff and customers with them,
+        and is refused while a customer plan is live. A customer has their homes removed and details scrubbed, and is
+        refused until their plans have ended. Plans and payments stay. Each is handled on its own. Needs data:delete.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                engineerIds: { type: array, maxItems: 20, items: { type: string } }
+                customerIds: { type: array, maxItems: 20, items: { type: string } }
+                reason: { type: string, minLength: 3, maxLength: 500 }
+      responses:
+        "200": { description: What happened to each, content: { application/json: { schema: { $ref: "#/components/schemas/DeletedAccounts" } } } }
         default: { $ref: "#/components/responses/Error" }
