@@ -1,0 +1,37 @@
+# Local development and test database. Not used by Vercel.
+#   docker compose up -d db          # start (data kept in the tradesura-db volume)
+#   docker compose down              # stop
+#   docker compose down -v           # stop and wipe the data
+# Port 54320, so it doesn't clash with another Postgres on 5432 or `prisma dev` on 51214.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: tradesura-db
+    environment:
+      POSTGRES_USER: tradesura
+      POSTGRES_PASSWORD: tradesura
+      POSTGRES_DB: tradesura
+    ports:
+      - "127.0.0.1:54320:5432"
+    volumes:
+      - tradesura-db:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tradesura -d tradesura"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Stands in for Vercel Blob in local demos: serves the fictional ID-card
+  # photos the demo seed (scripts/seed-demo.ts) points engineers at. Allow it
+  # in .env with ADMIN_CARD_EXTRA_ORIGINS=http://127.0.0.1:54321.
+  demo-blob:
+    image: nginx:1.27-alpine
+    container_name: tradesura-demo-blob
+    ports:
+      - "127.0.0.1:54321:80"
+    volumes:
+      - ./docker/demo-blob:/usr/share/nginx/html:ro
+
+volumes:
+  tradesura-db:

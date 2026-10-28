@@ -1,0 +1,856 @@
+openapi: 3.1.0
+info:
+  title: TradeSura admin API
+  version: "1"
+  description: |
+    The API the TradeSura Admin app (a separate Next.js app) uses for real data.
+    Server to server only: no browser calls it, and it isn't for the engineers'
+    mobile app (those routes are under /api and unchanged).
+
+    **Auth.** Every call carries `Authorization: Bearer <token>`: an HS256 JWT
+    signed with `ADMIN_API_SECRET`, issuer `tradesura-admin`, audience
+    `tradesura-api:admin`, living at most 120 seconds (the admin app signs one
+    per call, for 60). Claims: `sub` (the admin's ID), `name`, `role`, `perms`
+    (the permissions their role holds, from the list in
+    lib/admin-api/permissions.ts) and optional `rid` (the admin app's request
+    ID). Each route names the permission it needs; it's checked here as well
+    as in the admin app. Engineers' app tokens (SESSION_SECRET) are never
+    accepted, and the two secrets must differ.
+
+    **Errors.** Every failure is `{ "error": { "code", "message", "fields"? } }`
+    with a status code: 400 VALIDATION (fields names each bad field, and the
+    message is the first field's own message when no other is given), 401
+    UNAUTHENTICATED, 403 FORBIDDEN, 404 NOT_FOUND, 409 CONFLICT, 413, 415, 503
+    NOT_CONFIGURED (ADMIN_API_SECRET unset), 503 TIMEOUT (a heavy read ran past
+    10 seconds and Postgres stopped it; try a shorter range), 500 INTERNAL.
+    Messages are written for admins and safe to show. Unknown query or body
+    fields are refused, as is any text containing a NUL character (400), and
+    dates outside 2000–2099 (400). Search text is matched literally: % and _
+    aren't wildcards.
+
+    **Lists** take `page` (from 1) and `size` (1–100, default 25) and answer
+    `{ items, page, size, total }`. Each sort orders by the value its column
+    shows. The engineer and customer lists also stream whole, for CSV
+    exports, as NDJSON (`…/export`): one item per line, then
+    `{"end":true,"count":N}`; a stream without that last line didn't finish.
+
+    **Audit.** Every change is an Event row with actor type ADMIN, the admin's
+    name and role, the request ID and the reason given.
+
+    **Responses** are never cached (`Cache-Control: no-store`) and echo
+    `X-Request-Id`.
+servers:
+  - url: /api/admin/v1
+security:
+  - adminToken: []
+
+components:
+  securitySchemes:
+    adminToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    size: { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+    dir: { name: dir, in: query, schema: { type: string, enum: [asc, desc] } }
+    from: { name: from, in: query, required: true, description: Start of the range (ISO instant, inclusive), schema: { type: string, format: date-time } }
+    to: { name: to, in: query, required: true, description: End of the range (ISO instant, exclusive; at most 400 days after from), schema: { type: string, format: date-time } }
+    engineerId: { name: engineerId, in: path, required: true, schema: { type: string } }
+    customerId: { name: customerId, in: path, required: true, schema: { type: string } }
+    noteId: { name: noteId, in: path, required: true, schema: { type: string } }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, enum: [UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, VALIDATION, CONFLICT, PAYLOAD_TOO_LARGE, UNSUPPORTED_MEDIA_TYPE, NOT_CONFIGURED, UPSTREAM, TIMEOUT, INTERNAL] }
+            message: { type: string }
+            fields: { type: object, additionalProperties: { type: array, items: { type: string } } }
+    Page:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items: { type: array, items: {} }
+        page: { type: integer }
+        size: { type: integer }
+        total: { type: integer }
+    Reason:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    NoteBody:
+      type: object
+      additionalProperties: false
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1, maxLength: 2000 }
+    Note:
+      type: object
+      properties:
+        id: { type: string }
+        body: { type: string }
+        authorId: { type: string }
+        authorName: { type: string }
+        createdAt: { type: string, format: date-time }
+    Activity:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  name: { type: string, description: Event name, e.g. engineer_paused, offer_sent }
+                  at: { type: string, format: date-time }
+                  actor: { type: object, properties: { type: { type: string, enum: [ENGINEER, CUSTOMER, SYSTEM, ADMIN] }, id: { type: [string, "null"] }, name: { type: [string, "null"] } } }
+                  reason: { type: [string, "null"] }
+    Contact:
+      type: object
+      description: Both, or just the one asked for with `field`.
+      properties:
+        email: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+    Ok:
+      type: object
+      required: [ok]
+      properties: { ok: { const: true } }
+    Lock:
+      type: [object, "null"]
+      required: [holderId, holderName, until]
+      properties:
+        holderId: { type: string }
+        holderName: { type: string }
+        until: { type: string, format: date-time }
+    Register: { type: string, enum: [match, name_mismatch, not_found] }
+    VerificationStatus: { type: string, enum: [pending, verified, rejected, not_submitted] }
+    EngineerStatus: { type: string, enum: [active, paused, banned, left] }
+    PlanStatus: { type: string, enum: [PENDING, ACTIVE, PAUSED, CANCELLED] }
+    VerificationRow:
+      type: object
+      required: [id, name, business, businessType, gasSafeNo, submittedAt, status, decidedAt, rejectReason, claimedBy, signals]
+      properties:
+        id: { type: string, description: The engineer's ID (an application is the engineer's) }
+        name: { type: string }
+        business: { type: string }
+        businessType: { type: [string, "null"], description: sole_trader, ltd or partnership }
+        gasSafeNo: { type: [string, "null"] }
+        submittedAt: { type: string, format: date-time }
+        status: { $ref: "#/components/schemas/VerificationStatus" }
+        decidedAt: { type: [string, "null"], format: date-time }
+        rejectReason: { type: [string, "null"] }
+        claimedBy: { type: [string, "null"], description: Who is checking it now }
+        signals:
+          type: object
+          required: [hasCard, register, companyNotActive, duplicates, registerMismatchAtSignup]
+          properties:
+            hasCard: { type: boolean }
+            register: { $ref: "#/components/schemas/Register" }
+            companyNotActive: { type: boolean }
+            duplicates: { type: integer }
+            registerMismatchAtSignup: { type: boolean }
+    VerificationPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          required: [counts]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/VerificationRow" } }
+            counts:
+              type: object
+              required: [new, duplicates, pending, verified, rejected, decided]
+              properties:
+                new: { type: integer }
+                duplicates: { type: integer }
+                pending: { type: integer }
+                verified: { type: integer }
+                rejected: { type: integer }
+                decided: { type: integer }
+    VerificationDetail:
+      type: object
+      required: [id, name, firstName, lastName, business, businessType, submittedAt, status, tab, revision, lock, gasSafe, card, company, duplicates, decision, queue]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        firstName: { type: [string, "null"] }
+        lastName: { type: [string, "null"] }
+        business: { type: string }
+        tradingName: { type: [string, "null"] }
+        legalName: { type: [string, "null"] }
+        businessType: { type: [string, "null"] }
+        teamOf: { type: [object, "null"], properties: { id: { type: string }, business: { type: string } } }
+        submittedAt: { type: string, format: date-time }
+        status: { $ref: "#/components/schemas/VerificationStatus" }
+        tab: { type: [string, "null"], enum: [new, duplicates, verified, rejected, null] }
+        revision: { type: string, description: "Changes whenever anything the check looks at changes. Send it with a decision: if it no longer matches, the decision is refused (409)." }
+        standing: { type: string }
+        lock: { $ref: "#/components/schemas/Lock" }
+        gasSafe:
+          type: object
+          required: [number, register, onRegister, registerUrl]
+          properties:
+            number: { type: [string, "null"] }
+            register: { $ref: "#/components/schemas/Register" }
+            onRegister: { type: [object, "null"], properties: { name: { type: string }, company: { type: string }, categories: { type: string } } }
+            mismatchAtSignup: { type: boolean }
+            registerUrl: { type: string }
+        card: { type: object, required: [available], properties: { available: { type: boolean } } }
+        company:
+          type: [object, "null"]
+          properties:
+            name: { type: [string, "null"] }
+            number: { type: [string, "null"] }
+            status: { type: [string, "null"] }
+            officers: { type: [array, "null"], items: { type: object, properties: { name: { type: string }, role: { type: string }, matchesApplicant: { type: boolean } } } }
+        qualifications: { type: array, items: { type: object, properties: { code: { type: string }, title: { type: string }, confirmedAt: { type: string } } } }
+        duplicates:
+          type: array
+          items:
+            type: object
+            required: [engineerId, reason, name, business, status]
+            properties:
+              engineerId: { type: string }
+              reason: { type: string, enum: [company_number, name_and_postcode] }
+              name: { type: string }
+              business: { type: string }
+              status: { type: string }
+        decision:
+          type: [object, "null"]
+          properties:
+            outcome: { type: string, enum: [verified, rejected] }
+            at: { type: string, format: date-time }
+            byName: { type: [string, "null"] }
+            reason: { type: [string, "null"] }
+        queue:
+          type: [object, "null"]
+          properties:
+            position: { type: integer }
+            total: { type: integer }
+            previousId: { type: [string, "null"] }
+            nextId: { type: [string, "null"] }
+    EngineerRow:
+      type: object
+      required: [id, name, business, slug, town, type, channel, isStaff, status, verification, paymentsReady, plansLive, tiersLive, customers, customersOnPlans, lastOfferAt, joinedAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        business: { type: string }
+        slug: { type: string }
+        town: { type: [string, "null"] }
+        type: { type: [string, "null"] }
+        channel: { type: [string, "null"] }
+        isStaff: { type: boolean }
+        status: { $ref: "#/components/schemas/EngineerStatus" }
+        verification: { $ref: "#/components/schemas/VerificationStatus" }
+        paymentsReady: { type: boolean }
+        plansLive: { type: integer, description: Customer plans live now (ACTIVE). Sort plans. }
+        tiersLive: { type: integer, description: The engineer's own plans on sale (LIVE), as counts.tiersLive on the record. Sort tiers. }
+        customers: { type: integer, description: Everyone on their book. Sort customers. }
+        customersOnPlans: { type: integer, description: Customers with an active or paused plan, as counts.customersOnPlans on the record. Sort customersOnPlans. }
+        lastOfferAt: { type: [string, "null"], format: date-time, description: Sort lastOffer (never offered sorts last). }
+        joinedAt: { type: string, format: date-time }
+    EngineerPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties: { items: { type: array, items: { $ref: "#/components/schemas/EngineerRow" } } }
+    EngineerDetail:
+      type: object
+      description: The fields the admin app reads; the response carries a few more (see lib/admin/engineers.ts getEngineer).
+      required: [id, name, business, type, companyNumber, town, postcode, serviceArea, contact, joinedAt, channel, letterBatch, status, pause, ban, leftAt, verification, payments, counts, team, referrals, tiers, recentCustomers, payouts, lifetimePayoutsPence, milestones, offersLast7Days]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        business: { type: string }
+        type: { type: [string, "null"] }
+        companyNumber: { type: [string, "null"] }
+        town: { type: [string, "null"] }
+        postcode: { type: [string, "null"] }
+        serviceArea: { type: [string, "null"] }
+        contact: { type: object, required: [email, phone], properties: { email: { type: string, description: Masked }, phone: { type: [string, "null"], description: Masked } } }
+        joinedAt: { type: string, format: date-time }
+        channel: { type: [string, "null"] }
+        letterBatch: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/EngineerStatus" }
+        pause: { type: [object, "null"], properties: { at: { type: string }, reason: { type: [string, "null"] } } }
+        ban: { type: [object, "null"], properties: { at: { type: string }, reason: { type: [string, "null"] } } }
+        leftAt: { type: [string, "null"] }
+        verification:
+          type: object
+          required: [status, gasSafeNo, verifiedAt, rejectedAt]
+          properties:
+            status: { $ref: "#/components/schemas/VerificationStatus" }
+            gasSafeNo: { type: [string, "null"] }
+            verifiedAt: { type: [string, "null"] }
+            rejectedAt: { type: [string, "null"] }
+            rejectReason: { type: [string, "null"] }
+        payments: { type: object, required: [accountId, connected, payoutsEnabled], properties: { accountId: { type: [string, "null"] }, connected: { type: boolean }, payoutsEnabled: { type: boolean } } }
+        counts:
+          type: object
+          required: [customers, customersOnPlans, tiersLive, plans]
+          properties:
+            customers: { type: integer }
+            customersOnPlans: { type: integer }
+            tiersLive: { type: integer }
+            plans: { type: object, required: [ACTIVE, PENDING, PAUSED, CANCELLED], properties: { ACTIVE: { type: integer }, PENDING: { type: integer }, PAUSED: { type: integer }, CANCELLED: { type: integer } } }
+        team:
+          type: object
+          required: [staff]
+          properties:
+            staff: { type: array, items: { type: object, required: [id, name, email, phone, removedAt], properties: { id: { type: string }, name: { type: string }, email: { type: string }, phone: { type: [string, "null"] }, removedAt: { type: [string, "null"] } } } }
+        referrals:
+          type: object
+          required: [code, referredBy, earnedPence, paidPence, owedPence, people]
+          properties:
+            code: { type: string }
+            referredBy: { type: [object, "null"], properties: { id: { type: string }, business: { type: string } } }
+            earnedPence: { type: integer }
+            paidPence: { type: integer }
+            owedPence: { type: integer }
+            people: { type: array, items: { type: object, properties: { id: { type: string }, business: { type: string }, joinedAt: { type: string }, status: { $ref: "#/components/schemas/EngineerStatus" }, earnedPence: { type: integer }, currentRatePercent: { type: [number, "null"] } } } }
+        tiers: { type: array, items: { type: object, required: [id, name, status, priceMonthlyPence, options], properties: { id: { type: string }, name: { type: string }, status: { type: string, enum: [DRAFT, LIVE, STOPPED] }, priceMonthlyPence: { type: integer }, options: { type: array, items: { type: string } } } } }
+        recentCustomers: { type: array, items: { type: object, required: [id, name, postcode, planStatus, since], properties: { id: { type: string }, name: { type: string }, postcode: { type: [string, "null"] }, planStatus: { oneOf: [{ $ref: "#/components/schemas/PlanStatus" }, { type: "null" }] }, since: { type: string } } } }
+        payouts: { type: array, items: { type: object, required: [id, paidOn, amountPence, status], properties: { id: { type: string }, paidOn: { type: string, format: date }, amountPence: { type: integer }, status: { const: paid } } } }
+        lifetimePayoutsPence: { type: integer }
+        milestones: { type: object, properties: { signedUpAt: { type: [string, "null"] }, paymentsSetUpAt: { type: [string, "null"] }, firstPlanLiveAt: { type: [string, "null"] }, firstCustomerAt: { type: [string, "null"] }, firstPayoutAt: { type: [string, "null"] } } }
+        offersLast7Days: { type: integer }
+    CustomerRow:
+      type: object
+      required: [id, name, engineer, town, postcode, contact, plan, source, addedAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        engineer: { type: object, required: [id, business], properties: { id: { type: string }, business: { type: string } } }
+        town: { type: [string, "null"] }
+        postcode: { type: [string, "null"], description: Their first home's. Sort postcode. }
+        contact: { type: object, properties: { phone: { type: string }, email: { type: [string, "null"] } }, description: Masked }
+        plan:
+          type: [object, "null"]
+          description: "The plan that best describes them now: live first, then the newest. Sort price (its price) and since (its start, or addedAt with none)."
+          required: [id, ref, name, status, priceMonthlyPence, startedAt, payment]
+          properties:
+            id: { type: string }
+            ref: { type: string }
+            name: { type: [string, "null"] }
+            status: { $ref: "#/components/schemas/PlanStatus" }
+            priceMonthlyPence: { type: [integer, "null"] }
+            startedAt: { type: [string, "null"], format: date-time }
+            payment: { type: string, enum: [failing, paid, none] }
+        source: { type: string }
+        addedAt: { type: string, format: date-time }
+    CustomerPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties: { items: { type: array, items: { $ref: "#/components/schemas/CustomerRow" } } }
+    CustomerDetail:
+      type: object
+      description: The fields the admin app reads; see lib/admin/customers.ts getCustomer for the rest.
+      required: [id, name, contact, stripeCustomerId, addedAt, engineer, homes, plans, payments]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        contact: { type: object, properties: { phone: { type: string }, email: { type: [string, "null"] } }, description: Masked }
+        stripeCustomerId: { type: [string, "null"] }
+        addedAt: { type: string, format: date-time }
+        engineer: { type: object, properties: { id: { type: string }, business: { type: string } } }
+        homes: { type: array, items: { type: object, required: [addressLine1, addressLine2, town, postcode], properties: { addressLine1: { type: string }, addressLine2: { type: [string, "null"] }, town: { type: [string, "null"] }, postcode: { type: string } } } }
+        plans:
+          type: array
+          items:
+            type: object
+            required: [id, ref, status, tier, options, priceMonthlyPence, mandateStatus, activatedAt, cancelledAt, paymentFailedAt, cancellations]
+            properties:
+              id: { type: string }
+              ref: { type: string }
+              status: { $ref: "#/components/schemas/PlanStatus" }
+              tier: { type: [string, "null"] }
+              options: { type: array, items: { type: string } }
+              priceMonthlyPence: { type: [integer, "null"] }
+              mandateStatus: { type: [string, "null"] }
+              activatedAt: { type: [string, "null"] }
+              cancelledAt: { type: [string, "null"] }
+              paymentFailedAt: { type: [string, "null"] }
+              cancellations: { type: array, items: { type: object, properties: { reason: { type: string }, source: { type: string } } } }
+        payments: { type: array, items: { type: object, required: [id, status, amountPence, feePence, at], properties: { id: { type: string }, status: { type: string, enum: [paid, failed] }, amountPence: { type: integer }, feePence: { type: [integer, "null"] }, at: { type: string, format: date-time } } } }
+    PackRow:
+      type: object
+      required: [id, name, business, businessType, address, requestedAt, verifiedAt, postedAt, heldBecause]
+      properties:
+        id: { type: string, description: The engineer's ID }
+        name: { type: string }
+        business: { type: string }
+        businessType: { type: [string, "null"] }
+        address: { type: [string, "null"], description: The postal address as the engineer typed it, one line per line }
+        requestedAt: { type: [string, "null"] }
+        verifiedAt: { type: [string, "null"] }
+        postedAt: { type: [string, "null"] }
+        heldBecause: { type: [string, "null"], enum: [not_verified, paused, banned, null] }
+    PackPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          required: [counts]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/PackRow" } }
+            counts: { type: object, required: [to_post, held, posted], properties: { to_post: { type: integer }, held: { type: integer }, posted: { type: integer } } }
+    Week:
+      type: object
+      required: [weekStart, offers, activeEngineers, value]
+      properties: { weekStart: { type: string, format: date }, offers: { type: integer }, activeEngineers: { type: integer }, value: { type: number } }
+    Totals:
+      type: object
+      required: [count, grossPence, refundedPence, claimedPence, netPence, feePence]
+      properties: { count: { type: integer }, grossPence: { type: integer }, refundedPence: { type: integer }, claimedPence: { type: integer }, netPence: { type: integer }, feePence: { type: integer } }
+  responses:
+    Error:
+      description: See the Error schema.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+paths:
+  /me:
+    get:
+      summary: Who the token identifies, and their permissions (any admin).
+      responses:
+        "200": { description: The admin, content: { application/json: { schema: { type: object, properties: { id: { type: string }, name: { type: string }, role: { type: string }, permissions: { type: array, items: { type: string } } } } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /dashboard/core:
+    get:
+      summary: "Offers per verified engineer per week: last complete UK week, this week so far, change and a 12-week trend. Needs dashboard:read."
+      responses:
+        "200":
+          description: The core number
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lastWeek, previousWeek, weekToDate, change, trend]
+                properties:
+                  lastWeek: { $ref: "#/components/schemas/Week" }
+                  previousWeek: { $ref: "#/components/schemas/Week" }
+                  weekToDate: { $ref: "#/components/schemas/Week" }
+                  change: { type: number }
+                  trend: { type: array, items: { $ref: "#/components/schemas/Week" } }
+        default: { $ref: "#/components/responses/Error" }
+  /dashboard/stats:
+    get:
+      summary: "Sign-ups, verified (in period and all time), active engineers, live plans, customers on a plan, offers and offer-to-sign-up. Needs dashboard:read."
+      parameters: [{ $ref: "#/components/parameters/from" }, { $ref: "#/components/parameters/to" }]
+      responses:
+        "200":
+          description: Headline numbers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [signups, verified, active, plansLive, customers, offers, conversion]
+                properties:
+                  signups: { type: integer }
+                  verified: { type: object, required: [inPeriod, allTime], properties: { inPeriod: { type: integer }, allTime: { type: integer } } }
+                  active: { type: integer }
+                  plansLive: { type: integer }
+                  customers: { type: integer }
+                  offers: { type: integer }
+                  conversion: { type: object, required: [sent, converted, rate], properties: { sent: { type: integer }, converted: { type: integer }, rate: { type: number } } }
+        default: { $ref: "#/components/responses/Error" }
+  /dashboard/signups:
+    get:
+      summary: Engineer sign-ups by UK day, and how they heard about TradeSura. Needs dashboard:read.
+      parameters: [{ $ref: "#/components/parameters/from" }, { $ref: "#/components/parameters/to" }]
+      responses:
+        "200":
+          description: Sign-ups
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [byDay, channels]
+                properties:
+                  byDay: { type: array, items: { type: object, required: [date, count], properties: { date: { type: string, format: date }, count: { type: integer } } } }
+                  channels: { type: array, items: { type: object, required: [channel, count, share], properties: { channel: { type: string }, count: { type: integer }, share: { type: number } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /dashboard/funnel:
+    get:
+      summary: Engineers who signed up in the range, and how many reached each step since (with median days from the step before). Each step is grouped once, not per engineer. Needs dashboard:read.
+      parameters: [{ $ref: "#/components/parameters/from" }, { $ref: "#/components/parameters/to" }]
+      responses:
+        "200":
+          description: The five steps, in order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [label, count, ofStart, fromPrevious, medianDaysFromPrevious]
+                  properties:
+                    label: { type: string }
+                    count: { type: integer }
+                    ofStart: { type: number }
+                    fromPrevious: { type: number }
+                    medianDaysFromPrevious: { type: [number, "null"] }
+        default: { $ref: "#/components/responses/Error" }
+  /dashboard/money:
+    get:
+      summary: Collections by UK month (last six) and in the range, from paid Stripe invoices the webhook stored. Needs dashboard:read.
+      parameters: [{ $ref: "#/components/parameters/from" }, { $ref: "#/components/parameters/to" }]
+      responses:
+        "200":
+          description: Refunds and claims are 0 until those Stripe events are received.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [months, period]
+                properties:
+                  months: { type: array, items: { allOf: [{ $ref: "#/components/schemas/Totals" }, { type: object, required: [month], properties: { month: { type: string, description: YYYY-MM } } }] } }
+                  period: { $ref: "#/components/schemas/Totals" }
+        default: { $ref: "#/components/responses/Error" }
+  /dashboard/health:
+    get:
+      summary: Cancellations (rate and top reasons) and failed payments (recovered and outstanding) in the range. Needs dashboard:read.
+      parameters: [{ $ref: "#/components/parameters/from" }, { $ref: "#/components/parameters/to" }]
+      responses:
+        "200":
+          description: Cancellations and failed payments
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cancellations, failed]
+                properties:
+                  cancellations:
+                    type: object
+                    required: [count, rate, activeAtStart, topReasons]
+                    properties:
+                      count: { type: integer }
+                      rate: { type: number }
+                      activeAtStart: { type: integer }
+                      topReasons: { type: array, items: { type: object, properties: { reason: { type: string }, count: { type: integer } } } }
+                  failed:
+                    type: object
+                    required: [count, failedPence, recovered, recoveredPence, outstanding, outstandingPence, recoveryRate]
+                    properties:
+                      count: { type: integer }
+                      failedPence: { type: integer }
+                      recovered: { type: integer }
+                      recoveredPence: { type: integer }
+                      outstanding: { type: integer }
+                      outstandingPence: { type: integer }
+                      recoveryRate: { type: number }
+        default: { $ref: "#/components/responses/Error" }
+  /dashboard/waiting:
+    get:
+      summary: What's waiting on the team now. Needs dashboard:read.
+      responses:
+        "200": { description: Counts, content: { application/json: { schema: { type: object, required: [verifications, memberPacks, cancelRequests], properties: { verifications: { type: integer }, memberPacks: { type: integer }, cancelRequests: { type: integer } } } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /verifications:
+    get:
+      summary: The Gas Safe queue. Needs verification:read. No contact details (checkers see it).
+      parameters:
+        - { name: tab, in: query, schema: { type: string, enum: [new, duplicates, pending, verified, rejected, decided], default: pending }, description: "pending is everything waiting; new and duplicates split it; decided is verified and rejected, latest decision first" }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: Name, business, Gas Safe or company number }
+        - { name: sort, in: query, schema: { type: string, enum: [submitted, decided, name, business] }, description: business is the name as shown (trading name, else legal name) }
+        - { $ref: "#/components/parameters/dir" }
+        - { $ref: "#/components/parameters/page" }
+        - { $ref: "#/components/parameters/size" }
+      responses:
+        "200": { description: A page, plus counts per tab, content: { application/json: { schema: { $ref: "#/components/schemas/VerificationPage" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /verifications/{engineerId}:
+    get:
+      summary: One application (the engineer's), with register lookup, Companies House officers, duplicate signals, claim and place in the queue. Needs verification:read.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      responses:
+        "200": { description: The application, content: { application/json: { schema: { $ref: "#/components/schemas/VerificationDetail" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /verifications/{engineerId}/card:
+    get:
+      summary: The ID-card photo, fetched on the server from Vercel Blob (never any other host). Needs verification:read.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      responses:
+        "200": { description: "The image (Cache-Control: private, no-store)", content: { "image/*": {} } }
+        default: { $ref: "#/components/responses/Error" }
+  /verifications/{engineerId}/claim:
+    post:
+      summary: "Claim a waiting application while checking it (15 minutes, refreshed while open). Claims on one application are taken one at a time, so two admins can't both get it, and the start of a check is recorded once. Needs verification:decide."
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      responses:
+        "200":
+          description: claimed false with a lock means another admin holds it.
+          content: { application/json: { schema: { type: object, required: [claimed, lock], properties: { claimed: { type: boolean }, lock: { $ref: "#/components/schemas/Lock" } } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /verifications/{engineerId}/decision:
+    post:
+      summary: Approve or reject a waiting application. The engineer is told by push, text and email once the answer has gone back (each send gives up after 10 seconds). Needs verification:decide.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - { type: object, additionalProperties: false, required: [decision], properties: { decision: { const: approve }, reason: { type: string, maxLength: 500, description: A note }, revision: { type: string, description: The application's revision when it was opened } } }
+                - type: object
+                  additionalProperties: false
+                  required: [decision, reason]
+                  properties:
+                    decision: { const: reject }
+                    reason: { type: string, minLength: 3, maxLength: 500 }
+                    note: { type: string, maxLength: 500, description: "The checker's own words; kept with the reason as \"reason: note\", which is what the engineer is told" }
+                    duplicateOf: { type: string, description: The existing account it duplicates }
+                    revision: { type: string, description: The application's revision when it was opened }
+      responses:
+        "200":
+          description: nextId is the next waiting application in the same tab.
+          content: { application/json: { schema: { type: object, required: [id, outcome, decidedAt, nextId], properties: { id: { type: string }, outcome: { type: string, enum: [verified, rejected] }, decidedAt: { type: string, format: date-time }, nextId: { type: [string, "null"] } } } } }
+        "409": { description: "Already decided, another admin is checking it, or it changed since it was opened (revision)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /member-packs:
+    get:
+      summary: Founding-member packs. to_post is badge live and not paused or banned; held is waiting on one of those; posted is done, latest first. Includes postal addresses. Needs member_packs:read.
+      parameters:
+        - { name: tab, in: query, schema: { type: string, enum: [to_post, held, posted], default: to_post } }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: Name, business or address }
+        - { $ref: "#/components/parameters/page" }
+        - { $ref: "#/components/parameters/size" }
+      responses:
+        "200": { description: A page, plus counts per tab, content: { application/json: { schema: { $ref: "#/components/schemas/PackPage" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /member-packs/{engineerId}/posted:
+    post:
+      summary: Mark the engineer's pack as posted. Recorded as member_pack_shipped. Needs member_packs:mark_posted.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      responses:
+        "200": { description: Posted, content: { application/json: { schema: { type: object, required: [id, postedAt], properties: { id: { type: string }, postedAt: { type: string, format: date-time } } } } } }
+        "409": { description: "Already posted, never requested, or held (not verified, paused or banned)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /member-packs/posted:
+    post:
+      summary: Mark several packs as posted on one day (today if not given). Each goes only if it may; the rest come back with the reason. One member_pack_shipped event each. Needs member_packs:mark_posted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [engineerIds]
+              properties:
+                engineerIds: { type: array, minItems: 1, maxItems: 500, items: { type: string } }
+                postedOn: { type: string, format: date, description: Not in the future }
+      responses:
+        "200":
+          description: Which were posted, and why the others weren't
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [posted, postedAt, skipped]
+                properties:
+                  posted: { type: array, items: { type: string } }
+                  postedAt: { type: string, format: date-time }
+                  skipped: { type: array, items: { type: object, required: [id, reason], properties: { id: { type: string }, reason: { type: string } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /engineers:
+    get:
+      summary: Every engineer account (deleted ones excepted). Needs engineers:read.
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: Name, business, slug, town, postcode, email; Gas Safe, phone or company number by digits }
+        - { name: status, in: query, schema: { type: string, enum: [active, paused, banned, left] } }
+        - { name: verification, in: query, schema: { type: string, enum: [verified, pending, rejected, not_submitted] } }
+        - { name: step, in: query, schema: { type: string, enum: [signed_up, payments, plan, customer, payout] }, description: The furthest getting-started step reached }
+        - { name: town, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string, enum: [sole_trader, ltd, partnership] } }
+        - { name: channel, in: query, schema: { type: string, enum: [letter, email, engineer, online, other] } }
+        - { name: staff, in: query, schema: { type: string, enum: [owners, staff] } }
+        - { name: joinedFrom, in: query, schema: { type: string, format: date } }
+        - { name: joinedTo, in: query, schema: { type: string, format: date } }
+        - { name: sort, in: query, schema: { type: string, enum: [joined, name, business, plans, tiers, customers, customersOnPlans, lastOffer] }, description: Each orders by the field of the same meaning in EngineerRow; business by the name as shown }
+        - { $ref: "#/components/parameters/dir" }
+        - { $ref: "#/components/parameters/page" }
+        - { $ref: "#/components/parameters/size" }
+      responses:
+        "200": { description: A page, content: { application/json: { schema: { $ref: "#/components/schemas/EngineerPage" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/export:
+    get:
+      summary: Every engineer the list's filters match (same parameters, no paging or sort), newest first, as NDJSON for a CSV export. Needs engineers:read.
+      responses:
+        "200": { description: "One EngineerRow per line, then {\"end\":true,\"count\":N}", content: { application/x-ndjson: {} } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/filter-options:
+    get:
+      summary: Towns and sign-up channels in use. Needs engineers:read.
+      responses:
+        "200": { description: In use, content: { application/json: { schema: { type: object, required: [towns, channels], properties: { towns: { type: array, items: { type: string } }, channels: { type: array, items: { type: string } } } } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/{engineerId}:
+    get:
+      summary: One engineer in full (contact details masked). Needs engineers:read.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      responses:
+        "200": { description: The engineer, content: { application/json: { schema: { $ref: "#/components/schemas/EngineerDetail" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/{engineerId}/activity:
+    get:
+      summary: The engineer's own actions and anything done to them, newest first. Needs engineers:read.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }, { $ref: "#/components/parameters/page" }, { $ref: "#/components/parameters/size" }]
+      responses:
+        "200": { description: Activity, content: { application/json: { schema: { $ref: "#/components/schemas/Activity" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/{engineerId}/contact:
+    post:
+      summary: The full email and phone number, the engineer's or a staff member's on their team. Recorded every time, against this engineer, with the staff member and field. Needs pii:reveal.
+      parameters:
+        - { $ref: "#/components/parameters/engineerId" }
+        - { name: staffId, in: query, schema: { type: string }, description: One of this engineer's staff (404 if not on their team) }
+        - { name: field, in: query, schema: { type: string, enum: [email, phone] }, description: Just this one }
+      responses:
+        "200": { description: Contact, content: { application/json: { schema: { $ref: "#/components/schemas/Contact" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/{engineerId}/pause:
+    post:
+      summary: "Pause: no new offers or texts until resumed. Needs engineers:status."
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Reason" } } } }
+      responses:
+        "200": { description: "The engineer, as GET /engineers/{engineerId}", content: { application/json: { schema: { $ref: "#/components/schemas/EngineerDetail" } } } }
+        "409": { description: Already paused or banned, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/{engineerId}/resume:
+    post:
+      summary: Lift a pause. Needs engineers:status.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      requestBody: { content: { application/json: { schema: { type: object, additionalProperties: false, properties: { reason: { type: string, maxLength: 500 } } } } } }
+      responses:
+        "200": { description: The engineer, content: { application/json: { schema: { $ref: "#/components/schemas/EngineerDetail" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/{engineerId}/ban:
+    post:
+      summary: "Ban: off town pages and enquiries, and no new offers or texts. Needs engineers:ban."
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Reason" } } } }
+      responses:
+        "200": { description: The engineer, content: { application/json: { schema: { $ref: "#/components/schemas/EngineerDetail" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/{engineerId}/unban:
+    post:
+      summary: Lift a ban. Needs engineers:ban.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Reason" } } } }
+      responses:
+        "200": { description: The engineer, content: { application/json: { schema: { $ref: "#/components/schemas/EngineerDetail" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/{engineerId}/widget:
+    post:
+      summary: Switch the website widget off or back on. Needs engineers:status.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [disabled], properties: { disabled: { type: boolean }, reason: { type: string, maxLength: 500 } } } } } }
+      responses:
+        "200": { description: The engineer, content: { application/json: { schema: { $ref: "#/components/schemas/EngineerDetail" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/{engineerId}/notes:
+    get:
+      summary: Staff notes, newest first. Needs engineers:read.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      responses:
+        "200": { description: Notes, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Note" } } } } } } }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      summary: Add a note. Needs engineers:notes.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/NoteBody" } } } }
+      responses:
+        "200": { description: The note, content: { application/json: { schema: { $ref: "#/components/schemas/Note" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/{engineerId}/notes/{noteId}:
+    delete:
+      summary: Remove a note (hidden, not erased). Only its author or a super-admin (403 otherwise). Needs engineers:notes.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }, { $ref: "#/components/parameters/noteId" }]
+      responses:
+        "200": { description: Removed, content: { application/json: { schema: { $ref: "#/components/schemas/Ok" } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /customers:
+    get:
+      summary: Every homeowner on every engineer's book (contact details masked). Needs customers:read.
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: Name, email, postcode, first address line, plan reference; phone by digits }
+        - { name: engineerId, in: query, schema: { type: string } }
+        - { name: plan, in: query, schema: { type: string, enum: [active, pending, paused, cancelled, none] } }
+        - { name: payment, in: query, schema: { type: string, enum: [failing, paid, none] } }
+        - { name: cancelledFrom, in: query, schema: { type: string, format: date } }
+        - { name: cancelledTo, in: query, schema: { type: string, format: date } }
+        - { name: source, in: query, schema: { type: string, enum: [added, doorstep, web, import, contacts] } }
+        - { name: sort, in: query, schema: { type: string, enum: [added, name, since, postcode, engineer, price] }, description: Each orders by the value shown (see CustomerRow); blanks last }
+        - { $ref: "#/components/parameters/dir" }
+        - { $ref: "#/components/parameters/page" }
+        - { $ref: "#/components/parameters/size" }
+      responses:
+        "200": { description: A page, content: { application/json: { schema: { $ref: "#/components/schemas/CustomerPage" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /customers/export:
+    get:
+      summary: Every customer the list's filters match (same parameters, no paging or sort), newest first, as NDJSON for a CSV export. Needs customers:read.
+      responses:
+        "200": { description: "One CustomerRow per line, then {\"end\":true,\"count\":N}", content: { application/x-ndjson: {} } }
+        default: { $ref: "#/components/responses/Error" }
+  /customers/{customerId}:
+    get:
+      summary: One homeowner, with homes, plans (and what they agreed to), cancellations, ratings and payments from Stripe invoice events. Needs customers:read.
+      parameters: [{ $ref: "#/components/parameters/customerId" }]
+      responses:
+        "200": { description: The customer, content: { application/json: { schema: { $ref: "#/components/schemas/CustomerDetail" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /customers/{customerId}/activity:
+    get:
+      summary: Anything recorded about the customer, newest first. Needs customers:read.
+      parameters: [{ $ref: "#/components/parameters/customerId" }, { $ref: "#/components/parameters/page" }, { $ref: "#/components/parameters/size" }]
+      responses:
+        "200": { description: Activity, content: { application/json: { schema: { $ref: "#/components/schemas/Activity" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /customers/{customerId}/contact:
+    post:
+      summary: The full phone number and email. Recorded every time, with the field. Needs pii:reveal.
+      parameters:
+        - { $ref: "#/components/parameters/customerId" }
+        - { name: field, in: query, schema: { type: string, enum: [email, phone] }, description: Just this one }
+      responses:
+        "200": { description: Contact, content: { application/json: { schema: { $ref: "#/components/schemas/Contact" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /customers/{customerId}/notes:
+    get:
+      summary: Staff notes, newest first. Needs customers:read.
+      parameters: [{ $ref: "#/components/parameters/customerId" }]
+      responses:
+        "200": { description: Notes, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Note" } } } } } } }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      summary: Add a note. Needs customers:notes.
+      parameters: [{ $ref: "#/components/parameters/customerId" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/NoteBody" } } } }
+      responses:
+        "200": { description: The note, content: { application/json: { schema: { $ref: "#/components/schemas/Note" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /customers/{customerId}/notes/{noteId}:
+    delete:
+      summary: Remove a note (hidden, not erased). Only its author or a super-admin (403 otherwise). Needs customers:notes.
+      parameters: [{ $ref: "#/components/parameters/customerId" }, { $ref: "#/components/parameters/noteId" }]
+      responses:
+        "200": { description: Removed, content: { application/json: { schema: { $ref: "#/components/schemas/Ok" } } } }
+        default: { $ref: "#/components/responses/Error" }
