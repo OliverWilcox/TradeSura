@@ -54,21 +54,24 @@ function listWhere(q: CustomerListQuery): Prisma.CustomerWhereInput {
   if (q.cancelledFrom || q.cancelledTo) {
     and.push({ plans: { some: { cancelledAt: { ...(q.cancelledFrom ? { gte: q.cancelledFrom } : {}), ...(q.cancelledTo ? { lt: q.cancelledTo } : {}) } } } });
   }
-  if (q.q) {
-    const contains = { contains: likeTerm(q.q), mode: "insensitive" as const };
-    const contact = exactContactSearch(q.q);
-    and.push({
-      OR: [
-        { firstName: contains },
-        { lastName: contains },
-        { properties: { some: { OR: [{ postcode: contains }, { addressLine1: contains }] } } },
-        { plans: { some: { ref: { equals: q.q.trim().toUpperCase() } } } },
-        ...(contact.email ? [{ email: { equals: contact.email, mode: "insensitive" as const } }] : []),
-        ...(contact.phone ? [{ phone: contact.phone }] : []),
-      ],
-    });
-  }
+  if (q.q) and.push(customerSearch(q.q));
   return { AND: and };
+}
+
+/** What a search box matches: names, a home's postcode or first line, a plan reference, or a whole email or phone number. */
+export function customerSearch(term: string): Prisma.CustomerWhereInput {
+  const contains = { contains: likeTerm(term), mode: "insensitive" as const };
+  const contact = exactContactSearch(term);
+  return {
+    OR: [
+      { firstName: contains },
+      { lastName: contains },
+      { properties: { some: { OR: [{ postcode: contains }, { addressLine1: contains }] } } },
+      { plans: { some: { ref: { equals: term.trim().toUpperCase() } } } },
+      ...(contact.email ? [{ email: { equals: contact.email, mode: "insensitive" as const } }] : []),
+      ...(contact.phone ? [{ phone: contact.phone }] : []),
+    ],
+  };
 }
 
 /** The plan that best describes where a customer is now: live first, then the newest. */

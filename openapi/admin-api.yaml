@@ -416,48 +416,37 @@ components:
       description: "live: collecting, blocks deleting. ending: cancelled, running out the paid month. pending: offers not taken up (withdrawn on delete)."
       required: [live, ending, pending]
       properties: { live: { type: integer }, ending: { type: integer }, pending: { type: integer } }
-    AccountLookup:
+    EngineerAccount:
       type: object
-      required: [engineers, customers, unmatched]
+      required: [id, role, name, business, ownerId, email, phone, status, verification, joinedAt, staff, customers, plans, stripeAccount, blocked]
       properties:
-        engineers:
-          type: array
-          items:
-            type: object
-            required: [id, role, name, business, ownerId, email, phone, matched, status, verification, joinedAt, staff, customers, plans, stripeAccount, blocked]
-            properties:
-              id: { type: string }
-              role: { type: string, enum: [owner, staff] }
-              name: { type: string }
-              business: { type: string, description: The owner's business for staff }
-              ownerId: { type: [string, "null"] }
-              email: { type: string, description: Masked }
-              phone: { type: [string, "null"], description: Masked }
-              matched: { type: array, items: { type: string }, description: Which of the identifiers (normalised) this account uses }
-              status: { $ref: "#/components/schemas/EngineerStatus" }
-              verification: { $ref: "#/components/schemas/VerificationStatus" }
-              joinedAt: { type: string, format: date-time }
-              staff: { type: integer, description: Staff accounts deleted with an owner }
-              customers: { type: integer, description: Customers scrubbed with an owner }
-              plans: { $ref: "#/components/schemas/OpenPlans" }
-              stripeAccount: { type: boolean, description: Has a Stripe Connect account, left open for TradeSura to close }
-              blocked: { type: [string, "null"], description: Why it can't be deleted yet }
-        customers:
-          type: array
-          items:
-            type: object
-            required: [id, name, engineer, email, phone, matched, addedAt, plans, blocked]
-            properties:
-              id: { type: string }
-              name: { type: string }
-              engineer: { type: object, required: [id, business], properties: { id: { type: string }, business: { type: string } } }
-              email: { type: [string, "null"], description: Masked }
-              phone: { type: string, description: Masked }
-              matched: { type: array, items: { type: string } }
-              addedAt: { type: string, format: date-time }
-              plans: { $ref: "#/components/schemas/OpenPlans" }
-              blocked: { type: [string, "null"] }
-        unmatched: { type: array, items: { type: string }, description: Identifiers no account uses }
+        id: { type: string }
+        role: { type: string, enum: [owner, staff] }
+        name: { type: string }
+        business: { type: string, description: The owner's business for staff }
+        ownerId: { type: [string, "null"] }
+        email: { type: string, description: Masked }
+        phone: { type: [string, "null"], description: Masked }
+        status: { $ref: "#/components/schemas/EngineerStatus" }
+        verification: { $ref: "#/components/schemas/VerificationStatus" }
+        joinedAt: { type: string, format: date-time }
+        staff: { type: integer, description: Staff accounts deleted with an owner }
+        customers: { type: integer, description: Customers scrubbed with an owner }
+        plans: { $ref: "#/components/schemas/OpenPlans" }
+        stripeAccount: { type: boolean, description: Has a Stripe Connect account, left open for TradeSura to close }
+        blocked: { type: [string, "null"], description: Why it can't be deleted yet }
+    CustomerAccount:
+      type: object
+      required: [id, name, engineer, email, phone, addedAt, plans, blocked]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        engineer: { type: object, required: [id, business], properties: { id: { type: string }, business: { type: string } } }
+        email: { type: [string, "null"], description: Masked }
+        phone: { type: string, description: Masked }
+        addedAt: { type: string, format: date-time }
+        plans: { $ref: "#/components/schemas/OpenPlans" }
+        blocked: { type: [string, "null"] }
     DeletedAccounts:
       type: object
       required: [items]
@@ -917,21 +906,41 @@ paths:
         "200": { description: Removed, content: { application/json: { schema: { $ref: "#/components/schemas/Ok" } } } }
         default: { $ref: "#/components/responses/Error" }
 
-  /accounts/lookup:
-    post:
-      summary: Every engineer (owner or staff) and customer using these emails or UK phone numbers, with what deleting each would do. A POST so contact details stay out of URLs. Needs data:delete.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [identifiers]
-              properties:
-                identifiers: { type: array, minItems: 1, maxItems: 20, items: { type: string, minLength: 3, maxLength: 254 }, description: Emails or UK phone numbers in any common spelling; anything else is a 400 }
+  /accounts/engineers:
+    get:
+      summary: Engineer accounts (owners and staff), newest first, with what deleting each would do. Contact details masked. Needs data:delete.
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 500 }, description: "As the engineer list's search (a whole email or phone number, never a fragment); several at once separated by commas" }
+        - { name: role, in: query, schema: { type: string, enum: [owner, staff] } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/EngineerStatus" } }
+        - { name: deletable, in: query, schema: { type: string, enum: ["yes", "no"] }, description: "no: an owner with a live customer plan" }
+        - { name: joinedFrom, in: query, schema: { type: string, format: date } }
+        - { name: joinedTo, in: query, schema: { type: string, format: date } }
+        - { name: sort, in: query, schema: { type: string, enum: [joined] } }
+        - { $ref: "#/components/parameters/dir" }
+        - { $ref: "#/components/parameters/page" }
+        - { $ref: "#/components/parameters/size" }
       responses:
-        "200": { description: Matches, content: { application/json: { schema: { $ref: "#/components/schemas/AccountLookup" } } } }
+        "200":
+          description: A page
+          content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/Page" }, { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/EngineerAccount" } } } }] } } }
+        default: { $ref: "#/components/responses/Error" }
+  /accounts/customers:
+    get:
+      summary: Customers on every engineer's book, newest first, with what deleting each would do. Contact details masked. Needs data:delete.
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 500 }, description: "As the customer list's search; several at once separated by commas" }
+        - { name: deletable, in: query, schema: { type: string, enum: ["yes", "no"] }, description: "no: on a plan that hasn't ended" }
+        - { name: addedFrom, in: query, schema: { type: string, format: date } }
+        - { name: addedTo, in: query, schema: { type: string, format: date } }
+        - { name: sort, in: query, schema: { type: string, enum: [added] } }
+        - { $ref: "#/components/parameters/dir" }
+        - { $ref: "#/components/parameters/page" }
+        - { $ref: "#/components/parameters/size" }
+      responses:
+        "200":
+          description: A page
+          content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/Page" }, { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/CustomerAccount" } } } }] } } }
         default: { $ref: "#/components/responses/Error" }
   /accounts/delete:
     post:
@@ -947,11 +956,10 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [reason]
               properties:
                 engineerIds: { type: array, maxItems: 20, items: { type: string } }
                 customerIds: { type: array, maxItems: 20, items: { type: string } }
-                reason: { type: string, minLength: 3, maxLength: 500 }
+                reason: { type: string, maxLength: 500, description: Optional; kept on each event when given }
       responses:
         "200": { description: What happened to each, content: { application/json: { schema: { $ref: "#/components/schemas/DeletedAccounts" } } } }
         default: { $ref: "#/components/responses/Error" }

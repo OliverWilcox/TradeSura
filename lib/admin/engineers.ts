@@ -21,7 +21,7 @@ export type EngineerStatus = "active" | "paused" | "banned" | "left";
 
 const live = { deletedAt: null } satisfies Prisma.EngineerWhereInput;
 
-const STATUS_WHERE: Record<EngineerStatus, Prisma.EngineerWhereInput> = {
+export const STATUS_WHERE: Record<EngineerStatus, Prisma.EngineerWhereInput> = {
   active: { bannedAt: null, pausedAt: null, leftAt: null },
   paused: { bannedAt: null, pausedAt: { not: null } },
   banned: { bannedAt: { not: null } },
@@ -126,26 +126,29 @@ function listWhere(q: EngineerListQuery): Prisma.EngineerWhereInput {
   if (q.channel) and.push({ attribution: { path: ["heardVia"], equals: q.channel } });
   if (q.staff) and.push(q.staff === "staff" ? { ownerId: { not: null } } : { ownerId: null });
   if (q.joinedFrom || q.joinedTo) and.push({ createdAt: { ...(q.joinedFrom ? { gte: q.joinedFrom } : {}), ...(q.joinedTo ? { lt: q.joinedTo } : {}) } });
-  if (q.q) {
-    const contains = { contains: likeTerm(q.q), mode: "insensitive" as const };
-    const digits = q.q.replace(/\D/g, "");
-    const contact = exactContactSearch(q.q);
-    and.push({
-      OR: [
-        { firstName: contains },
-        { lastName: contains },
-        { tradingName: contains },
-        { legalName: contains },
-        { slug: contains },
-        { town: contains },
-        { postcode: contains },
-        ...(digits.length >= 3 ? [{ gasSafeNo: { contains: digits } }, { companyNumber: { contains: digits } }] : []),
-        ...(contact.email ? [{ email: { equals: contact.email, mode: "insensitive" as const } }] : []),
-        ...(contact.phone ? [{ phone: contact.phone }] : []),
-      ],
-    });
-  }
+  if (q.q) and.push(engineerSearch(q.q));
   return { AND: and };
+}
+
+/** What a search box matches: names, business, town, postcode, Gas Safe and company numbers, or a whole email or phone number. */
+export function engineerSearch(term: string): Prisma.EngineerWhereInput {
+  const contains = { contains: likeTerm(term), mode: "insensitive" as const };
+  const digits = term.replace(/\D/g, "");
+  const contact = exactContactSearch(term);
+  return {
+    OR: [
+      { firstName: contains },
+      { lastName: contains },
+      { tradingName: contains },
+      { legalName: contains },
+      { slug: contains },
+      { town: contains },
+      { postcode: contains },
+      ...(digits.length >= 3 ? [{ gasSafeNo: { contains: digits } }, { companyNumber: { contains: digits } }] : []),
+      ...(contact.email ? [{ email: { equals: contact.email, mode: "insensitive" as const } }] : []),
+      ...(contact.phone ? [{ phone: contact.phone }] : []),
+    ],
+  };
 }
 
 /** Sorts Prisma can order by itself. */

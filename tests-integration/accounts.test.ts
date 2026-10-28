@@ -1,33 +1,34 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
-import { POST as lookup } from "@/app/api/admin/v1/accounts/lookup/route";
+import { GET as engineerAccounts } from "@/app/api/admin/v1/accounts/engineers/route";
+import { GET as customerAccounts } from "@/app/api/admin/v1/accounts/customers/route";
 import { POST as remove } from "@/app/api/admin/v1/accounts/delete/route";
 import { call, CHECKER, resetDb, withPermissions } from "./helpers";
 import { makeCustomer, makeEngineer, makePlan } from "./factories";
 
 beforeEach(resetDb);
 
-const find = (identifiers: string[]) => call(lookup, { body: { identifiers } });
+const engineers = (query: Record<string, string> = {}) => call(engineerAccounts, { query });
+const customers = (query: Record<string, string> = {}) => call(customerAccounts, { query });
+const ids = (res: { body: { items: { id: string }[] } }) => res.body.items.map((i) => i.id);
 const del = (body: { engineerIds?: string[]; customerIds?: string[]; reason?: string }) => call(remove, { body: { reason: "Tester asked to sign up again", ...body } });
 
-describe("looking up accounts", () => {
-  it("finds owners, staff and customers by email in any case or phone in any spelling", async () => {
+describe("the engineer accounts list", () => {
+  it("lists owners and staff newest first, with what deleting each would do, contact details masked", async () => {
     const owner = await makeEngineer({ email: "tester@example.test", phone: "+447700900111", stripeAccountId: "acct_1" });
-    const staff = await makeEngineer({ ownerId: owner.id, email: "tester+staff@example.test", phone: null, gasSafeNo: null });
-    const elsewhere = await makeEngineer();
-    const asCustomer = await makeCustomer(elsewhere.id, { phone: "+447700900111", email: null });
+    const staff = await makeEngineer({ ownerId: owner.id, phone: null, gasSafeNo: null });
     const onBook = await makeCustomer(owner.id);
     await makePlan(owner.id, onBook.id);
     await makePlan(owner.id, onBook.id, { status: "PENDING", activatedAt: null });
-    await makeEngineer();
+    await makeEngineer({ deletedAt: new Date() });
 
-    const res = await find(["TESTER@example.test", "07700 900111", "tester+staff@example.test", "nobody@example.test"]);
+    const res = await engineers();
     expect(res.status).toBe(200);
-    expect(res.body.engineers.map((e: { id: string }) => e.id)).toEqual([owner.id, staff.id]);
-    expect(res.body.engineers[0]).toMatchObject({
+    expect(res.body).toMatchObject({ page: 1, size: 25, total: 2 });
+    expect(ids(res)).toEqual([staff.id, owner.id]);
+    expect(res.body.items[1]).toMatchObject({
       role: "owner",
       business: owner.tradingName,
-      matched: ["tester@example.test", "+447700900111"],
       email: "t•••@example.test",
       phone: "•••• 111",
       staff: 1,
@@ -36,27 +37,56 @@ describe("looking up accounts", () => {
       stripeAccount: true,
       blocked: expect.stringContaining("live customer plan"),
     });
-    expect(res.body.engineers[1]).toMatchObject({ role: "staff", business: owner.tradingName, ownerId: owner.id, blocked: null });
-    expect(res.body.customers).toEqual([expect.objectContaining({ id: asCustomer.id, engineer: { id: elsewhere.id, business: elsewhere.tradingName }, matched: ["+447700900111"], blocked: null })]);
-    expect(res.body.unmatched).toEqual(["nobody@example.test"]);
+    expect(res.body.items[0]).toMatchObject({ role: "staff", business: owner.tradingName, ownerId: owner.id, blocked: null });
+    expect(JSON.stringify(res.body)).not.toContain("tester@example.test");
   });
 
-  it("leaves out accounts that were already deleted", async () => {
-    await makeEngineer({ phone: "+447700900222", deletedAt: new Date() });
-    const res = await find(["07700900222"]);
-    expect(res.body).toEqual({ engineers: [], customers: [], unmatched: ["+447700900222"] });
+  it("searches names, or a whole email or mobile, several at once separated by commas", async () => {
+    const a = await makeEngineer({ email: "tester@example.test", tradingName: "Hartley Boilers" });
+    const b = await makeEngineer({ phone: "+447700900222" });
+    await makeEngineer();
+    expect(ids(await engineers({ q: "hartley" }))).toEqual([a.id]);
+    expect(ids(await engineers({ q: "TESTER@example.test, 07700 900222", dir: "asc" }))).toEqual([a.id, b.id]);
+    expect(ids(await engineers({ q: "tester@" }))).toEqual([]);
+    expect(ids(await engineers({ q: "900222" }))).toEqual([]);
   });
 
-  it("refuses anything that isn't an email address or UK phone number", async () => {
-    const res = await find(["tester@example.test", "not a number"]);
-    expect(res.status).toBe(400);
-    expect(res.body.error.message).toContain("not a number");
-    expect((await find([])).status).toBe(400);
+  it("filters by role, status and whether they can be deleted now", async () => {
+    const busy = await makeEngineer();
+    await makePlan(busy.id, (await makeCustomer(busy.id)).id);
+    const ending = await makeEngineer();
+    await makePlan(ending.id, (await makeCustomer(ending.id)).id, { cancelRequestedAt: new Date() });
+    const staff = await makeEngineer({ ownerId: busy.id, gasSafeNo: null });
+    const paused = await makeEngineer({ pausedAt: new Date() });
+    expect(ids(await engineers({ deletable: "no" }))).toEqual([busy.id]);
+    expect(ids(await engineers({ deletable: "yes", dir: "asc" }))).toEqual([ending.id, staff.id, paused.id]);
+    expect(ids(await engineers({ role: "staff" }))).toEqual([staff.id]);
+    expect(ids(await engineers({ status: "paused" }))).toEqual([paused.id]);
+    expect((await engineers({ deletable: "maybe" })).status).toBe(400);
   });
 
   it("needs data:delete", async () => {
-    expect((await call(lookup, { as: CHECKER, body: { identifiers: ["a@example.test"] } })).status).toBe(403);
-    expect((await call(lookup, { as: withPermissions("engineers:read", "customers:read", "pii:reveal"), body: { identifiers: ["a@example.test"] } })).status).toBe(403);
+    expect((await call(engineerAccounts, { as: CHECKER })).status).toBe(403);
+    expect((await call(engineerAccounts, { as: withPermissions("engineers:read", "pii:reveal") })).status).toBe(403);
+  });
+});
+
+describe("the customer accounts list", () => {
+  it("lists customers with their engineer and what stops them being deleted, and searches and filters", async () => {
+    const e = await makeEngineer();
+    const free = await makeCustomer(e.id, { phone: "+447700900333", email: "jane@example.test" });
+    const ending = await makeCustomer(e.id);
+    await makePlan(e.id, ending.id, { cancelRequestedAt: new Date() });
+    await makeCustomer((await makeEngineer({ deletedAt: new Date() })).id);
+
+    const res = await customers({ dir: "asc" });
+    expect(res.body.total).toBe(2);
+    expect(res.body.items[0]).toMatchObject({ id: free.id, engineer: { id: e.id, business: e.tradingName }, phone: "•••• 333", email: "j•••@example.test", blocked: null });
+    expect(res.body.items[1]).toMatchObject({ id: ending.id, plans: { live: 0, ending: 1, pending: 0 }, blocked: expect.stringContaining("hasn't ended") });
+    expect(ids(await customers({ q: "07700 900333, nobody@example.test" }))).toEqual([free.id]);
+    expect(ids(await customers({ deletable: "yes" }))).toEqual([free.id]);
+    expect(ids(await customers({ deletable: "no" }))).toEqual([ending.id]);
+    expect((await call(customerAccounts, { as: CHECKER })).status).toBe(403);
   });
 });
 
@@ -153,11 +183,15 @@ describe("deleting accounts", () => {
     expect(res.body.items.map((i: { outcome: string }) => i.outcome)).toEqual(["gone", "gone", "gone"]);
   });
 
-  it("needs a reason, something to delete, and data:delete", async () => {
+  it("takes an optional reason; needs something to delete, and data:delete", async () => {
     const e = await makeEngineer();
-    expect((await call(remove, { body: { engineerIds: [e.id] } })).status).toBe(400);
+    expect((await call(remove, { body: { engineerIds: [e.id], reason: "x".repeat(501) } })).status).toBe(400);
+    expect((await call(remove, { body: { engineerIds: [e.id] } })).body.items[0].outcome).toBe("deleted");
+    const event = await prisma.event.findFirstOrThrow({ where: { name: "admin_account_deleted" } });
+    expect(event.meta).not.toHaveProperty("reason");
+    const other = await makeEngineer();
     expect((await del({})).status).toBe(400);
-    expect((await call(remove, { as: CHECKER, body: { engineerIds: [e.id], reason: "Tester asked" } })).status).toBe(403);
-    expect((await prisma.engineer.findUniqueOrThrow({ where: { id: e.id } })).deletedAt).toBeNull();
+    expect((await call(remove, { as: CHECKER, body: { engineerIds: [other.id] } })).status).toBe(403);
+    expect((await prisma.engineer.findUniqueOrThrow({ where: { id: other.id } })).deletedAt).toBeNull();
   });
 });
