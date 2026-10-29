@@ -64,9 +64,16 @@ export function gasSafeStatus(
   e: Pick<
     EngineerVerification,
     "gasSafeNo" | "gasSafeVerifiedAt" | "gasSafeReviewRequestedAt" | "gasSafeRejectedAt"
-  >,
+  > & {
+    /** Review 4 — pass it to have a missing ID photo named (null = none). */
+    gasSafeCardUrl?: string | null;
+  },
 ): { tone: StandingTone; text: string } {
   if (e.gasSafeVerifiedAt) return { tone: "quiet", text: "Gas Safe verified — account active." };
+  // The check can't finish without the card, so say so rather than "in progress".
+  if (e.gasSafeCardUrl === null && !e.gasSafeRejectedAt) {
+    return { tone: "amber", text: "Photo needed · Add your Gas Safe ID so we can finish your check →" };
+  }
   if (e.gasSafeRejectedAt) {
     return {
       tone: "amber",

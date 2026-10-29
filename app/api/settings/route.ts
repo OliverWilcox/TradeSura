@@ -27,8 +27,16 @@ export async function GET() {
   const engineer = await prisma.engineer.findUnique({ where: { id: engineerId } });
   if (!engineer) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
+  // Review 4 — a company that left its trading name blank trades under its
+  // Companies House name, which is stored as the trading name. Show the box
+  // blank (that name is its placeholder) rather than "filled in".
+  const tradesUnderLegalName =
+    engineer.businessType !== "sole_trader" &&
+    Boolean(engineer.legalName) &&
+    engineer.tradingName?.trim() === engineer.legalName?.trim();
+
   return NextResponse.json({
-    tradingName: engineer.tradingName ?? "",
+    tradingName: tradesUnderLegalName ? "" : (engineer.tradingName ?? ""),
     logoUrl: engineer.logoUrl ?? "",
     slug: engineer.slug,
     firstName: engineer.firstName,
@@ -48,6 +56,7 @@ export async function GET() {
     // Part 13's two independent status lines.
     standing: standingCopy(engineer),
     gasSafe: gasSafeStatus(engineer),
+    gasSafePhotoNeeded: !engineer.gasSafeVerifiedAt && !engineer.gasSafeCardUrl,
     payments: paymentsStatus(engineer),
   });
 }

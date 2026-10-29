@@ -124,6 +124,13 @@ describe("gasSafeStatus", () => {
     expect(s.tone).toBe("amber");
     expect(s.text).toContain("check in progress");
   });
+  it("names the missing ID photo instead of 'in progress' (Review 4)", () => {
+    const s = gasSafeStatus({
+      gasSafeNo: "1", gasSafeVerifiedAt: null, gasSafeReviewRequestedAt: new Date(), gasSafeRejectedAt: null, gasSafeCardUrl: null,
+    });
+    expect(s.tone).toBe("amber");
+    expect(s.text).toContain("Photo needed");
+  });
 });
 
 describe("paymentsStatus", () => {

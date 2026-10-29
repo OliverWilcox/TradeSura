@@ -11,7 +11,7 @@ import { IdCardPicker, type IdCardState } from "@/components/id-card-picker";
 // build notes, step 2 item 10) — reached from the dashboard strip "Add your
 // Gas Safe ID to go live". The badge stays pending until a reviewer has it.
 export default function AddId() {
-  const { refreshMe } = useAuth();
+  const { me, refreshMe } = useAuth();
   const [card, setCard] = useState<IdCardState>({ phase: "empty" });
 
   return (
@@ -21,9 +21,17 @@ export default function AddId() {
       </SafeAreaView>
       <ScrollView className="flex-1" contentContainerClassName="px-4 pb-10 pt-5">
         <Text className="text-[15px] leading-[21px] text-white/85">
-          We check every member&apos;s registration, usually within 24 hours. Your Verified badge
-          goes live once we have a photo of your card.
+          We check every member&apos;s registration, usually within 24 hours. Your Verified Member
+          badge goes live once we have a photo of your card.
         </Text>
+        {/* Review 4 — the number they already gave at sign-up, so they can
+            check the card matches it. */}
+        {me?.gasSafeNo && (
+          <View className="mt-4 flex-row items-center justify-between rounded-2xl border border-line-strong px-4 py-3">
+            <Text className="text-[14px] text-muted">Gas Safe registration number</Text>
+            <Text className="tabular-nums text-[16px] font-semibold text-ink">{me.gasSafeNo}</Text>
+          </View>
+        )}
         <View className="mt-4">
           <IdCardPicker
             value={card}
@@ -38,7 +46,7 @@ export default function AddId() {
           />
         </View>
         <Text className="mt-2.5 text-[12.5px] leading-[17px] text-white/60">
-          Needed for your Verified badge. Only used to verify you — never shown to customers.
+          Needed for your Verified Member badge. Only used to verify you — never shown to customers.
         </Text>
         {card.phase === "added" && (
           <Pressable

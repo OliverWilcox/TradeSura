@@ -36,6 +36,7 @@ type Settings = {
   postcode: string | null;
   standing: { state: string } & Status;
   gasSafe: Status;
+  gasSafePhotoNeeded?: boolean;
   payments: Status;
 };
 
@@ -163,8 +164,10 @@ function OwnerAccount() {
           logoUrl: settings.logoUrl,
         }),
       });
-      // A blank name on a company comes back as its Companies House name.
-      const name = saved.tradingName ?? tradingName;
+      // A blank name on a company comes back as its Companies House name;
+      // keep the box blank then (Review 4), with that name as its placeholder.
+      const returned = saved.tradingName ?? tradingName;
+      const name = legalFallback && returned.trim() === legalFallback ? "" : returned;
       setTradingName(name);
       setSettings({ ...settings, tradingName: name, firstName: firstName.trim(), lastName: lastName.trim() });
       setSavedSettings(true);
@@ -337,7 +340,14 @@ function OwnerAccount() {
                   <TextBone width="60%" size={14} />
                 </Skeleton>
               )}
-              {settings && <StatusLine status={settings.gasSafe} />}
+              {settings &&
+                (settings.gasSafePhotoNeeded ? (
+                  <Pressable onPress={() => router.push("/add-id")} accessibilityRole="button">
+                    <StatusLine status={settings.gasSafe} />
+                  </Pressable>
+                ) : (
+                  <StatusLine status={settings.gasSafe} />
+                ))}
               {settings &&
                 (settings.payments.tone === "quiet" ? (
                   <StatusLine status={settings.payments} />
