@@ -99,15 +99,29 @@ export function Lockup({ height = 26 }: { height?: number }) {
   );
 }
 
-// Part 2.4: initials are first + last name ("MW"), not the email's first
-// letter. The credential tick (Part 2.1 — the one green thing that isn't a
-// £ figure) sits on the avatar once Gas Safe verification has been granted.
-export function initials(me: { firstName?: string | null; lastName?: string | null; tradingName?: string | null; email?: string } | null | undefined): string {
+// Review 4 — one rule for every avatar: the business's initials (or its logo
+// once added), never digits or "Ltd". "302 MD LTD" → "MD", "MW Heating" →
+// "MW", "Smith Heating" → "SH". Falls back to the person, then the email.
+// The credential tick (Part 2.1) sits on the avatar once Gas Safe is granted.
+const COMPANY_WORDS = new Set(["LTD", "LIMITED", "PLC", "LLP", "CO", "&", "AND", "THE"]);
+
+export function businessInitials(name: string | null | undefined): string {
+  const words = (name ?? "")
+    .split(/\s+/)
+    .map((w) => w.replace(/[^A-Za-z]/g, ""))
+    .filter((w) => w && !COMPANY_WORDS.has(w.toUpperCase()));
+  if (!words.length) return "";
+  // An existing abbreviation ("MW", "JB") is the business's own initials.
+  if (/^[A-Z]{2}$/.test(words[0]!)) return words[0]!;
+  return words.slice(0, 2).map((w) => w[0]!).join("").toUpperCase();
+}
+
+export function initials(me: { firstName?: string | null; lastName?: string | null; tradingName?: string | null; legalName?: string | null; email?: string } | null | undefined): string {
   if (!me) return "";
+  const business = businessInitials(me.tradingName) || businessInitials(me.legalName);
+  if (business) return business;
   const fromName = `${me.firstName?.[0] ?? ""}${me.lastName?.[0] ?? ""}`;
   if (fromName) return fromName.toUpperCase();
-  const words = (me.tradingName ?? "").split(/\s+/).filter(Boolean);
-  if (words.length) return words.slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   return (me.email?.[0] ?? "").toUpperCase();
 }
 

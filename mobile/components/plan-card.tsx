@@ -1,5 +1,5 @@
 import { View, Text, Pressable } from "react-native";
-import { Button } from "@/components/ui";
+import { Button, businessInitials } from "@/components/ui";
 import { Icon } from "@/components/icon";
 
 export type PlanLine = string | { title: string; note?: string | null };
@@ -35,12 +35,7 @@ export function CustomerPlanCard({
   showJoin?: boolean;
   cancelChip?: boolean;
 }) {
-  const initials = (engineer?.tradingName ?? "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]!.toUpperCase())
-    .join("");
+  const initials = businessInitials(engineer?.tradingName);
   return (
     <View>
       <View className="rounded-2xl bg-white p-4">
