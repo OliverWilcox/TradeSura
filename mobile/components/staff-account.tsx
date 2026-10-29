@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Avatar, Card, Pill, RowLine, Button, Chevron } from "@/components/ui";
+import { WHATSAPP_SUPPORT_URL } from "@/lib/support";
 
 // Build Review 2, section 8 — a staff engineer's Account: who they are, which
 // business they sign up for, their own Gas Safe check, support and sign out.
@@ -43,11 +44,7 @@ export function StaffAccount() {
           <RowLine left="Email" right={me?.email ?? "—"} />
         </Card>
         <Card>
-          <Pressable
-            onPress={() =>
-              Linking.openURL("https://wa.me/447700900000?text=" + encodeURIComponent("TradeSura support: "))
-            }
-          >
+          <Pressable onPress={() => Linking.openURL(WHATSAPP_SUPPORT_URL)}>
             <RowLine left="WhatsApp support" right={<Chevron />} />
           </Pressable>
           <Pressable onPress={() => WebBrowser.openBrowserAsync(apiUrl("/terms")).catch(() => {})}>

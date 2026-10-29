@@ -11,6 +11,7 @@ import { AppHeader, Avatar, Card, Pill, RowLine, Button, Chevron, OpeningStripe 
 import { Skeleton, TextBone, RowBone, LoadingImage } from "@/components/skeleton";
 import { StaffAccount } from "@/components/staff-account";
 import { Toggle } from "@/components/toggle";
+import { WHATSAPP_SUPPORT_URL } from "@/lib/support";
 
 type MoreData = {
   totalPence: number;
@@ -584,13 +585,7 @@ function OwnerAccount() {
           <Pressable onPress={() => router.push("/referral")}>
             <RowLine left="Invite an engineer · earn 25% of our fee" right={<Chevron />} />
           </Pressable>
-          <Pressable
-            onPress={() =>
-              Linking.openURL(
-                "https://wa.me/447700900000?text=" + encodeURIComponent("TradeSura support: "),
-              )
-            }
-          >
+          <Pressable onPress={() => Linking.openURL(WHATSAPP_SUPPORT_URL)}>
             <RowLine left="WhatsApp support" right={<Chevron />} />
           </Pressable>
           <Pressable
