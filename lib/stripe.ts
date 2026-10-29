@@ -520,6 +520,7 @@ export function stripeSetupState(
     stripeDetailsSubmitted: boolean;
     stripeChargesEnabled: boolean;
     stripePayoutsEnabled: boolean;
+    stripeOnboardingStartedAt?: Date | null;
   },
   // Live status when we just fetched it; without it, anything unfinished
   // after submission reads as needs_more (the safe prompt).
@@ -527,7 +528,9 @@ export function stripeSetupState(
 ): StripeSetupState {
   if (!e.stripeAccountId) return "none";
   if (e.stripeChargesEnabled && e.stripePayoutsEnabled) return "ready";
-  if (!e.stripeDetailsSubmitted) return "half";
+  // Opening Get paid makes the account ahead of time; until the engineer
+  // has actually gone to Stripe, nothing is "half set up".
+  if (!e.stripeDetailsSubmitted) return e.stripeOnboardingStartedAt === null ? "none" : "half";
   if (live && !live.requirementsDue) return "checking";
   return "needs_more";
 }

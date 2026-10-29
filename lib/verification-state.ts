@@ -89,9 +89,13 @@ export function gasSafeStatus(
 export function paymentsStatus(
   e: Pick<EngineerVerification, "stripeAccountId" | "stripeDetailsSubmitted" | "stripeChargesEnabled"> & {
     stripePayoutsEnabled: boolean;
+    stripeOnboardingStartedAt?: Date | null;
   },
 ): { tone: StandingTone; text: string } {
   if (!e.stripeAccountId) return { tone: "amber", text: "Set up payments →" };
+  if (!e.stripeDetailsSubmitted && e.stripeOnboardingStartedAt === null) {
+    return { tone: "amber", text: "Set up payments →" };
+  }
   if (e.stripeChargesEnabled && e.stripePayoutsEnabled) {
     return { tone: "quiet", text: "Payments — active, paid every Friday." };
   }

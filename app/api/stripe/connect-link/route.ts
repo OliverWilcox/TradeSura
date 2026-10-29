@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getEngineerId } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { createAccountOnboardingLink, stripeConfigured } from "@/lib/stripe";
 import { appUrl } from "@/lib/app-url";
 import { ensureConnectAccount } from "@/lib/stripe-onboarding";
@@ -21,6 +22,10 @@ export async function GET() {
   }
 
   const accountId = await ensureConnectAccount(engineerId);
+  await prisma.engineer.updateMany({
+    where: { id: engineerId, stripeOnboardingStartedAt: null },
+    data: { stripeOnboardingStartedAt: new Date() },
+  });
 
   // Stripe's Account Links API only accepts http(s) return/refresh URLs, not
   // a bare custom scheme — connect-return bounces on to tradesura://onboarding.

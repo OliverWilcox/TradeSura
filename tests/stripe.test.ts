@@ -56,6 +56,10 @@ describe("payment setup state", () => {
   const live = { detailsSubmitted: true, chargesEnabled: false, payoutsEnabled: false, requirementsDue: false };
   it("none without an account", () => expect(stripeSetupState({ ...e, stripeAccountId: null })).toBe("none"));
   it("half when Stripe was left before the end", () => expect(stripeSetupState(e)).toBe("half"));
+  it("none when Get paid made the account but Stripe was never opened", () =>
+    expect(stripeSetupState({ ...e, stripeOnboardingStartedAt: null })).toBe("none"));
+  it("half once the engineer has been to Stripe", () =>
+    expect(stripeSetupState({ ...e, stripeOnboardingStartedAt: new Date() })).toBe("half"));
   it("needs_more when submitted but something is due", () =>
     expect(stripeSetupState({ ...e, stripeDetailsSubmitted: true }, { ...live, requirementsDue: true })).toBe(
       "needs_more",

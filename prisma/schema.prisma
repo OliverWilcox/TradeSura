@@ -106,6 +106,9 @@ model Engineer {
   stripeDetailsSubmitted     Boolean           @default(false)
   stripeChargesEnabled       Boolean           @default(false)
   stripePayoutsEnabled       Boolean           @default(false)
+  // First tap on "Continue to Stripe". The account itself is made earlier,
+  // when Get paid opens, so it alone doesn't mean the engineer has started.
+  stripeOnboardingStartedAt  DateTime?
   // Set when Stripe asks a finished account for more information (Stripe's
   // point 7); the engineer is alerted once per request, cleared when done.
   stripeMoreInfoAlertedAt    DateTime?

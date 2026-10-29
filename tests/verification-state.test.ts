@@ -147,6 +147,10 @@ describe("paymentsStatus", () => {
     const s = paymentsStatus({ ...acct, stripeDetailsSubmitted: false, stripeChargesEnabled: false, stripePayoutsEnabled: false });
     expect(s.text).toBe("Payments half set up — finish with Stripe →");
   });
+  it("still 'set up payments' when Get paid made the account but Stripe was never opened", () => {
+    const s = paymentsStatus({ ...acct, stripeDetailsSubmitted: false, stripeChargesEnabled: false, stripePayoutsEnabled: false, stripeOnboardingStartedAt: null });
+    expect(s.text).toBe("Set up payments →");
+  });
   it("stays independent of the Gas Safe axis entirely", () => {
     // A Stripe-only fact — no Gas Safe fields even exist on the input type.
     expect(
