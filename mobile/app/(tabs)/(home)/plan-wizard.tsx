@@ -151,6 +151,8 @@ export default function PlanWizard() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  // Where each category card sits, so a quick start can jump to its pack.
+  const catY = useRef<Record<string, number>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -295,6 +297,20 @@ export default function PlanWizard() {
       if (!p) return;
       setSelected(new Set([...core, ...p.clauseCodes.filter((c) => byCode.has(c))]));
       if (!isEdit && !savedOnce) setName(p.name);
+      // Review 4 — a quick start that switches on a folded pack (Landlord)
+      // opens it and scrolls to it, so the engineer sees what went on.
+      const packs = [...new Set(p.clauseCodes.map((c) => byCode.get(c)?.category).filter(Boolean))].filter(
+        (c): c is string => !OPEN_CATEGORIES.has(c as string),
+      );
+      if (packs.length) {
+        setOpenCats(new Set([...openCats, ...packs]));
+        if (packs.includes(LANDLORD_CATEGORY)) {
+          setTimeout(() => {
+            const y = catY.current[LANDLORD_CATEGORY];
+            if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+          }, 250);
+        }
+      }
     }
     markDirty();
   }
@@ -500,6 +516,18 @@ export default function PlanWizard() {
     ]);
   }
 
+  async function saveAndExit() {
+    setError(null);
+    if (dirty || !savedOnce) {
+      setBusy(true);
+      const ok = await saveDraft();
+      setBusy(false);
+      if (!ok) return;
+    }
+    if (fromSetup) router.navigate("/onboarding");
+    else router.replace("/(tabs)/(home)/plans");
+  }
+
   async function saveSingleStep() {
     if (!currentId) return;
     if (step === 3 && !(await checkName(name))) return;
@@ -570,7 +598,8 @@ export default function PlanWizard() {
 
   const stepTitle = isEdit
     ? (["", "What's included", "Price", "Name"][singleStep] ?? "Edit")
-    : `New plan · Step ${step} of 4`;
+    : // Short, so "Draft saved" and "Save & exit" fit beside it.
+      `Step ${step} of 4`;
 
   if (loading) {
     return (
@@ -616,17 +645,20 @@ export default function PlanWizard() {
               <Text className="text-[12.5px] text-ink">Draft saved</Text>
             </View>
           )}
+          {/* Review 4 — one way out besides "<": save the draft and leave
+              (back to setup when the builder was opened from there). */}
+          {!isEdit && (
+            <Pressable
+              onPress={saveAndExit}
+              disabled={busy}
+              hitSlop={8}
+              accessibilityRole="button"
+              className="px-1.5 py-1.5"
+            >
+              <Text className="text-[14px] font-semibold text-flame">Save & exit</Text>
+            </Pressable>
+          )}
         </View>
-        {fromSetup && !isEdit && (
-          <Pressable
-            onPress={() => router.navigate("/onboarding")}
-            className="flex-row items-center gap-1.5 px-4 pb-2"
-            accessibilityRole="button"
-          >
-            <Icon name="back" size={14} color="#5FA3F0" weight="semibold" />
-            <Text className="text-[14px] font-semibold text-flame">Back to setup</Text>
-          </Pressable>
-        )}
         {!isEdit && (
           <View className="mx-4 mb-1 h-1.5 overflow-hidden rounded-full bg-line-strong">
             <View className="h-full rounded-full bg-flame" style={{ width: `${(step / 4) * 100}%` }} />
@@ -679,6 +711,32 @@ export default function PlanWizard() {
               </ScrollView>
             )}
 
+            {/* Review 4 — the Landlord pack sits at the bottom; say what the
+                quick start switched on there, up top. */}
+            {(() => {
+              const p = presets.find((x) => x.name === starter);
+              const on = p
+                ? templates.filter((t) => t.category === LANDLORD_CATEGORY && selected.has(t.code))
+                : [];
+              if (!on.length) return null;
+              return (
+                <Pressable
+                  onPress={() => {
+                    const y = catY.current[LANDLORD_CATEGORY];
+                    if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+                  }}
+                  className="rounded-2xl border border-flame/40 bg-flame-tint px-4 py-3"
+                  accessibilityRole="button"
+                >
+                  <Text className="text-[13.5px] leading-[19px] text-ink">
+                    <Text className="font-semibold">Landlord pack on: </Text>
+                    {on.map((t) => t.title).join(" · ")}
+                  </Text>
+                  <Text className="mt-1 text-[13px] font-semibold text-flame">See it below</Text>
+                </Pressable>
+              );
+            })()}
+
             {grouped.map(({ category, items }) => {
               const onCount = items.filter((t) => selected.has(t.code)).length;
               const open = openCats.has(category);
@@ -686,6 +744,7 @@ export default function PlanWizard() {
                 return (
                   <Pressable
                     key={category}
+                    onLayout={(e) => (catY.current[category] = e.nativeEvent.layout.y)}
                     onPress={() => setOpenCats(new Set([...openCats, category]))}
                     className="flex-row items-center justify-between rounded-2xl border border-line-strong px-4 py-3.5"
                   >
@@ -697,7 +756,11 @@ export default function PlanWizard() {
                 );
               }
               return (
-                <View key={category} className="rounded-2xl border border-line-strong px-4 pb-1 pt-3.5">
+                <View
+                  key={category}
+                  onLayout={(e) => (catY.current[category] = e.nativeEvent.layout.y)}
+                  className="rounded-2xl border border-line-strong px-4 pb-1 pt-3.5"
+                >
                   <Pressable
                     onPress={() => {
                       const next = new Set(openCats);
@@ -876,6 +939,7 @@ export default function PlanWizard() {
                 name={name}
                 priceMonthlyPence={price}
                 lines={customerLines}
+                verified={verified}
               />
             </Card>
 
@@ -1002,8 +1066,10 @@ export default function PlanWizard() {
               <CustomerPlanCard
                 name={name || "Your plan"}
                 priceMonthlyPence={price}
-                lines={customerLines.slice(0, 3).map((l) => (typeof l === "string" ? l : l.title))}
+                lines={customerLines.slice(0, 3)}
                 engineer={{ tradingName, verified }}
+                cancelChip
+                badgeHint
                 showJoin
               />
             </Card>
@@ -1024,6 +1090,7 @@ export default function PlanWizard() {
               lines={customerLines}
               engineer={{ tradingName, verified }}
               cancelChip
+              badgeHint
               showJoin
             />
 
@@ -1112,7 +1179,8 @@ export default function PlanWizard() {
           <View className="flex-row items-center gap-3 px-4 py-3">
             <View className="flex-1">
               <Text className="text-[19px] font-bold text-ink">{selected.size} selected</Text>
-              {selected.size > RECOMMENDED_MAX ? (
+              {/* Not on our own quick starts — the warning is for plans they build up. */}
+              {selected.size > RECOMMENDED_MAX && !presets.some((p) => p.name === starter) ? (
                 <Text className="text-[12.5px] text-warn">Over 6 options can be a lot for customers to take in</Text>
               ) : selected.size < RECOMMENDED_MIN && !serviceRuleError ? (
                 <Text className="text-[12.5px] text-muted">Most plans have 3 to 6 options</Text>
