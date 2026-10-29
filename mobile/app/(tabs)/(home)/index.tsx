@@ -11,7 +11,7 @@ import { Icon, type IconName } from "@/components/icon";
 import { RingProgress, payoutWeekProgress } from "@/components/ring-progress";
 import { RingMark } from "@/components/ring-mark";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
-import { setupSteps } from "@/lib/setup-steps";
+import { goLiveSteps, growSteps } from "@/lib/setup-steps";
 import { offerLock } from "@/lib/offer-lock";
 import { StripeStatusCard } from "@/components/stripe-status-card";
 import { GrowthCard } from "@/components/growth-card";
@@ -241,20 +241,31 @@ function OwnerHome() {
     };
   }, [awake]);
 
-  // Part 5 — the dashboard's "Finish setup — N of 7 done" card reads the
-  // same steps as the Getting started hub (lib/setup-steps.ts).
-  const steps = setupSteps(me);
-  const setupDone = steps.filter((x) => x.done).length;
-  const nextStep = steps.find((x) => !x.done && !x.pending && !x.locked) ?? steps.find((x) => !x.done);
-  const waitingLine = nextStep ? `Next: ${nextStep.title.toLowerCase()}.` : "";
-  const essentialsDone = steps.filter((x) => x.key === "plan" || x.key === "paid").every((x) => x.done);
+  // Review 4 — Home matches the hub: "N of 3 to go live" counts only the Go
+  // live steps; once live, the Grow steps sit on their own card.
+  const live = goLiveSteps(me);
+  const liveDone = live.filter((x) => x.done).length;
+  const isLive = liveDone === live.length;
+  const nextLive = live.find((x) => !x.done && !x.waiting) ?? live.find((x) => !x.done);
+  const grow = growSteps(me);
+  const growDone = grow.filter((x) => x.done).length;
+  const nextGrow = grow.find((x) => !x.done && !x.locked);
 
   // Review 3 — the offer lock: a live plan, the Gas Safe check AND payments.
   const lock = offerLock(me ? { ...me, hasPlan: awake } : me);
   const offerBlockedBy = lock?.reason ?? null;
   // Review 4 — "Send your first offer" only once the engineer is live (offers
   // unlocked), so it never sits under "Finish setup" as a second Get started.
-  const firstOffer = Boolean(data && essentialsDone && !lock && data.count === 0);
+  const firstOffer = Boolean(data && isLive && !lock && data.count === 0);
+  // Review 4 — one Gas Safe strip, not two: "Photo needed" until the ID
+  // photo is in, then "Check in progress".
+  const photoNeeded = Boolean(me && me.hasGasSafeCard === false && !verified);
+  const standing =
+    data?.standing.state === "CHECK_PENDING"
+      ? photoNeeded
+        ? null
+        : { ...data.standing, text: "Gas Safe check in progress · usually within 24 hours" }
+      : (data?.standing ?? null);
 
   return (
     <View className="flex-1 bg-panel">
@@ -275,9 +286,9 @@ function OwnerHome() {
             : "Once you're set up, offering a plan takes under 90 seconds."}
         </Text>
 
-        {data && <StandingStrip standing={data.standing} />}
+        {standing && <StandingStrip standing={standing} />}
         {/* Signed up with "I'll add my ID photo later" (30 Sept build notes). */}
-        {me && me.hasGasSafeCard === false && !verified && (
+        {photoNeeded && (
           <Pressable
             onPress={() => router.push("/add-id")}
             className="flex-row items-center gap-2.5 rounded-xl border border-warn-tint bg-warn-tint px-3.5 py-3"
@@ -370,17 +381,17 @@ function OwnerHome() {
               </Card>
             )}
 
-            {/* The setup card stays until all seven steps are done (Review 3:
-                "Skip setup" → Home, where "Finish setup" brings them back). */}
-            {me?.role !== "staff" && setupDone < steps.length && (
+            {/* Review 4 — until the three Go live steps are done (skipped or
+                not), Home says how far off going live is and what's next. */}
+            {me?.role !== "staff" && !isLive && (
               <Card>
-                {/* Review 4 — one "Get started" card: once the first offer
-                    card shows, this one is just the remaining steps. */}
-                <Micro>{firstOffer ? "Next steps" : "Get started"}</Micro>
+                <Micro>Get started</Micro>
                 <Text className="mt-1.5 text-[19px] font-bold text-ink">
-                  Finish setup — {setupDone} of {steps.length} done
+                  {liveDone} of {live.length} to go live
                 </Text>
-                <Text className="mt-1 text-[14px] text-muted">{waitingLine}</Text>
+                <Text className="mt-1 text-[14px] text-muted">
+                  {nextLive ? (nextLive.waiting ? `Waiting: ${nextLive.next}.` : `Next: ${nextLive.next}.`) : ""}
+                </Text>
                 <Button className="mt-4" onPress={() => router.push("/onboarding")}>
                   Continue setup
                 </Button>
@@ -398,6 +409,22 @@ function OwnerHome() {
                   onPress={() => (offerBlockedBy ? setOfferGate(offerBlockedBy) : router.push("/offer"))}
                 >
                   Offer a plan
+                </Button>
+              </Card>
+            )}
+
+            {/* After going live, the optional Grow steps live here. */}
+            {me?.role !== "staff" && isLive && growDone < grow.length && (
+              <Card>
+                <Micro>Keep growing</Micro>
+                <Text className="mt-1.5 text-[19px] font-bold text-ink">
+                  {growDone} of {grow.length} done
+                </Text>
+                <Text className="mt-1 text-[14px] text-muted">
+                  {nextGrow ? `Next: ${nextGrow.next}.` : "Any time — they're optional."}
+                </Text>
+                <Button variant="ghost" className="mt-4" onPress={() => router.push("/onboarding")}>
+                  See what&apos;s next
                 </Button>
               </Card>
             )}

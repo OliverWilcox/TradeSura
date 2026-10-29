@@ -3,58 +3,158 @@ import { View, Text, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
-import { setupSteps, type SetupStep } from "@/lib/setup-steps";
-import { Icon } from "@/components/icon";
+import { goLiveSteps, growSteps, packStatus, type SetupStep, type StepTone } from "@/lib/setup-steps";
+import { Button } from "@/components/ui";
+import { Icon, type IconName } from "@/components/icon";
 import { RingMarkProgress } from "@/components/ring-mark";
 import { StripeBadge } from "@/components/stripe-badge";
-import { StripeStatusCard } from "@/components/stripe-status-card";
 
-// 2026 Build Guide TARGET_getting_started_hub — seven numbered steps, a
-// progress ring, and the Gas Safe check status. Steps can be done in any
-// order; the first unfinished one is highlighted with its button inline.
-// State is derived from /api/me (lib/setup-steps.ts), never stored.
+// Matt's Getting Started layout (Review 4, 28 Oct). GO LIVE: the three steps
+// needed to take customers, counted by the ring. GROW: any time, optional.
+// The member pack is a status card. Once the three are done the hub becomes
+// the "You're live" screen. State comes from /api/me (lib/setup-steps.ts).
 
-function StepRow({ n, step, current }: { n: number; step: SetupStep; current: boolean }) {
+const PILL: Record<StepTone, { box: string; text: string }> = {
+  done: { box: "bg-ok/15", text: "text-ok" },
+  amber: { box: "bg-warn-tint", text: "text-warn" },
+  grey: { box: "bg-white/10", text: "text-muted" },
+  red: { box: "bg-danger-tint", text: "text-danger" },
+};
+
+function StatusPill({ tone, label }: { tone: StepTone; label: string }) {
+  return (
+    <View className={`mt-1.5 self-start rounded-md px-2 py-0.5 ${PILL[tone].box}`}>
+      <Text className={`text-[12px] font-semibold ${PILL[tone].text}`}>{label}</Text>
+    </View>
+  );
+}
+
+// Looks like a button; the whole row is the tap target (no nested buttons).
+function SmallButton({ label, primary }: { label: string; primary?: boolean }) {
+  return (
+    <View className={`rounded-xl px-3.5 py-2 ${primary ? "bg-white" : "border border-line-strong"}`}>
+      <Text className={`text-[13.5px] font-bold ${primary ? "text-on-light" : "text-ink"}`}>{label}</Text>
+    </View>
+  );
+}
+
+function GoLiveRow({ n, step, current }: { n: number; step: SetupStep; current: boolean }) {
+  const open = () => router.push(step.href);
   return (
     <Pressable
-      onPress={() => router.push(step.href)}
-      disabled={step.locked}
+      onPress={open}
+      disabled={step.done || step.waiting}
       accessibilityRole="button"
-      accessibilityState={{ disabled: Boolean(step.locked) }}
-      accessibilityLabel={`Step ${n}: ${step.title}${step.done ? ", done" : step.pending ? ", in review" : step.locked ? ", locked" : ""}`}
-      className={`flex-row items-center gap-3.5 rounded-2xl border px-3.5 py-3.5 ${current && !step.locked ? "border-[1.5px] border-flame" : "border-line-strong"} ${step.locked ? "opacity-60" : ""}`}
+      accessibilityLabel={`${step.title}: ${step.status}`}
+      className={`flex-row items-center gap-3.5 rounded-2xl border px-3.5 py-3.5 ${current ? "border-[1.5px] border-flame" : "border-line-strong"}`}
     >
-      <View className="h-12 w-12 items-center justify-center rounded-full border border-line-strong bg-paper">
-        <Text className="text-[20px] font-semibold text-ink">{n}</Text>
-      </View>
-      <View className="flex-1">
-        <Text className="text-[17px] font-semibold text-ink">{step.title}</Text>
-        <Text className={`mt-0.5 text-[13.5px] ${step.pending ? "text-warn" : "text-muted"}`}>
-          {step.sub}
-          {step.money && <Text className="font-semibold text-ok">{step.money}</Text>}
-        </Text>
-      </View>
-      {step.locked ? (
-        <Icon name="lock" size={17} color="#c9d6e6" weight="semibold" />
-      ) : step.pending ? (
-        <View className="h-10 w-10 items-center justify-center rounded-full border border-warn/50 bg-warn-tint">
-          <Icon name="clock" size={18} color="#F5B544" />
-        </View>
-      ) : step.done ? (
+      {step.done ? (
         <View className="h-10 w-10 items-center justify-center rounded-full bg-ok">
           <Icon name="check" size={18} color="#0f2140" weight="bold" />
         </View>
-      ) : current ? (
-        <View className="flex-row items-center gap-1.5">
-          <View className="rounded-xl bg-white px-3 py-2">
-            <Text className="text-[13.5px] font-bold text-on-light">{step.cta}</Text>
-          </View>
-          <Icon name="chevron" size={15} color="#c9d6e6" weight="semibold" />
-        </View>
       ) : (
-        <Icon name="chevron" size={15} color="#c9d6e6" weight="semibold" />
+        <View className="h-10 w-10 items-center justify-center rounded-full border border-line-strong">
+          <Text className="text-[17px] font-semibold text-ink">{n}</Text>
+        </View>
+      )}
+      <View className="flex-1">
+        <Text className="text-[16.5px] font-semibold text-ink">{step.title}</Text>
+        <Text className="mt-0.5 text-[13px] text-muted">
+          {step.sub}
+          {step.money && <Text className="font-semibold text-ok">{step.money}</Text>}
+        </Text>
+        <StatusPill tone={step.tone} label={step.status} />
+      </View>
+      {!step.done && !step.waiting && step.cta && <SmallButton label={step.cta} primary={current} />}
+    </Pressable>
+  );
+}
+
+const GROW_ICON: Record<string, IconName> = {
+  profile: "search",
+  website: "code",
+  customers: "customers",
+  invite: "share",
+};
+
+function GrowRow({ step }: { step: SetupStep }) {
+  const open = () => router.push(step.href);
+  return (
+    <Pressable
+      onPress={open}
+      disabled={step.locked}
+      accessibilityRole="button"
+      accessibilityLabel={`${step.title}: ${step.locked ? "opens once your first plan is live" : step.status}`}
+      className={`flex-row items-center gap-3 rounded-2xl border border-line-strong px-3.5 py-3 ${step.locked ? "opacity-60" : ""}`}
+    >
+      <View className="h-9 w-9 items-center justify-center rounded-lg bg-white/5">
+        <Icon name={GROW_ICON[step.key] ?? "chevron"} size={17} color="#5fa3f0" />
+      </View>
+      <View className="flex-1">
+        <Text className="text-[15.5px] font-semibold text-ink">{step.title}</Text>
+        {step.key === "invite" && !step.done ? (
+          <Text className="mt-0.5 text-[13px] font-semibold text-ok">{step.sub}</Text>
+        ) : step.locked ? (
+          <Text className="mt-0.5 text-[13px] text-muted">{step.sub}</Text>
+        ) : (
+          <StatusPill tone={step.tone} label={step.status} />
+        )}
+      </View>
+      {step.locked ? (
+        <Icon name="lock" size={16} color="#c9d6e6" weight="semibold" />
+      ) : (
+        step.cta && <SmallButton label={step.cta} />
       )}
     </Pressable>
+  );
+}
+
+const PACK_ITEMS = ["Van stickers", "Window sticker", "Quick-start booklet", "Leaflets", "QR labels"];
+
+function MemberPackCard() {
+  const { me } = useAuth();
+  const pack = packStatus(me);
+  const address = me?.packAddress?.replace(/\s*\n\s*/g, ", ");
+  return (
+    <View className="gap-2 rounded-2xl border border-dashed border-line-strong px-3.5 py-3.5">
+      <View className="flex-row items-center gap-3">
+        <View className="h-9 w-9 items-center justify-center rounded-lg bg-white/5">
+          <Icon name="mail" size={17} color="#5fa3f0" />
+        </View>
+        <View className="flex-1">
+          <Text className="text-[15.5px] font-semibold text-ink">Your member pack</Text>
+          <Text className="mt-0.5 text-[13px] text-muted">{pack.line}</Text>
+        </View>
+      </View>
+      <View className="flex-row flex-wrap gap-1.5">
+        {PACK_ITEMS.map((item) => (
+          <View key={item} className="w-[58px] items-center justify-center rounded-md border border-line-strong bg-white/5 px-1 py-2">
+            <Text className="text-center text-[9.5px] leading-[12px] text-muted">{item}</Text>
+          </View>
+        ))}
+      </View>
+      <Text className="text-[13px] text-muted">
+        {address ? `To: ${address} · ` : ""}
+        <Text className="font-semibold text-flame" onPress={() => router.push("/member-pack")}>
+          {address ? "Change" : "Add address"}
+        </Text>
+      </Text>
+      <StatusPill tone={pack.tone} label={pack.status} />
+    </View>
+  );
+}
+
+function Footer() {
+  return (
+    <>
+      {/* Part 5 — "How TradeSura works", never gated. */}
+      <Pressable onPress={() => router.push("/how-it-works")} className="items-center py-1">
+        <Text className="text-[15px] font-semibold text-flame">How TradeSura works</Text>
+      </Pressable>
+      <View className="items-center">
+        <StripeBadge height={22} />
+      </View>
+    </>
   );
 }
 
@@ -69,113 +169,123 @@ export default function Onboarding() {
     }, [refreshMe]),
   );
 
-  const steps = setupSteps(me);
-  const done = steps.filter((s) => s.done).length;
-  const currentIdx = steps.findIndex((s) => !s.done && !s.locked && !s.pending);
-  const verified = Boolean(me?.gasSafeVerifiedAt);
-  const rejected = Boolean(me?.gasSafeRejectedAt) && !verified;
-  // Review 4 — no ID photo yet: the check can't finish, so the strip asks for
-  // the photo (as on Home) instead of saying the check is in progress.
-  const needsPhoto = me?.hasGasSafeCard === false && !verified;
-  const inReview = Boolean(me?.gasSafeReviewRequestedAt) && !verified && !rejected && !needsPhoto;
+  const live = goLiveSteps(me);
+  const grow = growSteps(me);
+  const done = live.filter((s) => s.done).length;
+  const currentIdx = live.findIndex((s) => !s.done && !s.waiting);
+  const isLive = done === live.length;
 
-  // Back = the way in: Home's "Finish setup" card, or straight after sign-up
-  // (no history), where it does what "Skip setup for now" does.
-  function leave() {
-    if (router.canGoBack()) return router.back();
+  // "Skip for now" / "Go to dashboard": Home, and setup exits stop pulling
+  // back here (lib/setup-exit.ts reads the same skipped flag).
+  function toDashboard() {
     skipStripe();
     router.replace("/");
   }
 
+  if (isLive) {
+    const keepGrowing = grow.filter((s) => !s.done);
+    return (
+      <View className="flex-1 bg-bg">
+        <SafeAreaView edges={["top"]} className="flex-1">
+          <ScrollView contentContainerClassName="gap-3 px-4 pb-10 pt-8">
+            <View className="items-center">
+              <View className="items-center justify-center" style={{ width: 130, height: 130 }}>
+                <RingMarkProgress size={130} progress={1} />
+                <View className="absolute">
+                  <Icon name="check" size={40} color="#ffffff" weight="bold" />
+                </View>
+              </View>
+              <Text className="mt-5 text-center text-[30px] font-extrabold leading-[36px] text-ink">
+                {me?.firstName ? `You're live, ${me.firstName}!` : "You're live!"}
+              </Text>
+              <Text className="mt-2 text-center text-[15px] text-muted">
+                Your Verified Member badge is on, payments are switched on
+                {me?.firstPlan ? ` and ${me.firstPlan.name} is ready to sell.` : "."}
+              </Text>
+            </View>
+            <Button className="mt-3" onPress={() => router.push("/offer")}>
+              {(me?.activePlans ?? 0) > 0 ? "Offer a plan" : "Offer your first plan"}
+            </Button>
+            <Button variant="ghost" onPress={toDashboard}>
+              Go to dashboard
+            </Button>
+
+            {keepGrowing.length > 0 && (
+              <View className="mt-3 flex-row items-center justify-between">
+                <Text className="text-[12.5px] font-bold uppercase tracking-[0.12em] text-flame">Keep growing</Text>
+                <Text className="text-[12.5px] text-muted">Any time</Text>
+              </View>
+            )}
+            {keepGrowing.map((s) => (
+              <GrowRow key={s.key} step={s} />
+            ))}
+            <MemberPackCard />
+            <Footer />
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+    );
+  }
+
+  const next = live[currentIdx];
   return (
     <View className="flex-1 bg-bg">
       <SafeAreaView edges={["top"]} className="flex-1">
-        <ScrollView contentContainerClassName="gap-3 px-4 pb-8 pt-4">
-          <Pressable
-            onPress={leave}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            className="-ml-1 h-8 w-8 items-center justify-center"
-          >
-            <Icon name="back" size={22} weight="semibold" />
-          </Pressable>
+        <ScrollView contentContainerClassName="gap-3 px-4 pb-10 pt-3">
+          {/* One "Skip to dashboard" at the top, as on the design. */}
+          <View className="flex-row justify-end">
+            <Pressable
+              onPress={toDashboard}
+              accessibilityRole="button"
+              className="rounded-full border border-line-strong px-3.5 py-1.5"
+            >
+              <Text className="text-[13.5px] font-semibold text-flame">Skip to dashboard</Text>
+            </Pressable>
+          </View>
+
           <View className="flex-row items-center justify-between gap-3">
-            {/* One line on a 6.1" phone, as on the target. */}
-            <Text className="flex-1 text-[30px] font-extrabold leading-[36px] text-ink" numberOfLines={1} adjustsFontSizeToFit>
-              Getting started
-            </Text>
-            <View className="items-center justify-center" style={{ width: 80, height: 80 }}>
-              <RingMarkProgress size={80} progress={done / steps.length} />
-              <Text className="absolute text-[12.5px] font-semibold text-ink">
-                {done} of {steps.length}
+            <View className="flex-1">
+              <Text className="text-[30px] font-extrabold leading-[36px] text-ink" numberOfLines={1} adjustsFontSizeToFit>
+                Getting started
+              </Text>
+              <Text className="mt-1 text-[21px] font-bold text-ink">
+                {me?.firstName ? `Welcome, ${me.firstName}` : "Welcome"}
               </Text>
             </View>
-          </View>
-
-          <View>
-            <Text className="text-[26px] font-bold text-ink">
-              {me?.firstName ? `Welcome, ${me.firstName}` : "Welcome"}
-            </Text>
-            <Text className="mt-1 text-[15px] text-muted">
-              A few quick steps and you&apos;re earning. About 10 minutes in total.
-            </Text>
-          </View>
-
-          {needsPhoto && (
-            <Pressable
-              onPress={() => router.push("/add-id")}
-              accessibilityRole="button"
-              className="flex-row items-center justify-center gap-2 rounded-xl border border-warn/50 bg-warn-tint px-3 py-2.5"
-            >
-              <Icon name="camera" size={17} color="#F5B544" />
-              <Text className="text-[14px] font-semibold text-warn">Add your Gas Safe ID photo</Text>
-              <Icon name="chevron" size={13} color="#F5B544" weight="semibold" />
-            </Pressable>
-          )}
-          {inReview && (
-            <View className="flex-row items-center justify-center gap-2 rounded-xl border border-warn/50 bg-warn-tint px-3 py-2.5">
-              <Icon name="clock" size={17} color="#F5B544" />
-              <Text className="text-[14px] text-warn">Gas Safe check in progress · usually within 24 hours</Text>
+            <View className="items-center justify-center" style={{ width: 88, height: 88 }}>
+              <RingMarkProgress size={88} progress={done / live.length} />
+              <View className="absolute items-center">
+                <Text className="text-[17px] font-extrabold text-ink">
+                  {done} of {live.length}
+                </Text>
+                <Text className="text-[10px] text-muted">to go live</Text>
+              </View>
             </View>
-          )}
-          {rejected && (
-            <Pressable
-              onPress={() => router.push("/more")}
-              className="flex-row items-center justify-center gap-2 rounded-xl border border-danger/50 bg-danger-tint px-3 py-2.5"
-            >
-              <Icon name="warning" size={16} color="#ff6b6b" />
-              <Text className="text-[14px] text-danger">Your Gas Safe check needs attention — tap to see why</Text>
-            </Pressable>
-          )}
+          </View>
+          <Text className="text-[15px] text-muted">Three steps and you can take customers. About 5 minutes.</Text>
 
-          <StripeStatusCard state={me?.stripeState} />
-
-          {steps.map((s, i) => (
-            <StepRow key={s.key} n={i + 1} step={s} current={i === currentIdx} />
+          <View className="mt-2 flex-row items-center justify-between">
+            <Text className="text-[12.5px] font-bold uppercase tracking-[0.12em] text-flame">Go live</Text>
+            <Text className="text-[12.5px] text-muted">Needed to take customers</Text>
+          </View>
+          {live.map((s, i) => (
+            <GoLiveRow key={s.key} n={i + 1} step={s} current={next?.key === s.key} />
           ))}
 
-          {/* Part 5 — "How TradeSura works", never gated. */}
-          <Pressable onPress={() => router.push("/how-it-works")} className="items-center py-1">
-            <Text className="text-[15px] font-semibold text-flame">How TradeSura works</Text>
-          </Pressable>
+          <Button variant="ghost" className="mt-1" onPress={toDashboard}>
+            Skip for now · go to dashboard
+          </Button>
+          <Text className="-mt-1 text-center text-[13px] text-muted">You can finish these any time from Home.</Text>
 
-          {/* The white outline badge, as on the welcome screen. */}
-          <View className="items-center">
-            <StripeBadge caption="Paid out every Friday" height={22} />
+          <View className="mt-3 flex-row items-center justify-between">
+            <Text className="text-[12.5px] font-bold uppercase tracking-[0.12em] text-flame">Grow</Text>
+            <Text className="text-[12.5px] text-muted">Any time · optional</Text>
           </View>
-
-          <Pressable
-            onPress={() => {
-              skipStripe();
-              router.replace("/");
-            }}
-            className="items-center py-3"
-          >
-            <Text className="text-[15px] text-muted">
-              {done === steps.length ? "Go to my dashboard" : "Skip setup for now"}
-            </Text>
-          </Pressable>
+          {grow.map((s) => (
+            <GrowRow key={s.key} step={s} />
+          ))}
+          <MemberPackCard />
+          <Footer />
         </ScrollView>
       </SafeAreaView>
     </View>

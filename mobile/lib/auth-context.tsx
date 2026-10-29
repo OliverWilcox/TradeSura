@@ -57,6 +57,8 @@ export type Me = {
   customerCount: number;
   activePlans: number;
   packRequestedAt: string | null;
+  packAddress?: string | null;
+  packShippedAt?: string | null;
   profilePublishedAt: string | null;
   websiteConnectedAt: string | null;
   inviteSharedAt: string | null;

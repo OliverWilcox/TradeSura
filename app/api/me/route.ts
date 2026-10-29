@@ -110,6 +110,8 @@ export async function GET() {
     customerCount,
     activePlans,
     packRequestedAt: engineer.packRequestedAt,
+    packAddress: engineer.packAddress,
+    packShippedAt: engineer.packShippedAt,
     gasSafeRejectedAt: engineer.gasSafeRejectedAt,
     profilePublishedAt: engineer.profilePublishedAt,
     websiteConnectedAt: engineer.websiteConnectedAt,
