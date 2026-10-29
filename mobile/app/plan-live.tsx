@@ -94,6 +94,13 @@ export default function PlanLive() {
       setTimeout(() => setCopied(false), 2000);
     }
   }
+  // Review 4 — never a trap: ✕ at the top and the main button both leave to
+  // the hub during setup, otherwise to My plans.
+  function leave() {
+    if (setup) router.navigate("/onboarding");
+    else router.replace("/(tabs)/(home)/plans");
+  }
+
   async function whatsapp() {
     const wa = `whatsapp://send?text=${encodeURIComponent(shareText)}`;
     if (await Linking.canOpenURL(wa).catch(() => false)) return Linking.openURL(wa);
@@ -103,8 +110,19 @@ export default function PlanLive() {
   return (
     <View className="flex-1 bg-bg">
       <SafeAreaView edges={["top", "bottom"]} className="flex-1">
-        <ScrollView contentContainerClassName="px-4 pb-6">
-          <View className="items-center pb-4 pt-6">
+        <View className="flex-row justify-end px-4 pt-1">
+          <Pressable
+            onPress={leave}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={setup ? "Close and go back to setup" : "Close and go back to my plans"}
+            className="h-9 w-9 items-center justify-center rounded-full border border-line-strong"
+          >
+            <Icon name="close" size={16} weight="semibold" />
+          </Pressable>
+        </View>
+        <ScrollView contentContainerClassName="px-4 pb-12">
+          <View className="items-center pb-4 pt-2">
             <Confetti width={width - 32} height={200} reduceMotion={reduceMotion} />
             <RingMark size={150} />
           </View>
@@ -201,35 +219,27 @@ export default function PlanLive() {
           </View>
 
           <View className="mt-4 gap-2.5">
+            {/* Review 4 — the main button is the way back. */}
+            <Button onPress={leave}>{setup ? "Back to setup" : "Back to my plans"}</Button>
             {lock ? (
               <>
-                {/* Review 4 — the next setup step, never the Account page. */}
-                {lock.needsPayments ? (
-                  <Button onPress={() => router.push("/get-paid")}>Next: get paid</Button>
-                ) : setup ? (
-                  <Button onPress={() => router.navigate("/onboarding")}>Back to setup</Button>
-                ) : (
-                  <Button onPress={() => router.push(lock.href)}>{lock.cta}</Button>
+                {lock.needsPayments && (
+                  <Button variant="ghost" onPress={() => router.push("/get-paid")}>
+                    Next: get paid
+                  </Button>
                 )}
                 <Button variant="ghost" onPress={() => router.push("/demo")}>
                   Try it in demo mode
                 </Button>
               </>
             ) : (
-              <Button onPress={() => router.replace("/offer")}>Offer it to a customer now</Button>
+              <Button variant="ghost" onPress={() => router.replace("/offer")}>
+                Offer it to a customer now
+              </Button>
             )}
-            <Button variant="ghost" onPress={() => router.replace("/plan-wizard")}>
-              Add another plan
-            </Button>
-            {/* Review 4 — during setup the way out is the hub, not My plans. */}
-            {!(setup && lock && !lock.needsPayments) && (
-              <Pressable
-                onPress={() => (setup ? router.navigate("/onboarding") : router.replace("/(tabs)/(home)/plans"))}
-                className="items-center py-3"
-              >
-                <Text className="text-[15px] font-semibold text-flame">{setup ? "Back to setup" : "Back to My plans"}</Text>
-              </Pressable>
-            )}
+            <Pressable onPress={() => router.replace("/plan-wizard")} className="items-center py-3">
+              <Text className="text-[15px] font-semibold text-flame">Add another plan</Text>
+            </Pressable>
           </View>
         </ScrollView>
       </SafeAreaView>
