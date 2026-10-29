@@ -1,13 +1,19 @@
-// Review 4 — the Verified Member badge on the customer's plan pages, as a
-// blue status chip (green is money only). Only ever rendered for an
-// engineer whose Gas Safe check is done (gasSafeVerifiedAt).
+import Image from "next/image";
+
+// Review 4 — the Verified Member badge on the customer's plan pages: the
+// supplied badge artwork (public/brand, from mobile/assets/brand — never
+// redrawn) beside a blue status chip (green is money only). Only ever
+// rendered for an engineer whose Gas Safe check is done (gasSafeVerifiedAt).
 export function VerifiedMemberBadge() {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-flame/40 bg-flame-tint px-2 py-0.5 text-[11px] font-semibold text-flame">
-      <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="11" fill="currentColor" />
-        <path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-flame/40 bg-flame-tint py-0.5 pl-0.5 pr-2 text-[11px] font-semibold text-flame">
+      <Image
+        src="/brand/verified-member-badge.png"
+        alt="TradeSura Verified Member badge"
+        width={20}
+        height={20}
+        unoptimized
+      />
       Verified Member · Gas Safe verified
     </span>
   );
