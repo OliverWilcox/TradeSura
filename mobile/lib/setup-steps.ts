@@ -11,6 +11,8 @@ export type SetupStep = {
   /** £ figure in the subtitle, shown in money-green. */
   money?: string;
   done: boolean;
+  /** Waiting on someone else (Stripe's review): amber, not a tick. */
+  pending?: boolean;
   /** Not available yet: shown with a padlock and can't be opened. */
   locked?: boolean;
   /** Label for the inline button on the current step. */
@@ -27,6 +29,12 @@ export function setupSteps(me: Me | null): SetupStep[] {
   const price = plan?.priceMonthlyPence ?? 1200;
   // Our 20% rounds down to the penny, in the engineer's favour.
   const yearlyKeep = Math.round(((price - Math.floor(price * FEE_RATE)) * 12) / 100);
+  const paidReady = Boolean(me?.stripeConnected && me?.stripePayoutsEnabled);
+  // Stripe has everything and is checking it (not "needs one more thing").
+  const paidReview =
+    !paidReady &&
+    (me?.stripeState === "checking" ||
+      Boolean(me?.stripeConnected && me?.stripeState !== "needs_more" && me?.stripeState !== "half"));
   return [
     {
       key: "plan",
@@ -56,8 +64,15 @@ export function setupSteps(me: Me | null): SetupStep[] {
     {
       key: "paid",
       title: "Get paid",
-      sub: me?.stripeConnected ? "Paid out every Friday" : "About 3 minutes with Stripe",
-      done: Boolean(me?.stripeConnected),
+      // Review 4 — no green tick while Stripe is still checking: amber
+      // "In review" until payouts are switched on.
+      sub: paidReady
+        ? "Paid out every Friday"
+        : paidReview
+          ? "In review · Stripe usually confirms within 24 hours"
+          : "About 3 minutes with Stripe",
+      done: paidReady,
+      pending: paidReview,
       cta: me?.stripeDetailsSubmitted || me?.stripeState === "half" || me?.stripeState === "needs_more" ? "Finish payments" : "Set up payments",
       href: "/get-paid",
     },
@@ -107,4 +122,13 @@ export function setupSteps(me: Me | null): SetupStep[] {
       href: "/member-pack",
     },
   ];
+}
+
+// Review 4 — "until setup is finished or skipped, every exit returns to the
+// Getting Started hub". Finished = the go-live steps: a live plan, payments
+// and the Gas Safe ID in. Skipped = "Skip setup for now" on the hub. Staff
+// never see the hub.
+export function inSetup(me: Me | null, skipped: boolean): boolean {
+  if (!me || me.role === "staff" || skipped) return false;
+  return !(me.hasPlan && me.stripeConnected && (me.hasGasSafeCard || me.gasSafeVerifiedAt));
 }

@@ -21,7 +21,7 @@ function StepRow({ n, step, current }: { n: number; step: SetupStep; current: bo
       disabled={step.locked}
       accessibilityRole="button"
       accessibilityState={{ disabled: Boolean(step.locked) }}
-      accessibilityLabel={`Step ${n}: ${step.title}${step.done ? ", done" : step.locked ? ", locked" : ""}`}
+      accessibilityLabel={`Step ${n}: ${step.title}${step.done ? ", done" : step.pending ? ", in review" : step.locked ? ", locked" : ""}`}
       className={`flex-row items-center gap-3.5 rounded-2xl border px-3.5 py-3.5 ${current && !step.locked ? "border-[1.5px] border-flame" : "border-line-strong"} ${step.locked ? "opacity-60" : ""}`}
     >
       <View className="h-12 w-12 items-center justify-center rounded-full border border-line-strong bg-paper">
@@ -29,13 +29,17 @@ function StepRow({ n, step, current }: { n: number; step: SetupStep; current: bo
       </View>
       <View className="flex-1">
         <Text className="text-[17px] font-semibold text-ink">{step.title}</Text>
-        <Text className="mt-0.5 text-[13.5px] text-muted">
+        <Text className={`mt-0.5 text-[13.5px] ${step.pending ? "text-warn" : "text-muted"}`}>
           {step.sub}
           {step.money && <Text className="font-semibold text-ok">{step.money}</Text>}
         </Text>
       </View>
       {step.locked ? (
         <Icon name="lock" size={17} color="#c9d6e6" weight="semibold" />
+      ) : step.pending ? (
+        <View className="h-10 w-10 items-center justify-center rounded-full border border-warn/50 bg-warn-tint">
+          <Icon name="clock" size={18} color="#F5B544" />
+        </View>
       ) : step.done ? (
         <View className="h-10 w-10 items-center justify-center rounded-full bg-ok">
           <Icon name="check" size={18} color="#0f2140" weight="bold" />
@@ -67,16 +71,19 @@ export default function Onboarding() {
 
   const steps = setupSteps(me);
   const done = steps.filter((s) => s.done).length;
-  const currentIdx = steps.findIndex((s) => !s.done && !s.locked);
+  const currentIdx = steps.findIndex((s) => !s.done && !s.locked && !s.pending);
   const verified = Boolean(me?.gasSafeVerifiedAt);
   const rejected = Boolean(me?.gasSafeRejectedAt) && !verified;
-  const inReview = Boolean(me?.gasSafeReviewRequestedAt) && !verified && !rejected;
+  // Review 4 — no ID photo yet: the check can't finish, so the strip asks for
+  // the photo (as on Home) instead of saying the check is in progress.
+  const needsPhoto = me?.hasGasSafeCard === false && !verified;
+  const inReview = Boolean(me?.gasSafeReviewRequestedAt) && !verified && !rejected && !needsPhoto;
 
   // Back = the way in: Home's "Finish setup" card, or straight after sign-up
   // (no history), where it does what "Skip setup for now" does.
   function leave() {
     if (router.canGoBack()) return router.back();
-    if (!me?.stripeConnected) skipStripe();
+    skipStripe();
     router.replace("/");
   }
 
@@ -115,6 +122,17 @@ export default function Onboarding() {
             </Text>
           </View>
 
+          {needsPhoto && (
+            <Pressable
+              onPress={() => router.push("/add-id")}
+              accessibilityRole="button"
+              className="flex-row items-center justify-center gap-2 rounded-xl border border-warn/50 bg-warn-tint px-3 py-2.5"
+            >
+              <Icon name="camera" size={17} color="#F5B544" />
+              <Text className="text-[14px] font-semibold text-warn">Add your Gas Safe ID photo</Text>
+              <Icon name="chevron" size={13} color="#F5B544" weight="semibold" />
+            </Pressable>
+          )}
           {inReview && (
             <View className="flex-row items-center justify-center gap-2 rounded-xl border border-warn/50 bg-warn-tint px-3 py-2.5">
               <Icon name="clock" size={17} color="#F5B544" />
@@ -149,7 +167,7 @@ export default function Onboarding() {
 
           <Pressable
             onPress={() => {
-              if (!me?.stripeConnected) skipStripe();
+              skipStripe();
               router.replace("/");
             }}
             className="items-center py-3"

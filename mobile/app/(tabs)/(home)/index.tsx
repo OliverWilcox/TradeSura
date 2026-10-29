@@ -245,13 +245,16 @@ function OwnerHome() {
   // same steps as the Getting started hub (lib/setup-steps.ts).
   const steps = setupSteps(me);
   const setupDone = steps.filter((x) => x.done).length;
-  const nextStep = steps.find((x) => !x.done);
+  const nextStep = steps.find((x) => !x.done && !x.pending && !x.locked) ?? steps.find((x) => !x.done);
   const waitingLine = nextStep ? `Next: ${nextStep.title.toLowerCase()}.` : "";
   const essentialsDone = steps.filter((x) => x.key === "plan" || x.key === "paid").every((x) => x.done);
 
   // Review 3 — the offer lock: a live plan, the Gas Safe check AND payments.
   const lock = offerLock(me ? { ...me, hasPlan: awake } : me);
   const offerBlockedBy = lock?.reason ?? null;
+  // Review 4 — "Send your first offer" only once the engineer is live (offers
+  // unlocked), so it never sits under "Finish setup" as a second Get started.
+  const firstOffer = Boolean(data && essentialsDone && !lock && data.count === 0);
 
   return (
     <View className="flex-1 bg-panel">
@@ -281,7 +284,7 @@ function OwnerHome() {
           >
             <Icon name="camera" size={16} color="#F5B544" />
             <Text className="flex-1 text-[13.5px] font-semibold text-warn">
-              Add your Gas Safe ID to go live
+              Photo needed · Add your Gas Safe ID
             </Text>
             <Icon name="chevron" size={13} color="#F5B544" weight="semibold" />
           </Pressable>
@@ -371,7 +374,9 @@ function OwnerHome() {
                 "Skip setup" → Home, where "Finish setup" brings them back). */}
             {me?.role !== "staff" && setupDone < steps.length && (
               <Card>
-                <Micro>Get started</Micro>
+                {/* Review 4 — one "Get started" card: once the first offer
+                    card shows, this one is just the remaining steps. */}
+                <Micro>{firstOffer ? "Next steps" : "Get started"}</Micro>
                 <Text className="mt-1.5 text-[19px] font-bold text-ink">
                   Finish setup — {setupDone} of {steps.length} done
                 </Text>
@@ -381,7 +386,7 @@ function OwnerHome() {
                 </Button>
               </Card>
             )}
-            {essentialsDone && data.count === 0 && (
+            {firstOffer && (
               <Card>
                 <Micro>Get started</Micro>
                 <Text className="mt-1.5 text-[19px] font-bold text-ink">Send your first offer</Text>

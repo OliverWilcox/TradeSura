@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { View, Text, FlatList, Pressable } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Contacts from "expo-contacts";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Button } from "@/components/ui";
 import { CenteredSpinner } from "@/components/skeleton";
+import { useSetupExit } from "@/lib/setup-exit";
 
 type PickedContact = { id: string; name: string; phone: string; email?: string };
 
@@ -23,6 +24,8 @@ export default function ImportContacts() {
   const [confirmed, setConfirmed] = useState(consent === "1");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  // Review 4 — during setup every way out goes back to the hub.
+  const { exit } = useSetupExit();
 
   useEffect(() => {
     let stop = false;
@@ -98,7 +101,7 @@ export default function ImportContacts() {
           TradeSura needs permission to read your contacts to import them. Enable it in your
           device Settings and try again.
         </Text>
-        <Button variant="ghost" onPress={() => router.back()}>
+        <Button variant="ghost" onPress={() => exit()}>
           Back
         </Button>
       </View>
@@ -109,7 +112,7 @@ export default function ImportContacts() {
     return (
       <View className="flex-1 items-center justify-center gap-3 bg-panel px-6">
         <Text className="text-center font-semibold text-sm text-ink">{result}</Text>
-        <Button onPress={() => router.back()}>Done</Button>
+        <Button onPress={() => exit()}>Done</Button>
       </View>
     );
   }
@@ -117,7 +120,7 @@ export default function ImportContacts() {
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-paper">
-        <AppHeader title="Import contacts" />
+        <AppHeader title="Import contacts" onBack={() => exit()} />
       </SafeAreaView>
       <FlatList
         data={contacts}
@@ -125,7 +128,7 @@ export default function ImportContacts() {
         contentContainerClassName="gap-1 p-4 pb-28"
         ListHeaderComponent={
           <View className="mb-2 flex-row items-center justify-between">
-            <Pressable onPress={() => router.back()}>
+            <Pressable onPress={() => exit()}>
               <Text className="font-semibold text-sm text-flame-deep">‹ Back</Text>
             </Pressable>
             <Text className="font-sans text-xs text-muted">

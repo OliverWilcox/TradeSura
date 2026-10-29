@@ -48,6 +48,18 @@ export function AddCustomerSheet({
   // Stripe setup isn't finished, the customer would hit "hasn't finished
   // their payment setup" mid-signup. Stop it here, on the engineer's side.
   const paymentsReady = Boolean(me?.stripeConnected);
+  // Review 4 — greyed routes say what unlocks them, not what they'd do.
+  const lockedSub =
+    me?.role === "staff"
+      ? !badgeGranted
+        ? "Unlocks when your Gas Safe check is done"
+        : "Unlocks when the business owner finishes payment setup"
+      : !badgeGranted && !paymentsReady
+        ? "Unlocks when your Gas Safe check and payments are done"
+        : !badgeGranted
+          ? "Unlocks when your Gas Safe check is done"
+          : "Unlocks when your payments are set up";
+  const customerLocked = !badgeGranted || !paymentsReady;
 
   function go(path: Parameters<typeof router.push>[0]) {
     onClose();
@@ -67,12 +79,14 @@ export function AddCustomerSheet({
 
   function customerFacing(path: Parameters<typeof router.push>[0]) {
     if (!badgeGranted) {
-      return locked(
-        "Offers are locked for now",
-        "Unlocks when your Gas Safe check is done (usually within 24 hours).",
-        "Check my status",
-        "/more",
-      );
+      return !paymentsReady && me?.role !== "staff"
+        ? locked("Offers are locked for now", "Unlocks when your Gas Safe check and payments are done.", "Set up payments", "/get-paid")
+        : locked(
+            "Offers are locked for now",
+            "Unlocks when your Gas Safe check is done (usually within 24 hours).",
+            "Check my status",
+            "/more",
+          );
     }
     if (!paymentsReady) {
       return me?.role === "staff"
@@ -94,14 +108,14 @@ export function AddCustomerSheet({
 
           <Row
             title="They're with me — show my plans"
-            sub="Hand them the phone at the kitchen table"
-            muted={!badgeGranted || !paymentsReady}
+            sub={customerLocked ? lockedSub : "Hand them the phone at the kitchen table"}
+            muted={customerLocked}
             onPress={() => customerFacing("/demo")}
           />
           <Row
             title="Text them the offer"
-            sub="Pick a plan, see the exact text, send"
-            muted={!badgeGranted || !paymentsReady}
+            sub={customerLocked ? lockedSub : "Pick a plan, see the exact text, send"}
+            muted={customerLocked}
             onPress={() => customerFacing("/offer")}
           />
           <Row

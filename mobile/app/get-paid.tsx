@@ -9,6 +9,7 @@ import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
 import { AppHeader, Button, OpeningStripe } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icon";
 import { StripeBadge } from "@/components/stripe-badge";
+import { useSetupExit } from "@/lib/setup-exit";
 
 // 2026 Build Guide TARGET_pre_stripe — "Get paid every Friday". Sets
 // expectations before handing over to Stripe's hosted onboarding: how the
@@ -34,7 +35,8 @@ function FlowRow({ icon, n, children }: { icon: IconName; n: number; children: R
 }
 
 export default function GetPaid() {
-  const { me, refreshMe, skipStripe } = useAuth();
+  const { me, refreshMe } = useAuth();
+  const { exit } = useSetupExit();
   // Creating the Stripe account takes several slow calls: start it while the
   // engineer reads this screen, so "Continue to Stripe" only fetches the link.
   const prepared = useRef<Promise<unknown> | null>(null);
@@ -78,6 +80,10 @@ export default function GetPaid() {
   }
 
   const state = me?.stripeState;
+  // Review 4 — while Stripe reviews there's nothing for the engineer to do:
+  // no checklist, no "Finish with Stripe", just the way back to setup.
+  const reviewing =
+    state === "checking" || Boolean(me?.stripeConnected && !me?.stripePayoutsEnabled && state !== "needs_more");
   const cta =
     state === "needs_more"
       ? "Go back to Stripe"
@@ -129,6 +135,7 @@ export default function GetPaid() {
           </Text>
         </Section>
 
+        {!reviewing && (
         <Section title="Have these ready · about 3 minutes">
           {[
             "Your bank sort code and account number",
@@ -143,6 +150,7 @@ export default function GetPaid() {
             </View>
           ))}
         </Section>
+        )}
 
         <View className="flex-row gap-2.5 px-1">
           <Icon name="lock" size={16} color="#9fb6d0" />
@@ -168,10 +176,10 @@ export default function GetPaid() {
             </Text>
           </View>
         )}
-        {returned && state === "checking" && (
-          <View className="rounded-2xl border border-line-strong p-4">
-            <Text className="text-[15.5px] font-bold text-ink">Stripe is checking your details</Text>
-            <Text className="mt-1 text-[14px] leading-[20px] text-muted">
+        {reviewing && (
+          <View className="rounded-2xl border border-warn/50 bg-warn-tint p-4">
+            <Text className="text-[15.5px] font-bold text-warn">In review · Stripe usually confirms within 24 hours</Text>
+            <Text className="mt-1 text-[14px] leading-[20px] text-ink">
               Nothing more to do. We&apos;ll let you know when payments are on.
             </Text>
           </View>
@@ -183,19 +191,19 @@ export default function GetPaid() {
           </Text>
         )}
 
-        <Button onPress={connectStripe} disabled={busy}>
-          {cta}
-        </Button>
-        {busy && <OpeningStripe />}
-        <Pressable
-          onPress={() => {
-            skipStripe();
-            router.back();
-          }}
-          className="items-center py-2.5"
-        >
-          <Text className="text-[15px] font-semibold text-flame">I&apos;ll do this later</Text>
-        </Pressable>
+        {reviewing ? (
+          <Button onPress={() => exit(() => router.navigate("/onboarding"))}>Back to setup</Button>
+        ) : (
+          <>
+            <Button onPress={connectStripe} disabled={busy}>
+              {cta}
+            </Button>
+            {busy && <OpeningStripe />}
+            <Pressable onPress={() => exit()} className="items-center py-2.5">
+              <Text className="text-[15px] font-semibold text-flame">I&apos;ll do this later</Text>
+            </Pressable>
+          </>
+        )}
       </ScrollView>
     </View>
   );

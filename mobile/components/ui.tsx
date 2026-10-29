@@ -46,7 +46,7 @@ function isTextLike(node: ReactNode): boolean {
 //    (Part 2.4 — "a couple of pictures centre them"; the text wins).
 // The retired "TRADESURA ✓" text mark is gone — every header wears the
 // final lockup.
-export function AppHeader({ title, right }: { title?: string; right?: ReactNode }) {
+export function AppHeader({ title, right, onBack }: { title?: string; right?: ReactNode; onBack?: () => void }) {
   if (!title) {
     return (
       <View className="flex-row items-center justify-between border-b border-line bg-bg-deep px-4 py-3">
@@ -59,7 +59,7 @@ export function AppHeader({ title, right }: { title?: string; right?: ReactNode 
     <View className="flex-row items-center justify-between border-b border-line bg-bg-deep px-3 py-3">
       <View className="flex-1 flex-row items-center gap-1.5">
         <Pressable
-          onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+          onPress={onBack ?? (() => (router.canGoBack() ? router.back() : router.replace("/")))}
           hitSlop={10}
           accessibilityRole="button"
           accessibilityLabel="Back"

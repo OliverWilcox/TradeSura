@@ -21,6 +21,7 @@ import { Icon, type IconName } from "@/components/icon";
 import { RingMark } from "@/components/ring-mark";
 import { Confetti } from "@/components/confetti";
 import { offerLock } from "@/lib/offer-lock";
+import { useSetupExit } from "@/lib/setup-exit";
 
 // 2026 Build Guide TARGET_plan_live — the celebration after "Make this plan
 // live": the ring, a moment of confetti, what each customer is worth, the
@@ -59,6 +60,7 @@ function NextRow({
 
 export default function PlanLive() {
   const { me } = useAuth();
+  const { inSetup: setup } = useSetupExit();
   const { name, pricePence } = useLocalSearchParams<{ name: string; pricePence: string }>();
   const { width } = useWindowDimensions();
   const [link, setLink] = useState<Link | null>(null);
@@ -117,14 +119,20 @@ export default function PlanLive() {
 
           {lock ? (
             <Pressable
-              onPress={() => router.push(lock.href)}
+              onPress={() => (lock.needsPayments ? router.push("/get-paid") : setup ? router.navigate("/onboarding") : router.push(lock.href))}
               className="mt-5 flex-row items-center gap-2.5 rounded-2xl border border-warn/50 bg-warn-tint px-4 py-3.5"
             >
               <Icon name="warning" size={17} color="#F5B544" />
               <View className="flex-1">
-                <Text className="text-[15px] font-semibold text-warn">
-                  {lock.href === "/more" ? "Waiting for your Gas Safe check" : "Set up payments to start taking customers"}
-                </Text>
+                {/* Review 4 — name everything still missing, not just Gas Safe. */}
+                {lock.needsPayments && (
+                  <Text className="text-[15px] font-semibold text-warn">Set up payments</Text>
+                )}
+                {lock.needsGasSafe && (
+                  <Text className={`text-[15px] font-semibold text-warn ${lock.needsPayments ? "mt-1" : ""}`}>
+                    Waiting for your Gas Safe check
+                  </Text>
+                )}
                 <Text className="mt-0.5 text-[13px] text-warn">{lock.reason}</Text>
               </View>
               <Icon name="chevron" size={14} color="#F5B544" weight="semibold" />
@@ -195,7 +203,14 @@ export default function PlanLive() {
           <View className="mt-4 gap-2.5">
             {lock ? (
               <>
-                <Button onPress={() => router.push(lock.href)}>{lock.cta}</Button>
+                {/* Review 4 — the next setup step, never the Account page. */}
+                {lock.needsPayments ? (
+                  <Button onPress={() => router.push("/get-paid")}>Next: get paid</Button>
+                ) : setup ? (
+                  <Button onPress={() => router.navigate("/onboarding")}>Back to setup</Button>
+                ) : (
+                  <Button onPress={() => router.push(lock.href)}>{lock.cta}</Button>
+                )}
                 <Button variant="ghost" onPress={() => router.push("/demo")}>
                   Try it in demo mode
                 </Button>
@@ -206,9 +221,15 @@ export default function PlanLive() {
             <Button variant="ghost" onPress={() => router.replace("/plan-wizard")}>
               Add another plan
             </Button>
-            <Pressable onPress={() => router.replace("/(tabs)/(home)/plans")} className="items-center py-3">
-              <Text className="text-[15px] font-semibold text-flame">Back to My plans</Text>
-            </Pressable>
+            {/* Review 4 — during setup the way out is the hub, not My plans. */}
+            {!(setup && lock && !lock.needsPayments) && (
+              <Pressable
+                onPress={() => (setup ? router.navigate("/onboarding") : router.replace("/(tabs)/(home)/plans"))}
+                className="items-center py-3"
+              >
+                <Text className="text-[15px] font-semibold text-flame">{setup ? "Back to setup" : "Back to My plans"}</Text>
+              </Pressable>
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
