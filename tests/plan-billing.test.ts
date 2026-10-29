@@ -62,9 +62,12 @@ describe("annual service unlocks after the 3rd payment", () => {
     expect(annualServiceUnlocked({ paymentsCleared: 2 })).toBe(false);
     expect(annualServiceUnlocked({ paymentsCleared: 3 })).toBe(true);
   });
-  it("yearly: the one payment covers the year", () => {
-    expect(annualServiceUnlocked({ paymentsCleared: 0, billingInterval: "year" })).toBe(false);
-    expect(annualServiceUnlocked({ paymentsCleared: 1, billingInterval: "year" })).toBe(true);
+  it("yearly: from the start of the third paid plan month (customer terms 5.2)", () => {
+    const yearly = { billingInterval: "year", coolingOffEndsAt: new Date("2026-11-10T12:00:00Z"), activatedAt: null };
+    expect(annualServiceUnlocked({ ...yearly, paymentsCleared: 0 }, new Date("2027-02-01T12:00:00Z"))).toBe(false);
+    expect(annualServiceUnlocked({ ...yearly, paymentsCleared: 1 }, new Date("2026-12-01T12:00:00Z"))).toBe(false);
+    expect(annualServiceUnlocked({ ...yearly, paymentsCleared: 1 }, new Date("2027-01-09T12:00:00Z"))).toBe(false);
+    expect(annualServiceUnlocked({ ...yearly, paymentsCleared: 1 }, new Date("2027-01-10T12:00:00Z"))).toBe(true);
   });
 });
 
@@ -74,9 +77,9 @@ describe("when the annual service opens (portal)", () => {
     const d = annualServiceFrom({ coolingOffEndsAt, activatedAt: new Date("2026-10-27T12:00:00Z") });
     expect(d?.toISOString().slice(0, 10)).toBe("2027-01-10");
   });
-  it("yearly: the first collection", () => {
+  it("yearly: the start of the third paid plan month, same as monthly", () => {
     const d = annualServiceFrom({ coolingOffEndsAt, activatedAt: null, billingInterval: "year" });
-    expect(d?.toISOString().slice(0, 10)).toBe("2026-11-10");
+    expect(d?.toISOString().slice(0, 10)).toBe("2027-01-10");
   });
   it("falls back to 14 days after activation", () => {
     const d = annualServiceFrom({ coolingOffEndsAt: null, activatedAt: new Date("2026-10-27T12:00:00Z") });

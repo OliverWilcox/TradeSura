@@ -52,7 +52,7 @@ export async function planDocumentEmailHtml(planId: string) {
   <p style="color:#5E6975;margin-top:0">Plan ${plan.ref} · ${plan.customer.firstName} ${plan.customer.lastName}</p>
   <p><b>You're on the ${tier?.name ?? ""} plan</b> — ${priceLine(plan.priceMonthlyPence ?? 0, plan.billingInterval, plan.engineer.vatRegistered)} by Direct Debit.
   ${FIRST_PAYMENT_LINE}</p>
-  <p>${yearly ? "Your annual service can be booked once your yearly payment has cleared." : "Your annual service can be booked once your third monthly payment has cleared."}
+  <p>${yearly ? "Your annual service can be booked from the start of your third plan month, once your yearly payment has cleared." : "Your annual service can be booked once your third monthly payment has cleared."}
   Everything else starts from your first payment.</p>
   <h2>What your plan includes</h2>
   ${clauseHtml}

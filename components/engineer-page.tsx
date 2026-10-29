@@ -80,7 +80,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "When is my service?",
-    a: "If your plan includes the annual service, it's available once your third monthly payment has been collected. We set your service month and message you to book it in.",
+    a: "If your plan includes the annual service, it's available once your third monthly payment has been collected — or, if you pay yearly, from the start of your third plan month. Your engineer sets your service month and messages you to book it in.",
   },
   {
     q: "How do I cancel?",

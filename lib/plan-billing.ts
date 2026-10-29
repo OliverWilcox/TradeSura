@@ -46,18 +46,33 @@ export const RESCUE_REMINDER_DAYS = [3, 7] as const;
 // ---------------------------------------------------------------------------
 
 // The annual service can only be booked once the 3rd monthly payment clears.
-// A yearly payment covers the whole year up front, so one cleared payment is
-// enough there.
-export function annualServiceUnlocked(plan: {
-  paymentsCleared: number;
-  billingInterval?: string | null;
-}): boolean {
-  if (billingIntervalOf(plan.billingInterval) === "year") return plan.paymentsCleared >= 1;
+// Yearly payers (customer terms 5.2, engineer terms 7.4): from the start of
+// their third paid plan month, i.e. the yearly payment has cleared and two
+// months have passed since the first collection.
+export function annualServiceUnlocked(
+  plan: {
+    paymentsCleared: number;
+    billingInterval?: string | null;
+    coolingOffEndsAt?: Date | null;
+    activatedAt?: Date | null;
+  },
+  now: Date = new Date(),
+): boolean {
+  if (billingIntervalOf(plan.billingInterval) === "year") {
+    if (plan.paymentsCleared < 1) return false;
+    const from = annualServiceFrom({
+      billingInterval: "year",
+      coolingOffEndsAt: plan.coolingOffEndsAt ?? null,
+      activatedAt: plan.activatedAt ?? null,
+    });
+    return !from || now >= from;
+  }
   return plan.paymentsCleared >= ANNUAL_SERVICE_AFTER_PAYMENTS;
 }
 
-// When the annual service becomes available: the month of the 3rd monthly
-// collection (the 1st for yearly). The first collection is the end of the
+// When the annual service becomes available: the start of the third paid
+// plan month — the 3rd monthly collection, or for yearly payers two months
+// after their single collection. The first collection is the end of the
 // 14-day cooling-off.
 export function annualServiceFrom(plan: {
   billingInterval?: string | null;
@@ -66,7 +81,6 @@ export function annualServiceFrom(plan: {
 }): Date | null {
   const first = plan.coolingOffEndsAt ?? (plan.activatedAt ? coolingOffEnd(plan.activatedAt) : null);
   if (!first) return null;
-  if (billingIntervalOf(plan.billingInterval) === "year") return first;
   return addMonths(first, ANNUAL_SERVICE_AFTER_PAYMENTS - 1);
 }
 

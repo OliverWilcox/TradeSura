@@ -32,7 +32,9 @@ export default async function ManagePage({
       ? `You've had this year's service. The next one is due by ${longDate(nextServiceDate(plan.activatedAt))}.`
       : unlocked
         ? `Your annual service is ready to book now. Just call or text ${brand}.`
-        : "Your annual service becomes available after your third payment.";
+        : plan.billingInterval === "year"
+          ? "Your annual service becomes available from the start of your third plan month."
+          : "Your annual service becomes available after your third payment.";
 
   const now = new Date();
   const endingOn =
