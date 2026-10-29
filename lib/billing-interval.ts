@@ -20,6 +20,20 @@ export function yearlyPricePence(priceMonthlyPence: number): number {
   return priceMonthlyPence * YEARLY_MONTHS_CHARGED;
 }
 
+// Review 4 / engineer terms 6.6 — before a customer picks Pay yearly: the
+// full annual price, what they save against paying monthly, and how a
+// refund works if they cancel. Shown on the plan page, not just in the terms.
+export function yearlyTermsLines(priceMonthlyPence: number, vatRegistered?: boolean | null): string[] {
+  const vat = vatRegistered ? " including VAT" : "";
+  const year = poundsLabel(yearlyPricePence(priceMonthlyPence));
+  const monthly12 = poundsLabel(priceMonthlyPence * 12);
+  const saving = poundsLabel(priceMonthlyPence * 12 - yearlyPricePence(priceMonthlyPence));
+  return [
+    `Pay yearly: ${year} a year${vat}, taken once after your cooling-off period. Paying monthly for a year comes to ${monthly12}, so you save ${saving}.`,
+    "If you cancel a yearly plan, you get back the whole months you haven't used, in proportion to what you paid. The month you're in counts as used.",
+  ];
+}
+
 // What one collection takes: the monthly price, or a year at 11 months' price.
 export function chargePence(priceMonthlyPence: number, interval: BillingInterval | string | null | undefined): number {
   return billingIntervalOf(interval) === "year" ? yearlyPricePence(priceMonthlyPence) : priceMonthlyPence;

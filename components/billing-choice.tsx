@@ -4,6 +4,7 @@ import {
   FIRST_PAYMENT_LINE,
   poundsLabel,
   yearlyPricePence,
+  yearlyTermsLines,
   type BillingInterval,
 } from "@/lib/billing-interval";
 
@@ -65,6 +66,12 @@ export function BillingChoice({
       <p className="text-[11.5px] text-muted mt-1.5 text-center">
         {FIRST_PAYMENT_LINE}
       </p>
+      {/* Review 4 — the yearly price, saving and refund rule, before they pick it. */}
+      <div className="mt-2 rounded-[10px] border border-line bg-paper px-3 py-2.5 text-[11.5px] text-muted space-y-1">
+        {yearlyTermsLines(priceMonthlyPence, vatRegistered).map((l) => (
+          <p key={l}>{l}</p>
+        ))}
+      </div>
     </div>
   );
 }
