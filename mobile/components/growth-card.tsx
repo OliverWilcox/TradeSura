@@ -7,6 +7,7 @@ import { Icon } from "@/components/icon";
 
 type Summary = {
   enquiriesThisMonth: number;
+  messagesThisWeek?: number;
   websiteLive: boolean;
   websiteDisabled: boolean;
   websiteSalesThisMonth: number;
@@ -29,6 +30,15 @@ export function GrowthCard() {
   return (
     <Card>
       <Micro className="mb-1">Growth</Micro>
+      {(s.messagesThisWeek ?? 0) > 0 && (
+        <Pressable className="flex-row items-center gap-2 py-1.5" onPress={() => router.push("/enquiries")}>
+          <Icon name="message" size={18} color="#5fa3f0" />
+          <Text className="flex-1 text-[13px] font-semibold text-flame">
+            {s.messagesThisWeek} new message{s.messagesThisWeek === 1 ? "" : "s"} this week — reply
+          </Text>
+          <Icon name="chevron" size={13} color="#5fa3f0" />
+        </Pressable>
+      )}
       <Pressable className="flex-row items-center gap-2 py-1.5" onPress={() => router.push("/enquiries")}>
         <Icon name="chat" size={18} color="#9fb6d0" />
         <Text className="flex-1 text-[13px] text-ink">

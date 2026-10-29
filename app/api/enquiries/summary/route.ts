@@ -16,8 +16,12 @@ export async function GET() {
   if (!e) return NextResponse.json({ error: "Not found." }, { status: 404 });
   const since = startOfMonth();
   const live = Boolean(e.websiteConnectedAt) && !e.widgetDisabledAt;
+  // Review 4 — "where do Message enquiries land?" Recent messages get their
+  // own line on Home so they're never only inside a monthly count.
+  const weekAgo = new Date(Date.now() - 7 * 86_400_000);
   return NextResponse.json({
     enquiriesThisMonth: await enquiriesThisMonth(engineerId),
+    messagesThisWeek: await prisma.enquiry.count({ where: { engineerId, kind: "message", createdAt: { gte: weekAgo } } }),
     websiteLive: live,
     websiteDisabled: Boolean(e.widgetDisabledAt),
     websiteSalesThisMonth: live ? await websiteSales(engineerId, since) : 0,
