@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, Alert, Pressable, Linking } from "react-native";
+import { View, Text, ScrollView, Alert, Pressable, Linking, TextInput } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
@@ -10,6 +10,9 @@ import { PassportSection } from "@/components/passport-section";
 import { formatPounds } from "@/lib/earnings";
 import { useAuth } from "@/lib/auth-context";
 import { offerLock } from "@/lib/offer-lock";
+import { AddressLookupField, type AddressValue } from "@/components/address-lookup";
+import { MonthPicker } from "@/components/month-picker";
+import { normaliseUkMobile } from "@/lib/validate";
 
 type Detail = {
   id: string;
@@ -19,7 +22,9 @@ type Detail = {
   email: string | null;
   source: string;
   address: string | null;
+  addressParts?: { line1: string; town: string; postcode: string } | null;
   hasPassport?: boolean;
+  removeBlocked?: string | null;
   appliance: { label: string; lastServicedAt: string | null } | null;
   nextServiceDue: string | null;
   serviceOverdue: boolean;
@@ -60,6 +65,105 @@ function d(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "Europe/London" });
 }
 
+// Review 4 — "+447123456789" reads as "07123 456789".
+function ukMobile(e164: string) {
+  const m = e164.match(/^\+44(7\d{3})(\d{6})$/);
+  return m ? `0${m[1]} ${m[2]}` : e164;
+}
+
+const inputCls = "min-h-[44px] rounded-[10px] border border-line bg-paper px-3 font-sans text-[15px] text-ink";
+
+// Review 4 — edit name, mobile, email, address and last service.
+function EditDetails({ c, onDone }: { c: Detail; onDone: (saved: boolean) => void }) {
+  const [firstName, setFirstName] = useState(c.firstName);
+  const [lastName, setLastName] = useState(c.lastName);
+  const [phone, setPhone] = useState(ukMobile(c.phone));
+  const [email, setEmail] = useState(c.email ?? "");
+  const [address, setAddress] = useState<AddressValue>(
+    c.addressParts ? { line1: c.addressParts.line1, town: c.addressParts.town, postcode: c.addressParts.postcode } : { line1: "", town: "", postcode: "" },
+  );
+  const [lastServiced, setLastServiced] = useState<Date | null>(
+    c.appliance?.lastServicedAt ? new Date(c.appliance.lastServicedAt) : null,
+  );
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    if (!firstName.trim() || !lastName.trim()) return setErr("Enter their first and last name.");
+    if (!normaliseUkMobile(phone)) return setErr("Enter a UK mobile number, like 07123 456789.");
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) {
+      return setErr("That email doesn't look right — check for typos.");
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const hasAddress = Boolean(address.line1.trim() && address.postcode.trim());
+      await api(`/api/customers/${c.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phone: phone.trim(),
+          email: email.trim(),
+          ...(hasAddress
+            ? { addressLine1: address.line1.trim(), town: address.town.trim(), postcode: address.postcode.trim() }
+            : {}),
+          ...(!c.hasPassport && (hasAddress || c.addressParts)
+            ? { lastServicedAt: lastServiced ? lastServiced.toISOString() : null }
+            : {}),
+        }),
+      });
+      onDone(true);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Couldn't save — try again.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <Micro className="mb-1.5">Edit details</Micro>
+      <View className="gap-2">
+        <View className="flex-row gap-2">
+          <View className="flex-1">
+            <TextInput value={firstName} onChangeText={setFirstName} placeholder="First name" placeholderTextColor="#6e86a3" className={inputCls} />
+          </View>
+          <View className="flex-1">
+            <TextInput value={lastName} onChangeText={setLastName} placeholder="Last name" placeholderTextColor="#6e86a3" className={inputCls} />
+          </View>
+        </View>
+        <TextInput value={phone} onChangeText={setPhone} placeholder="Mobile (07…)" placeholderTextColor="#6e86a3" keyboardType="phone-pad" className={inputCls} />
+        <TextInput
+          value={email}
+          onChangeText={setEmail}
+          placeholder="Email (optional)"
+          placeholderTextColor="#6e86a3"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          className={inputCls}
+        />
+        <AddressLookupField value={address} onChange={setAddress} />
+        {!c.hasPassport && (
+          <View>
+            <Text className="mb-1 font-sans text-xs text-muted">Last boiler service</Text>
+            <MonthPicker value={lastServiced} onChange={setLastServiced} />
+          </View>
+        )}
+      </View>
+      {err && <Text className="mt-2 font-sans text-[13px] text-warn">{err}</Text>}
+      <View className="mt-3 gap-2">
+        <Button onPress={save} disabled={busy}>
+          {busy ? "Saving…" : "Save changes"}
+        </Button>
+        <Button variant="ghost" onPress={() => onDone(false)} disabled={busy}>
+          Cancel
+        </Button>
+      </View>
+    </Card>
+  );
+}
+
 // Last service is picked as a month, so service dates show "Oct 2027".
 function month(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "Europe/London" });
@@ -77,6 +181,7 @@ export default function CustomerDetail() {
   const [ending, setEnding] = useState(false);
   const [endReason, setEndReason] = useState<string | null>(null);
   const [endError, setEndError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -311,13 +416,35 @@ export default function CustomerDetail() {
 
         <PassportSection customerId={c.id} />
 
-        {/* Part 10 — Contact card. */}
-        <Card>
-          <Micro className="mb-1">Contact</Micro>
-          <RowLine left="Mobile" right={<Text className="tabular-nums text-sm text-ink">{c.phone}</Text>} />
-          {c.email && <RowLine left="Email" right={c.email} />}
-          {c.address && <RowLine left="Address" right={c.address} />}
-        </Card>
+        {/* Part 10 — Contact card. Review 4: 07… mobiles you can tap, and Edit. */}
+        {editing ? (
+          <EditDetails
+            c={c}
+            onDone={(saved) => {
+              setEditing(false);
+              if (saved) load();
+            }}
+          />
+        ) : (
+          <Card>
+            <View className="mb-1 flex-row items-center justify-between">
+              <Micro>Contact</Micro>
+              <Pressable onPress={() => setEditing(true)} accessibilityRole="button" hitSlop={8}>
+                <Text className="font-sans text-[13px] font-semibold text-flame">Edit</Text>
+              </Pressable>
+            </View>
+            <RowLine
+              left="Mobile"
+              right={
+                <Pressable onPress={() => Linking.openURL(`tel:${c.phone}`).catch(() => {})} accessibilityRole="link">
+                  <Text className="tabular-nums text-sm text-flame">{ukMobile(c.phone)}</Text>
+                </Pressable>
+              }
+            />
+            {c.email && <RowLine left="Email" right={c.email} />}
+            {c.address && <RowLine left="Address" right={c.address} />}
+          </Card>
+        )}
 
         <Card>
           <Micro className="mb-1.5">Timeline</Micro>
@@ -390,9 +517,14 @@ export default function CustomerDetail() {
         )}
 
         {!c.plan && !c.viewerIsStaff && (
-          <Button variant="dangerghost" onPress={confirmRemove} disabled={busy}>
-            Remove customer
-          </Button>
+          <View className="gap-1.5">
+            <Button variant="dangerghost" onPress={confirmRemove} disabled={busy || Boolean(c.removeBlocked)}>
+              Remove customer
+            </Button>
+            {c.removeBlocked && (
+              <Text className="text-center font-sans text-xs text-warn">{c.removeBlocked}</Text>
+            )}
+          </View>
         )}
       </ScrollView>
     </View>

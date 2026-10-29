@@ -17,7 +17,13 @@ export type ImportRow = {
 // Shared by CSV upload and phone-book import. Dedupe = exact match on
 // normalised phone per engineer.
 // ponytail: exact phone dedupe; fuzzy name/address matching when it earns its keep
-export async function importCustomers(engineerId: string, rows: ImportRow[]) {
+// `source` tags new rows so the customer page says how they arrived (Review 4:
+// imported contacts were showing as "added manually").
+export async function importCustomers(
+  engineerId: string,
+  rows: ImportRow[],
+  source: "import" | "contacts" = "import",
+) {
   let imported = 0;
   let updated = 0;
   let skipped = 0;
@@ -49,6 +55,7 @@ export async function importCustomers(engineerId: string, rows: ImportRow[]) {
         lastName: lastName || "—",
         phone,
         email: row.email || null,
+        source,
         ...(row.addressLine1 && row.postcode
           ? {
               properties: {

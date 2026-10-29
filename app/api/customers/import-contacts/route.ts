@@ -49,6 +49,7 @@ export async function POST(req: Request) {
         email: c.email,
       };
     }),
+    "contacts",
   );
   return NextResponse.json(result);
 }
