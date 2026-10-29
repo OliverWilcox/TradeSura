@@ -35,11 +35,84 @@ type Settings = {
   legalName?: string | null;
   vatRegistered?: boolean;
   postcode: string | null;
+  packAddress?: string | null;
+  packShipped?: boolean;
   standing: { state: string } & Status;
   gasSafe: Status;
   gasSafePhotoNeeded?: boolean;
   payments: Status;
 };
+
+// Review 4 — the sign-up correspondence address (where the member pack
+// goes), with Change. Locked once the pack has been posted.
+function PackAddress({ value, shipped, onSaved }: { value: string; shipped: boolean; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function save() {
+    if (draft.trim().length < 10) return setErr("Enter your full postal address, including the postcode.");
+    setBusy(true);
+    setErr(null);
+    try {
+      await api("/api/settings/pack-address", { method: "POST", body: JSON.stringify({ address: draft.trim() }) });
+      setEditing(false);
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Couldn't save your address.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <View className="border-t border-line pt-2.5">
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="flex-1">
+          <Text className="font-sans text-xs text-muted">Member pack posts to</Text>
+          {!editing && (
+            <Text className="mt-0.5 font-sans text-sm text-ink">
+              {value ? value.replace(/\s*\n\s*/g, ", ") : "No address yet"}
+            </Text>
+          )}
+        </View>
+        {!editing && !shipped && (
+          <Pressable
+            onPress={() => {
+              setDraft(value);
+              setEditing(true);
+            }}
+            accessibilityRole="button"
+            hitSlop={8}
+          >
+            <Text className="font-sans text-[13px] font-semibold text-flame">Change</Text>
+          </Pressable>
+        )}
+      </View>
+      {shipped && <Text className="mt-0.5 font-sans text-xs text-faint">Posted — on its way.</Text>}
+      {editing && (
+        <View className="mt-1.5 gap-2">
+          <TextInput
+            value={draft}
+            onChangeText={setDraft}
+            multiline
+            placeholder="Full postal address, including postcode"
+            placeholderTextColor="#6e86a3"
+            className="min-h-[72px] rounded-[10px] border border-line bg-paper px-3.5 py-2.5 font-sans text-[16px] text-ink"
+          />
+          {err && <Text className="font-sans text-[13px] text-warn">{err}</Text>}
+          <View className="flex-row gap-2">
+            <Button className="flex-1" onPress={save} disabled={busy}>
+              {busy ? "Saving…" : "Save address"}
+            </Button>
+            <Button className="flex-1" variant="ghost" onPress={() => setEditing(false)} disabled={busy}>
+              Cancel
+            </Button>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
 
 function StatusLine({ status }: { status: Status }) {
   return (
@@ -397,6 +470,11 @@ function OwnerAccount() {
                 <RowLine left="Company number" right={settings.companyNumber} />
               )}
               {settings.postcode && <RowLine left="Business postcode" right={settings.postcode} />}
+            </View>
+          )}
+          {settings && settings.packAddress !== undefined && (
+            <View className="mt-2">
+              <PackAddress value={settings.packAddress ?? ""} shipped={Boolean(settings.packShipped)} onSaved={load} />
             </View>
           )}
           {/* Editable so accounts from older signup builds, which saved no

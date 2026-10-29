@@ -50,6 +50,9 @@ export async function GET() {
     legalName: engineer.legalName,
     vatRegistered: engineer.vatRegistered,
     postcode: engineer.postcode,
+    // Review 4 — where the member pack goes, with Change on Account.
+    packAddress: engineer.packAddress,
+    packShipped: Boolean(engineer.packShippedAt),
     // Part 6.4/17.3 — the same truth source the dashboard strip and Payouts'
     // banner read. `standing` is the collapsed single-line ladder (used only
     // when banned/paused outranks everything else); `gasSafe`/`payments` are
