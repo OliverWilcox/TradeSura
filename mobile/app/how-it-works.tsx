@@ -61,7 +61,7 @@ const CARDS: { title: string; body: string; image?: ImageSourcePropType }[] = [
 ];
 
 const WHY: { icon: IconName; badge?: IconName; title: string; line: string }[] = [
-  { icon: "shield", title: "Be the trusted installer", line: "Your Verified badge wins customers' trust" },
+  { icon: "shield", title: "Be the trusted installer", line: "Your Verified Member badge wins customers' trust" },
   // No handshake in SF Symbols — same pairing the Invite row already uses
   // (hand.raised on iOS, the Material handshake on Android).
   { icon: "referral", title: "Keep your customers", line: "They call you, not the next engineer on Google" },

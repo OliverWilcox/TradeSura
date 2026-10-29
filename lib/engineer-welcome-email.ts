@@ -83,7 +83,7 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
 
   <tr><td style="padding:22px 32px 4px;">
     <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${EMAIL.blue};text-transform:uppercase;">Your setup · ${doneCount} of ${items.length} done</div>
-    <div style="font-size:13px;color:${EMAIL.muted};padding:4px 0 10px;">About 8 minutes in total. Pick up where you left off any time.</div>
+    <div style="font-size:13px;color:${EMAIL.muted};padding:4px 0 10px;">About 10 minutes in total. Pick up where you left off any time.</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:15px;line-height:21px;color:${EMAIL.ink};">
       ${items.map((it, i) => checklistRow(it, i === items.length - 1)).join("")}
     </table>

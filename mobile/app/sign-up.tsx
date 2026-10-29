@@ -1161,7 +1161,7 @@ export default function SignUp() {
                     Create your free account
                   </Text>
                   <Text className="mb-3 mt-1 text-[14px] leading-[19px] text-white/85">
-                    Takes about 2 minutes · Your Verified badge + welcome pack once approved.
+                    Takes about 2 minutes · Your Verified Member badge + member pack once approved.
                   </Text>
 
                   <AppleSignInButton onResult={onApple} />
@@ -1424,7 +1424,7 @@ export default function SignUp() {
                     Verify your trade
                   </Text>
                   <Text className="mb-3 mt-1 text-[14px] leading-[19px] text-white/85">
-                    Customers see your verified badge on every plan you sell — it&apos;s your
+                    Customers see your Verified Member badge on every plan you sell — it&apos;s your
                     biggest closer.
                   </Text>
 
@@ -1480,7 +1480,7 @@ export default function SignUp() {
                       />
                       <FieldError>{errors.gasSafeCard}</FieldError>
                       <Hint>
-                        Needed for your Verified badge. Only used to verify you — never shown to
+                        Needed for your Verified Member badge. Only used to verify you — never shown to
                         customers.
                       </Hint>
                     </View>

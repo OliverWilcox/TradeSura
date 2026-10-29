@@ -274,7 +274,7 @@ export async function EngineerPage({
       {/* Build Guide v2 Part 15.1 — title + sub-line, verbatim. */}
       <div>
         <h2 className="font-sans font-semibold text-lg">Choose your plan</h2>
-        <p className="text-sm text-muted">Cancel anytime — set up takes about a minute.</p>
+        <p className="text-sm text-muted">Cancel anytime — set up takes about 2 minutes.</p>
       </div>
 
       <PublicSignup

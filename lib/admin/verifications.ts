@@ -425,7 +425,7 @@ async function tellEngineer(engineerId: string, approved: boolean, reason: strin
           emailEngineer(
             engineerId,
             "You're Gas Safe verified on TradeSura",
-            "<p>Good news — we've checked your Gas Safe registration and your Verified badge is now live. You can send plan offers straight away, and your member pack is on its way.</p>",
+            "<p>Good news — we've checked your Gas Safe registration and your Verified Member badge is now live. You can send plan offers straight away, and your member pack is on its way.</p>",
           ),
       ]
     : [

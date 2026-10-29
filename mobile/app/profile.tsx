@@ -319,7 +319,7 @@ export default function ProfileScreen() {
               <Text className="text-[13px] font-bold uppercase tracking-[0.1em] text-flame">Also on your page</Text>
               {[
                 "Your live plans, with a Join button",
-                verified ? "Your Gas Safe verified badge" : "Your Gas Safe badge, once it's verified",
+                verified ? "Your Verified Member badge" : "Your Verified Member badge, once your Gas Safe check is done",
                 "Ratings from your plan customers",
                 `Call ${firstName} and Message buttons, if switched on`,
                 "The gas emergency number, on every page",

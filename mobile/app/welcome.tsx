@@ -291,7 +291,7 @@ export default function Welcome() {
               <Text className="text-[14px] font-semibold text-white">I already have an account</Text>
             </Pressable>
             <Text className="mt-3 text-center tabular-nums text-[11px] uppercase tracking-wider text-night-muted">
-              Gas Safe verified members
+              Verified members only
             </Text>
             {/* Build Review 3 §3 — the official badge, never typed text.
                 Outline-only white vector (not the boxed pill), so it still
