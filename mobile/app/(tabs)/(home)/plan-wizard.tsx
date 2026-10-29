@@ -714,7 +714,8 @@ export default function PlanWizard() {
                     const sub = locked
                       ? "Included in every TradeSura plan"
                       : t.engineerNote
-                        ? `Optional · ${t.engineerNote}`
+                        ? // Review 4 — the annual service is ticked for them; "Optional" only once they untick it.
+                          `${on && DEFAULT_ON_CODES.includes(t.code) ? "Ticked by default" : "Optional"} · ${t.engineerNote}`
                         : t.pricingLabel;
                     return (
                       <View key={t.code} className="flex-row items-center gap-3 py-2.5">
