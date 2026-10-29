@@ -7,6 +7,7 @@ import { checkWording } from "@/lib/compliance/blocklist";
 import { normaliseUkPhone } from "@/lib/phone";
 import { canonicalProfileDisplay, canonicalProfileUrl } from "@/lib/public-url";
 import { ensureEngineerTown, townSlugOf } from "@/lib/town";
+import { profilePreviewToken } from "@/lib/public-page";
 
 const Body = z.object({
   profileBio: z.string().max(600).default(""),
@@ -27,6 +28,9 @@ async function view(engineerId: string) {
     serviceArea: e.serviceArea ?? "",
     published: Boolean(e.profilePublishedAt),
     url: canonicalProfileUrl(e),
+    // Review 4 — "Preview my profile" opens this: PREVIEW banner, Join off,
+    // and it works before the profile is published.
+    previewUrl: `${canonicalProfileUrl(e)}?preview=${await profilePreviewToken(e.slug)}`,
     display: canonicalProfileDisplay(e),
     town: e.town ?? "",
     photos: e.profilePhotos,

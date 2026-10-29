@@ -22,6 +22,8 @@ type Profile = {
   serviceArea: string;
   published: boolean;
   url: string;
+  /** Review 4 — the engineer's own preview link (PREVIEW banner, Join off). */
+  previewUrl?: string;
   display: string;
   town: string;
   photos: string[];
@@ -90,7 +92,7 @@ export default function ProfileScreen() {
       await refreshMe();
       setData(p);
       setTown(p.town);
-      if (then === "preview") Linking.openURL(p.url);
+      if (then === "preview") Linking.openURL(p.previewUrl ?? p.url);
       else if (publish) router.back();
     } catch (e) {
       const body = e instanceof ApiError ? (e.body as { field?: string; explanation?: string } | undefined) : undefined;

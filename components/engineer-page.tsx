@@ -10,6 +10,7 @@ import { CustomerShell } from "@/components/shells";
 import { PublicSignup } from "@/components/public-signup";
 import { ProfileContact } from "@/components/profile-contact";
 import { rejoinFreeMonth } from "@/lib/rejoin-offer";
+import { pageMode } from "@/lib/public-page";
 import { TrustLine } from "@/components/verified-badge";
 import {
   ProfileHeader,
@@ -109,6 +110,8 @@ export async function EngineerPage({
   by,
   profile,
   rejoin,
+  preview = false,
+  practice = false,
 }: {
   data: Loaded;
   slug: string;
@@ -120,6 +123,10 @@ export async function EngineerPage({
   profile?: ProfileExtras;
   /** Retention §9 — a win-back rejoin link's token. */
   rejoin?: string;
+  /** Review 4 — the engineer's own "Preview my profile" link (checked by the route). */
+  preview?: boolean;
+  /** Review 4 — demo mode while offers are locked: nothing is saved. */
+  practice?: boolean;
 }) {
   const { engineer, tiers } = data;
   const brand = engineer.tradingName!;
@@ -127,6 +134,8 @@ export async function EngineerPage({
   const area = engineer.serviceArea?.trim();
   const published = Boolean(engineer.profilePublishedAt);
   const legalLine = tradingNameOf(engineer);
+  const mode = pageMode({ preview, practice, engineer });
+  const banner = <ModeBanner mode={mode} />;
 
   // The engineer's Stripe Connect business_profile.url points here from the
   // moment they connect payments — before they've published a plan. A hard
@@ -135,6 +144,7 @@ export async function EngineerPage({
   if (tiers.length === 0) {
     return (
       <CustomerShell tradingName={brand} legalLine={legalLine}>
+        {banner}
         <div className="bg-paper border border-line rounded-xl p-4 text-center">
           <h1 className="font-sans font-semibold text-base mb-1.5">{brand}&apos;s care plans</h1>
           <p className="text-sm text-muted">
@@ -158,11 +168,11 @@ export async function EngineerPage({
   await track("page_visit", { type: "CUSTOMER" }, {
     engineerId: engineer.id,
     slug,
-    source: demo ? "demo" : (src ?? (profile ? "profile" : "direct")),
+    source: mode === "preview" || mode === "practice" ? mode : demo ? "demo" : (src ?? (profile ? "profile" : "direct")),
   });
 
   const rated = profile && profile.rating.average !== null && profile.rating.count > 0 ? profile.rating : null;
-  const jsonLd = published
+  const jsonLd = published && mode !== "preview" && mode !== "practice"
     ? {
         "@context": "https://schema.org",
         "@type": profile ? ["LocalBusiness", "HVACBusiness"] : "HVACBusiness",
@@ -215,6 +225,7 @@ export async function EngineerPage({
       // engineer who isn't actually verified.
       sub={<TrustLine verified={Boolean(gasSafe)} />}
     >
+      {banner}
       {jsonLd && (
         <script
           type="application/ld+json"
@@ -273,6 +284,7 @@ export async function EngineerPage({
         initialTierId={tier}
         rejoin={rejoin}
         firstMonthFree={await rejoinFreeMonth(engineer.id, rejoin)}
+        mode={mode}
         soldById={demo ? by : undefined}
         channel={
           demo ? "demo" : src === "blast" ? "blast" : src === "referral" ? "referral" : src === "website" ? "website" : "web"
@@ -335,4 +347,25 @@ export async function EngineerPage({
       )}
     </CustomerShell>
   );
+}
+
+// Review 4 — said on every screen of the page while it isn't a real sign-up.
+function ModeBanner({ mode }: { mode: ReturnType<typeof pageMode> }) {
+  if (mode === "preview") {
+    return (
+      <div className="rounded-xl border border-warn bg-warn-tint px-3.5 py-2.5 text-[13px] text-ink">
+        <b className="text-warn tracking-wide">PREVIEW</b> · This is how your page looks to customers.
+        Join is switched off in preview.
+      </div>
+    );
+  }
+  if (mode === "practice") {
+    return (
+      <div className="rounded-xl border border-warn bg-warn-tint px-3.5 py-2.5 text-[13px] text-ink">
+        <b className="text-warn tracking-wide">DEMO</b> · Practice only. Nothing here creates a customer
+        or takes a payment.
+      </div>
+    );
+  }
+  return null;
 }

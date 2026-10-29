@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { EngineerPage, engineerPageMetadata, loadEngineerPage } from "@/components/engineer-page";
 import { gasEngineerPath } from "@/lib/public-url";
+import { isProfilePreview } from "@/lib/public-page";
 
 export const dynamic = "force-dynamic";
 
@@ -17,18 +18,34 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 export default async function EngineerProfile({
   params,
   searchParams,
-}: Params & { searchParams: Promise<{ src?: string; demo?: string; tier?: string; by?: string }> }) {
+}: Params & {
+  searchParams: Promise<{ src?: string; demo?: string; tier?: string; by?: string; preview?: string; practice?: string }>;
+}) {
   const { slug } = await params;
-  const { src, demo, tier, by } = await searchParams;
+  const { src, demo, tier, by, preview, practice } = await searchParams;
   const data = await loadEngineerPage(slug);
   if (!data) notFound();
   // Section 6 — profiles moved to /gas-engineers/{town}/{slug}; old links
   // (and any ?src=/tier= on them) keep working. /p/{slug} is not redirected.
-  if (data.engineer.townSlug) {
+  const previewOk = await isProfilePreview(preview, slug);
+  // Review 4 — only a published profile (or the engineer's preview) moves on
+  // to the town profile; until then this stays the plan page.
+  if (data.engineer.townSlug && (data.engineer.profilePublishedAt || previewOk)) {
     const q = new URLSearchParams(
-      Object.entries({ src, demo, tier, by }).filter((e): e is [string, string] => Boolean(e[1])),
+      Object.entries({ src, demo, tier, by, preview, practice }).filter((e): e is [string, string] => Boolean(e[1])),
     ).toString();
     permanentRedirect(`${gasEngineerPath(data.engineer.townSlug, slug)}${q ? `?${q}` : ""}`);
   }
-  return <EngineerPage data={data} slug={slug} src={src} demo={demo} tier={tier} by={by} />;
+  return (
+    <EngineerPage
+      data={data}
+      slug={slug}
+      src={src}
+      demo={demo}
+      tier={tier}
+      by={by}
+      preview={previewOk}
+      practice={practice === "1"}
+    />
+  );
 }

@@ -7,6 +7,8 @@ import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Button } from "@/components/ui";
 import { Icon } from "@/components/icon";
 import { RingSpinner } from "@/components/skeleton";
+import { offerLock } from "@/lib/offer-lock";
+import { useSetupExit } from "@/lib/setup-exit";
 
 // E5 — demo mode. In-app, full screen, with a slim hand-over ribbon and ✕ to
 // exit — never the system browser, so the engineer's account stays hidden
@@ -14,24 +16,42 @@ import { RingSpinner } from "@/components/skeleton";
 // "close the browser to come back," which isn't actually one tap and briefly
 // exposes the OS browser chrome). The page's ?demo=1 tags the resulting
 // subscription channel=demo.
+// Review 4 (P0) — while offers are locked (Gas Safe check or payments not
+// done) this is a practice run: DEMO on every screen, and the page's Join
+// runs a pretend sign-up that creates no customer, plan or mandate. Once the
+// engineer is live it's the real in-person sale.
 export default function Demo() {
   const { me } = useAuth();
+  // Review 4 — ✕ during setup goes back to the Getting Started hub.
+  const { exit } = useSetupExit();
   const [viewing, setViewing] = useState(false);
   const [loading, setLoading] = useState(true);
   const base = process.env.EXPO_PUBLIC_API_URL;
+  const practice = offerLock(me) !== null;
   // Staff hand over their phone too — `by` credits the sale to them (section 8).
-  const url = me && base ? `${base}/${me.slug}?demo=1${me.role === "staff" ? `&by=${me.id}` : ""}` : null;
+  const url =
+    me && base
+      ? practice
+        ? `${base}/p/${me.slug}?practice=1`
+        : `${base}/${me.slug}?demo=1${me.role === "staff" ? `&by=${me.id}` : ""}`
+      : null;
 
   if (viewing && url) {
     return (
       <View className="flex-1 bg-bg">
         <SafeAreaView edges={["top"]} className="bg-bg-deep">
           <View className="flex-row items-center justify-between px-4 py-2.5">
-            <Text className="flex-1 font-sans text-xs text-muted" numberOfLines={1}>
-              Viewing {me?.tradingName ?? "your"} plan page — hand the phone over
-            </Text>
+            {practice ? (
+              <Text className="flex-1 font-sans text-xs text-muted" numberOfLines={1}>
+                <Text className="font-bold text-warn">DEMO</Text> · practice only, nothing is saved
+              </Text>
+            ) : (
+              <Text className="flex-1 font-sans text-xs text-muted" numberOfLines={1}>
+                Viewing {me?.tradingName ?? "your"} plan page — hand the phone over
+              </Text>
+            )}
             <Pressable
-              onPress={() => router.replace("/")}
+              onPress={() => exit(() => router.replace("/"))}
               hitSlop={10}
               className="ml-3 h-7 w-7 items-center justify-center rounded-full bg-line-soft"
             >
@@ -52,9 +72,18 @@ export default function Demo() {
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader title="Show a customer" />
+        <AppHeader title={practice ? "Demo mode" : "Show a customer"} />
       </SafeAreaView>
       <ScrollView className="flex-1" contentContainerClassName="gap-3.5 px-4 pb-8 pt-4">
+        {practice && (
+          <Card className="border-warn">
+            <Text className="font-bold text-sm text-warn">DEMO</Text>
+            <Text className="mt-1 font-sans text-xs text-muted">
+              Practice only. Try the sign-up as a customer would: nothing you do here creates a customer,
+              sets up a Direct Debit or takes a payment.
+            </Text>
+          </Card>
+        )}
         <Card>
           <Text className="font-semibold text-sm text-ink">
             Hand your phone over at the kitchen table
@@ -78,10 +107,12 @@ export default function Demo() {
           }}
           disabled={!url || !me?.hasPlan}
         >
-          Open my plan page
+          {practice ? "Open my plan page in demo mode" : "Open my plan page"}
         </Button>
         <Micro className="text-center">
-          Anything signed up here is tagged as an in-person sale.
+          {practice
+            ? "Real sign-ups unlock once your Gas Safe check and payments are done."
+            : "Anything signed up here is tagged as an in-person sale."}
         </Micro>
       </ScrollView>
     </View>

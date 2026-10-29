@@ -6,6 +6,7 @@ import { EmbeddedCheckout } from "@/components/embedded-checkout";
 import { JOIN_BTN, PlanTierCard } from "@/components/plan-tier-card";
 import { BillingChoice } from "@/components/billing-choice";
 import { chargePence, priceLine, type BillingInterval } from "@/lib/billing-interval";
+import type { PageMode } from "@/lib/public-page";
 
 type Tier = {
   id: string;
@@ -40,6 +41,7 @@ export function PublicSignup({
   initialTierId,
   rejoin,
   firstMonthFree,
+  mode = "live",
 }: {
   slug: string;
   tiers: Tier[];
@@ -53,6 +55,8 @@ export function PublicSignup({
   /** Win-back rejoin link token, and whether it carries a free month. */
   rejoin?: string;
   firstMonthFree?: boolean;
+  /** Review 4 — only "live" ever creates a customer or plan. */
+  mode?: PageMode;
 }) {
   const [selectedId, setSelectedId] = useState(
     tiers.find((t) => t.id === initialTierId)?.id ??
@@ -67,6 +71,7 @@ export function PublicSignup({
   const [busy, setBusy] = useState(false);
   const [started, setStarted] = useState<Started | null>(null);
   const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
+  const [practiceDone, setPracticeDone] = useState(false);
   const selected = tiers.find((t) => t.id === selectedId);
 
   const ready =
@@ -77,6 +82,11 @@ export function PublicSignup({
 
   async function begin() {
     if (!selected || !ready) return;
+    if (mode === "practice") {
+      setPracticeDone(true);
+      return;
+    }
+    if (mode !== "live") return;
     setBusy(true);
     setError(null);
     const res = await fetch(`/api/p/${slug}/start`, {
@@ -104,6 +114,24 @@ export function PublicSignup({
   }
 
   const input = "w-full rounded-[10px] border-[1.5px] border-line bg-paper px-3 py-2.5 text-sm";
+
+  if (practiceDone && selected) {
+    return (
+      <div className="rounded-xl border border-warn bg-warn-tint p-4 text-sm text-ink">
+        <p className="font-semibold">
+          <span className="text-warn">DEMO</span> · This is where {firstName.trim() || "your customer"} sets up
+          their Direct Debit
+        </p>
+        <p className="mt-1.5 text-muted">
+          In a real sign-up they enter their bank details with Stripe, nothing is taken for 14 days, and their
+          plan document arrives by email. Nothing was saved here and no payment was set up.
+        </p>
+        <button onClick={() => setPracticeDone(false)} className="mt-3 text-sm text-ink underline">
+          Back to the plans
+        </button>
+      </div>
+    );
+  }
 
   if (started && selected) {
     return (
@@ -184,13 +212,19 @@ export function PublicSignup({
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
-      {selected && (
-        <button onClick={begin} disabled={busy || !ready} className={JOIN_BTN}>
-          {busy
-            ? "Setting up…"
-            : `Join ${selected.name} — ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)} by Direct Debit`}
+      {selected && mode === "closed" ? (
+        <p className="rounded-xl border border-line bg-paper px-3.5 py-3 text-center text-sm text-muted">
+          {`${engineerName} isn't taking sign-ups online just yet. Check back soon, or ask them directly.`}
+        </p>
+      ) : selected ? (
+        <button onClick={begin} disabled={busy || !ready || mode === "preview"} className={JOIN_BTN}>
+          {mode === "preview"
+            ? "Join is switched off in preview"
+            : busy
+              ? "Setting up…"
+              : `${mode === "practice" ? "DEMO · " : ""}Join ${selected.name} — ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)} by Direct Debit`}
         </button>
-      )}
+      ) : null}
     </>
   );
 }

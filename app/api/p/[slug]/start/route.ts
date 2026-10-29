@@ -11,6 +11,7 @@ import { newPlanRef, newToken } from "@/lib/plans";
 import { createSignupCheckout, ensureRecipientConfiguration, isMissingDestination, publishableKey } from "@/lib/stripe";
 import { snapshotTier } from "@/lib/plan-tier";
 import { appUrl } from "@/lib/app-url";
+import { offerBlockedReason } from "@/lib/verification-state";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 const Body = z.object({
@@ -42,6 +43,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
 
   const engineer = await prisma.engineer.findUnique({ where: { slug } });
   if (!engineer) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  // Review 4 (P0) — no real customer, plan or mandate until the engineer is
+  // live: Gas Safe check done and payments set up. The page hides Join too;
+  // this is the gate for an old page or a hand-built request.
+  if (offerBlockedReason({ ...engineer, stripeChargesEnabled: engineer.stripeChargesEnabled })) {
+    return NextResponse.json(
+      { error: `${engineer.tradingName?.trim() || "This engineer"} isn't taking sign-ups online just yet.` },
+      { status: 409 },
+    );
+  }
   if (!engineer.stripeAccountId || !engineer.stripeChargesEnabled) {
     return NextResponse.json(
       { error: `${engineer.tradingName?.trim() || "This engineer"} hasn't finished their payment setup yet.` },
