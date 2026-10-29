@@ -10,6 +10,7 @@ import { CustomerShell } from "@/components/shells";
 import { PublicSignup } from "@/components/public-signup";
 import { ProfileContact } from "@/components/profile-contact";
 import { rejoinFreeMonth } from "@/lib/rejoin-offer";
+import { TrustLine } from "@/components/verified-badge";
 import {
   ProfileHeader,
   ProfilePhotos,
@@ -212,7 +213,7 @@ export async function EngineerPage({
       legalLine={legalLine}
       // Build Guide v2 Part 15.1 — the trust line. Never asserted for an
       // engineer who isn't actually verified.
-      sub={gasSafe ? "Gas Safe verified · Backed by TradeSura" : "Backed by TradeSura"}
+      sub={<TrustLine verified={Boolean(gasSafe)} />}
     >
       {jsonLd && (
         <script

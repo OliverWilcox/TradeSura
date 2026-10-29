@@ -5,6 +5,7 @@ import { track } from "@/lib/track";
 import { CustomerShell } from "@/components/shells";
 import { SignupTiers } from "@/components/signup-tiers";
 import { clauseLine } from "@/lib/clauses";
+import { TrustLine } from "@/components/verified-badge";
 
 export default async function SignupPage({
   params,
@@ -49,7 +50,7 @@ export default async function SignupPage({
     <CustomerShell
       tradingName={brand}
       legalLine={tradingNameOf(plan.engineer)}
-      sub={plan.engineer.gasSafeVerifiedAt ? "Gas Safe verified · Backed by TradeSura" : "Backed by TradeSura"}
+      sub={<TrustLine verified={Boolean(plan.engineer.gasSafeVerifiedAt)} />}
     >
       <p className="text-sm">
         Hi {plan.customer.firstName} — pick the plan that suits you. The monthly price you see is
