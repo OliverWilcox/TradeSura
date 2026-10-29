@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Button } from "@/components/ui";
 import { AddressLookupField, type AddressValue } from "@/components/address-lookup";
 import { MonthPicker } from "@/components/month-picker";
+import { CustomerAdded } from "@/components/customer-added";
 import { normaliseUkMobile } from "@/lib/validate";
 
 // Thumb-sized (29 Sept review, systemic defect 4); size-only text class —
@@ -89,33 +90,19 @@ export default function AddCustomer() {
 
   if (saved) {
     return (
-      <View className="flex-1 items-center justify-center gap-4 bg-panel px-8">
-        <Text className="text-center text-xl font-extrabold text-ink">
-          {firstName} is in your book
-        </Text>
-        <Text className="text-center text-sm text-muted">
-          No plan sent yet — offer one any time from Customers.
-        </Text>
-        <View className="w-full gap-2">
-          <Button
-            onPress={() => {
-              setSaved(false);
-              setFirstName("");
-              setLastName("");
-              setPhone("");
-              setEmail("");
-              setOwnCustomer(false);
-              setAddress({ line1: "", town: "", postcode: "" });
-              setLastServiced(null);
-            }}
-          >
-            Add another
-          </Button>
-          <Button variant="ghost" onPress={() => router.replace("/(tabs)/(customers)/customers")}>
-            Back to Customers
-          </Button>
-        </View>
-      </View>
+      <CustomerAdded
+        firstName={firstName}
+        onAnother={() => {
+          setSaved(false);
+          setFirstName("");
+          setLastName("");
+          setPhone("");
+          setEmail("");
+          setOwnCustomer(false);
+          setAddress({ line1: "", town: "", postcode: "" });
+          setLastServiced(null);
+        }}
+      />
     );
   }
 
