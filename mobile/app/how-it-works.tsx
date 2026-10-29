@@ -67,7 +67,7 @@ const WHY: { icon: IconName; badge?: IconName; title: string; line: string }[] =
   { icon: "referral", title: "Keep your customers", line: "They call you, not the next engineer on Google" },
   { icon: "calendar", badge: "coin", title: "Steady income all year", line: "Plan payments keep coming, even in quiet months" },
   { icon: "reminders", title: "Repeat work, automatically", line: "We remind your customers when they're due" },
-  { icon: "boiler", badge: "verified", title: "Protect their warranty", line: "Many manufacturers require an annual service" },
+  { icon: "boiler", badge: "verified", title: "Keep their warranty valid", line: "Many manufacturers require an annual service" },
 ];
 
 const HARD_BITS = [
@@ -80,10 +80,11 @@ const HARD_BITS = [
 ];
 
 const PACK: { icon: IconName; label: string }[] = [
-  { icon: "van", label: "Sticker" },
-  { icon: "booklet", label: "Playbook" },
+  { icon: "van", label: "Van stickers" },
+  { icon: "home", label: "Window sticker" },
+  { icon: "booklet", label: "Quick-start booklet" },
   { icon: "leaflets", label: "Leaflets" },
-  { icon: "cards", label: "Cards" },
+  { icon: "qr", label: "QR labels" },
 ];
 
 const SCRIPT =
@@ -415,7 +416,7 @@ export default function HowItWorks() {
             {PACK.map((p) => (
               <View key={p.label} className="flex-1 items-center gap-1.5">
                 <Icon name={p.icon} size={26} color={BLUE} />
-                <Text className="text-[12.5px] text-white">{p.label}</Text>
+                <Text className="text-center text-[12px] leading-[15px] text-white">{p.label}</Text>
               </View>
             ))}
           </View>
