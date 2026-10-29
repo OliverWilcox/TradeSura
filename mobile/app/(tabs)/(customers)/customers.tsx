@@ -5,6 +5,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { offerLock } from "@/lib/offer-lock";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 import { AppHeader, Card, Pill, Button, ScreenTitle, SectionHeading } from "@/components/ui";
 
@@ -107,6 +108,8 @@ export default function Customers() {
   const [importConsent, setImportConsent] = useState(false);
   const [salesByEngineer, setSalesByEngineer] = useState<{ name: string; plans: number }[] | null>(null);
   const { me } = useAuth();
+  // Review 4 — Offer buttons look locked while offers are, and say why.
+  const lock = offerLock(me);
   const isStaff = me?.role === "staff";
 
   const load = useCallback(async () => {
@@ -213,6 +216,7 @@ export default function Customers() {
           </View>
         )}
         <ScreenTitle title="Customers" intro="Your book. Offer a plan to anyone who isn't on one yet." />
+        {lock && <Text className="-mt-1.5 font-sans text-xs text-warn">Offers: {lock.reason}</Text>}
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
         {tabs.length > 0 && (
@@ -259,6 +263,7 @@ export default function Customers() {
                   <Button
                     variant="flame"
                     className="px-3 py-1.5"
+                    disabled={!!lock}
                     onPress={() =>
                       router.push({ pathname: "/offer", params: { customerId: c.id } })
                     }

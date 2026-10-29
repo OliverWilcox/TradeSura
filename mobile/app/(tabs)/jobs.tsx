@@ -4,6 +4,7 @@ import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { offerLock } from "@/lib/offer-lock";
 import { AppHeader, Card, Micro, Pill, Button, ScreenTitle, SectionHeading } from "@/components/ui";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 
@@ -90,11 +91,14 @@ function JobRow({
   urgent,
   onOffer,
   offerBusy,
+  lockReason,
 }: {
   d: DueItem;
   urgent: boolean;
   onOffer?: () => void;
   offerBusy?: boolean;
+  /** Review 4 — offers are locked: grey the button and say why. */
+  lockReason?: string;
 }) {
   return (
     <Pressable
@@ -118,8 +122,8 @@ function JobRow({
             {reminderLine(new Date(d.dueDate))}
           </Text>
         ) : (
-          <Text className="mt-0.5 font-sans text-[11px] text-muted">
-            Book it — and offer the plan at the perfect moment.
+          <Text className={`mt-0.5 font-sans text-[11px] ${onOffer && lockReason ? "text-warn" : "text-muted"}`}>
+            {onOffer && lockReason ? lockReason : "Book it — and offer the plan at the perfect moment."}
           </Text>
         )}
       </View>
@@ -128,7 +132,7 @@ function JobRow({
       ) : d.onPlan ? (
         <Pill tone="info">AUTO</Pill>
       ) : onOffer ? (
-        <Button variant="flame" className="px-3 py-1.5" onPress={onOffer} disabled={offerBusy}>
+        <Button variant="flame" className="px-3 py-1.5" onPress={onOffer} disabled={offerBusy || !!lockReason}>
           {offerBusy ? "…" : "Book + offer"}
         </Button>
       ) : (
@@ -171,6 +175,7 @@ function JobsSkeleton() {
 
 export default function Jobs() {
   const { me } = useAuth();
+  const lock = offerLock(me);
   const [data, setData] = useState<JobsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -256,6 +261,7 @@ export default function Jobs() {
                     urgent
                     onOffer={d.onPlan ? undefined : () => sendReminder(d.customerId)}
                     offerBusy={reminding === d.customerId}
+                    lockReason={lock?.reason}
                   />
                 ))}
               </Card>
@@ -285,6 +291,7 @@ export default function Jobs() {
                     urgent={d.hasCp12 && new Date(d.dueDate) <= soon}
                     onOffer={d.onPlan ? undefined : () => sendReminder(d.customerId)}
                     offerBusy={reminding === d.customerId}
+                    lockReason={lock?.reason}
                   />
                 ))
               )}
@@ -346,7 +353,7 @@ export default function Jobs() {
             {/* Build Review 2 — nothing to offer (no live plan) or no one to
                 offer it to: grey it out and point at setup, like the other
                 locked buttons. */}
-            {me?.hasPlan && (me?.customerCount ?? 0) > 0 ? (
+            {me?.hasPlan && (me?.customerCount ?? 0) > 0 && !lock ? (
               <Button variant="copper" onPress={() => router.push("/offer")}>
                 Offer a plan to a no-plan customer
               </Button>
@@ -355,7 +362,9 @@ export default function Jobs() {
                 <Button variant="copper" disabled onPress={() => {}}>
                   Offer a plan to a no-plan customer
                 </Button>
-                {me?.role === "staff" ? (
+                {me?.hasPlan && lock ? (
+                  <Text className="text-center font-sans text-xs text-warn">{lock.reason}</Text>
+                ) : me?.role === "staff" ? (
                   <Text className="text-center font-sans text-xs text-muted">
                     {me?.hasPlan ? "Add a customer first." : "The business has no live plan yet — ask the owner."}
                   </Text>

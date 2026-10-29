@@ -8,6 +8,8 @@ import { Skeleton, Bone, TextBone, RowBone } from "@/components/skeleton";
 import { CancelSaveCard } from "@/components/cancel-save-card";
 import { PassportSection } from "@/components/passport-section";
 import { formatPounds } from "@/lib/earnings";
+import { useAuth } from "@/lib/auth-context";
+import { offerLock } from "@/lib/offer-lock";
 
 type Detail = {
   id: string;
@@ -65,6 +67,9 @@ function month(iso: string) {
 
 export default function CustomerDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { me } = useAuth();
+  // Review 4 — the Offer button looks locked while offers are, and says why.
+  const lock = offerLock(me);
   const [c, setC] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -266,11 +271,15 @@ export default function CustomerDetail() {
             </View>
           </Card>
         ) : (
-          <Button
-            onPress={() => router.push({ pathname: "/offer", params: { customerId: c.id } })}
-          >
-            Offer a plan
-          </Button>
+          <View className="gap-1.5">
+            <Button
+              disabled={!!lock}
+              onPress={() => router.push({ pathname: "/offer", params: { customerId: c.id } })}
+            >
+              Offer a plan
+            </Button>
+            {lock && <Text className="text-center font-sans text-xs text-warn">{lock.reason}</Text>}
+          </View>
         )}
 
         {/* Part 10 — Service card: Last service / Next due with a red
