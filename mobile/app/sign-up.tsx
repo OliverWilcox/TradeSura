@@ -827,7 +827,7 @@ export default function SignUp() {
     const noErr = checkGasSafeNo(gasSafeNo);
     let cardErr: string | null = null;
     if (card.phase === "empty" || card.phase === "denied") {
-      cardErr = "Add a photo of your ID card — or tap “I'll add it later”.";
+      cardErr = "Add a photo of your ID card — or tap “I'll add the photo later”.";
     } else if (card.phase === "uploading") {
       cardErr = "Your photo is still uploading — one moment.";
     } else if (card.phase === "failed") {
@@ -1495,7 +1495,7 @@ export default function SignUp() {
                   <PrimaryButton label="Continue" onPress={continueStep2} busy={step2Busy} />
                   <Pressable onPress={skipCard} className="mt-2 items-center py-2.5">
                     <Text className="text-[13.5px] text-white/60">
-                      I&apos;ll add it later — you can still build your plans
+                      I&apos;ll add the photo later — you can still build your plans
                     </Text>
                   </Pressable>
                 </>
