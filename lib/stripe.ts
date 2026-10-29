@@ -759,6 +759,7 @@ export type PayoutSummary = {
   pendingPence: number;
   availablePence: number;
   bankLast4: string | null;
+  bankName: string | null;
   nextPayout: { amountPence: number; arrivalDate: string; status: string } | null;
   history: { id: string; amountPence: number; arrivalDate: string; status: string }[];
 };
@@ -772,7 +773,7 @@ export async function getPayoutSummary(accountId: string): Promise<PayoutSummary
     stripe.accounts.retrieve(accountId),
   ]);
   const extBank = account.external_accounts?.data.find((a) => a.object === "bank_account") as
-    | { last4?: string }
+    | { last4?: string; bank_name?: string | null }
     | undefined;
   const gbp = (rows: { amount: number; currency: string }[]) =>
     rows.filter((r) => r.currency === "gbp").reduce((s, r) => s + r.amount, 0);
@@ -782,6 +783,7 @@ export async function getPayoutSummary(accountId: string): Promise<PayoutSummary
     pendingPence: gbp(balance.pending),
     availablePence: gbp(balance.available),
     bankLast4: extBank?.last4 ?? null,
+    bankName: extBank?.bank_name ?? null,
     nextPayout: upcoming
       ? {
           amountPence: upcoming.amount,

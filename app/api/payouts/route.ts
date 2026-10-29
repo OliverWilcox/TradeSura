@@ -3,7 +3,13 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { activeMonthlyPence, collectionsSince, payoutWeekStart } from "@/lib/plans";
 import { appFeePence } from "@/lib/clauses";
-import { getPayoutSummary, stripeConfigured, type PayoutSummary } from "@/lib/stripe";
+import {
+  getConnectAccountStatus,
+  getPayoutSummary,
+  stripeConfigured,
+  stripeSetupState,
+  type PayoutSummary,
+} from "@/lib/stripe";
 import { standingCopy, paymentsStatus } from "@/lib/verification-state";
 
 // E11 — Payouts & collections. When the engineer's Stripe account is live this
@@ -66,6 +72,23 @@ export async function GET() {
     }
   }
 
+  // Review 4 — show Stripe's in-review state here too, not "needs more
+  // information", when nothing is due from the engineer.
+  let live = null;
+  if (
+    stripeConfigured() &&
+    engineer.stripeAccountId &&
+    engineer.stripeDetailsSubmitted &&
+    !(engineer.stripeChargesEnabled && engineer.stripePayoutsEnabled)
+  ) {
+    live = await getConnectAccountStatus(engineer.stripeAccountId).catch(() => null);
+  }
+  const stripeState = stripeSetupState(engineer, live);
+  const payments =
+    stripeState === "checking"
+      ? { tone: "amber" as const, text: "In review · Stripe usually confirms within 24 hours. Payouts start once it's done." }
+      : paymentsStatus(engineer);
+
   return NextResponse.json({
     totalPence,
     count,
@@ -78,6 +101,8 @@ export async function GET() {
     week,
     referralBonusPence,
     bankLast4: stripe?.bankLast4 ?? null,
+    bankName: stripe?.bankName ?? null,
+    stripeState,
     stripe,
     stripeError,
     accountRestricted: Boolean(engineer.stripeAccountId) && !engineer.stripeChargesEnabled,
@@ -86,7 +111,7 @@ export async function GET() {
     // covers banned/paused (genuinely red); `payments` covers Stripe
     // specifically (amber while mid-onboarding).
     standing: standingCopy(engineer),
-    payments: paymentsStatus(engineer),
+    payments,
     failedPlans: failedPlans.map((p) => ({
       id: p.id,
       customerName: `${p.customer.firstName} ${p.customer.lastName}`,

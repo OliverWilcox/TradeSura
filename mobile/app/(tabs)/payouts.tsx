@@ -31,6 +31,8 @@ type PayoutsData = {
   week: Collections;
   referralBonusPence: number;
   bankLast4: string | null;
+  bankName?: string | null;
+  stripeState?: "none" | "half" | "needs_more" | "checking" | "ready";
   stripe: StripeSummary | null;
   stripeError: boolean;
   accountRestricted: boolean;
@@ -166,7 +168,16 @@ export default function Payouts() {
             <Text className="font-semibold text-sm text-danger">{data.standing.text}</Text>
           </Card>
         )}
-        {data && data.payments.tone === "amber" && data.standing.state !== "BANNED" && data.standing.state !== "PAUSED" && (
+        {/* Review 4 — Stripe checking: nothing to do, so not a link. */}
+        {data && data.stripeState === "checking" && data.standing.state !== "BANNED" && data.standing.state !== "PAUSED" && (
+          <Card className="border-warn-tint bg-warn-tint">
+            <Text className="font-semibold text-sm text-warn">In review · usually 24 hours</Text>
+            <Text className="mt-0.5 font-sans text-xs text-muted">
+              Stripe is checking your details. Nothing to do — payouts start once it&apos;s done.
+            </Text>
+          </Card>
+        )}
+        {data && data.stripeState !== "checking" && data.payments.tone === "amber" && data.standing.state !== "BANNED" && data.standing.state !== "PAUSED" && (
           <Pressable onPress={() => router.push("/more")}>
             <Card className="border-warn-tint bg-warn-tint">
               <Text className="font-semibold text-sm text-warn">{data.payments.text}</Text>
@@ -205,7 +216,7 @@ export default function Payouts() {
                     this state — the balance line used to take priority over
                     `data.count === 0` here). */}
                 {data.count === 0
-                  ? "Payouts start when your first plan goes live — paid every Friday."
+                  ? "Payouts start when your first customer pays — paid every Friday."
                   : "This week's cleared collections — your 80%, paid direct to your bank."}
               </Text>
               {s && data.count > 0 && (
@@ -255,7 +266,15 @@ export default function Payouts() {
                 }
               />
               {data.bankLast4 && (
-                <RowLine left="Bank" right={<Text className="tabular-nums">···{data.bankLast4}</Text>} />
+                <RowLine
+                  left="Paid into"
+                  right={
+                    <Text className="text-sm text-ink">
+                      {data.bankName ? `${data.bankName} · ` : ""}account ending{" "}
+                      <Text className="tabular-nums font-semibold">{data.bankLast4}</Text>
+                    </Text>
+                  }
+                />
               )}
             </Card>
 
@@ -292,14 +311,18 @@ export default function Payouts() {
                       <Text className="font-bold text-sm text-ink">
                         {p.customerName} · <Text className="tabular-nums">{pounds(p.priceMonthlyPence)}</Text>
                       </Text>
-                      <Micro>STRIPE RETRIES AUTOMATICALLY</Micro>
+                      <Micro>RESCUE LINK SENT · REMINDERS DAY 3 AND 7</Micro>
                     </View>
-                    <Pill tone="warn">AUTO</Pill>
+                    <Pill tone="warn">ON HOLD</Pill>
                   </View>
                 ))
               )}
               <Text className="mt-1.5 font-sans text-xs text-muted">
-                Smart retries run automatically; most failures recover themselves.
+                {/* Review 4 — say what actually happens (lib/plan-billing.ts
+                    startPaymentRescue / endUnpaidPlans), not "smart retries". */}
+                When a payment fails we text and email the customer a one-tap link, from you, to set up their
+                Direct Debit again, with reminders on day 3 and day 7. Their service booking is on hold until
+                it&apos;s paid, you get an alert, and the plan ends if it&apos;s still unpaid after 14 days.
               </Text>
             </Card>
 
