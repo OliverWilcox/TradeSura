@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { brandName } from "@/lib/engineer";
 import { activeMonthlyPence, collectionsSince, payoutWeekStart } from "@/lib/plans";
-import { dueServices } from "@/lib/reminders";
+import { dueServices, REMINDER_OFFSETS_DAYS } from "@/lib/reminders";
 import { getPayoutSummary, stripeConfigured } from "@/lib/stripe";
 import { referralRatePercent } from "@/lib/referral";
 import { recentEmergencyCount } from "@/lib/emergencies";
@@ -84,8 +84,11 @@ export async function GET() {
   const prizeYearlyPence = Math.round((noPlan / 5) * avgPence * 12);
 
   const now = new Date();
+  // Home's "Today" card: only services inside the first reminder window, not
+  // every future anniversary (a job serviced last month isn't "due").
+  const soon = new Date(now.getTime() + REMINDER_OFFSETS_DAYS[0] * 86_400_000);
   const upcoming = (await dueServices(engineerId))
-    .filter((d) => d.dueDate >= now)
+    .filter((d) => d.dueDate >= now && d.dueDate <= soon)
     .slice(0, 3)
     .map((d) => ({ ...d, dueDate: d.dueDate.toISOString() }));
 
