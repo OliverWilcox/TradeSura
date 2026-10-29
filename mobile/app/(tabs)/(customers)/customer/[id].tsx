@@ -58,6 +58,11 @@ function d(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "Europe/London" });
 }
 
+// Last service is picked as a month, so service dates show "Oct 2027".
+function month(iso: string) {
+  return new Date(iso).toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "Europe/London" });
+}
+
 export default function CustomerDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [c, setC] = useState<Detail | null>(null);
@@ -275,7 +280,7 @@ export default function CustomerDetail() {
           <Card>
             <Micro className="mb-1">Service</Micro>
             {c.appliance?.lastServicedAt && (
-              <RowLine left="Last service" right={d(c.appliance.lastServicedAt)} />
+              <RowLine left="Last service" right={month(c.appliance.lastServicedAt)} />
             )}
             {c.nextServiceDue && (
               <RowLine
@@ -284,7 +289,7 @@ export default function CustomerDetail() {
                   c.serviceOverdue ? (
                     <Pill tone="danger">OVERDUE</Pill>
                   ) : (
-                    <Text className="tabular-nums text-sm text-ink">{d(c.nextServiceDue)}</Text>
+                    <Text className="tabular-nums text-sm text-ink">{month(c.nextServiceDue)}</Text>
                   )
                 }
               />

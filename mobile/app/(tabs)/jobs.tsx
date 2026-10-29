@@ -107,8 +107,10 @@ function JobRow({
           {d.onPlan ? `ANNUAL SERVICE · ${d.tierName?.toUpperCase()} PLAN` : "ANNUAL SERVICE · NO PLAN"}
           {d.hasCp12 && " · CP12"}
           {" · "}
+          {/* Review 4 — month and year only: last service is picked as a month,
+              and a bare "01 OCT" read as this October, not next year's. */}
           {new Date(d.dueDate)
-            .toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "Europe/London" })
+            .toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "Europe/London" })
             .toUpperCase()}
         </Micro>
         {d.onPlan ? (
