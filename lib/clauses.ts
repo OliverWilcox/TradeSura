@@ -294,6 +294,7 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     upliftPence: 200,
     bodyText:
       "When we attend a visit you request under this plan, our usual attendance charge is waived. This is not a promise to attend at any particular time. Labour and parts for any work carried out remain chargeable at the rates shown in your plan.",
+    note: "your attendance charge is waived when we attend",
     engineerNote: "your attendance charge is waived when you attend",
   },
 
