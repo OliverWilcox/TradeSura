@@ -173,6 +173,12 @@ type PersonCreateParams = NonNullable<Parameters<Stripe["v2"]["core"]["accounts"
 
 const MCC = "1711"; // Heating, plumbing, air-conditioning contractors
 
+// Review 4, P2 — Stripe's "what do you sell" answer states how and when
+// customers pay. Accounts pre-filled with the earlier line get this one.
+const OLD_PRODUCT_DESCRIPTION = "Monthly gas boiler care plans sold to the engineer's own customers.";
+const PRODUCT_DESCRIPTION =
+  "Monthly gas boiler care plans sold to the engineer's own customers. Customers pay monthly by Direct Debit; first payment after a 14-day cooling-off period.";
+
 // Everything we can send, verified against the installed SDK's v2 types
 // (stripe@22.6.0, V2/Core/Accounts.d.ts AccountCreateParams). Fields we
 // don't know stay unset so Stripe asks for them.
@@ -250,7 +256,7 @@ function prefillParams(e: ConnectEngineer) {
       // it's what Stripe otherwise flags as "provide a business website".
       business_url: profileUrl(e.slug),
       doing_business_as: e.tradingName?.trim() || undefined,
-      product_description: "Monthly gas boiler care plans sold to the engineer's own customers.",
+      product_description: PRODUCT_DESCRIPTION,
     },
     merchant: {
       mcc: MCC,
@@ -285,7 +291,7 @@ function baseCreateParams(e: ConnectEngineer): Stripe.V2.Core.AccountCreateParam
       responsibilities: { fees_collector: "application", losses_collector: "application" },
       profile: {
         business_url: profileUrl(e.slug),
-        product_description: "Monthly gas boiler care plans sold to the engineer's own customers.",
+        product_description: PRODUCT_DESCRIPTION,
       },
     },
     configuration: {
@@ -397,7 +403,10 @@ export async function prefillConnectAccount(accountId: string, engineer: Connect
         contact_phone: missingOnly(q.contact_phone, a.contact_phone),
         display_name: missingOnly(q.display_name, a.display_name),
         identity: entityMismatch ? undefined : missingOnly(q.identity, a.identity),
-        defaults: missingOnly({ profile: q.profile }, a.defaults),
+        defaults:
+          a.defaults?.profile?.product_description === OLD_PRODUCT_DESCRIPTION
+            ? { profile: { ...(missingOnly(q.profile, a.defaults.profile) as object), product_description: PRODUCT_DESCRIPTION } }
+            : missingOnly({ profile: q.profile }, a.defaults),
         configuration: missingOnly({ merchant: q.merchant }, a.configuration),
       };
       return Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
