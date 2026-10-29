@@ -53,18 +53,21 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
   // The mock-up's "WhatsApp us on …" line — set SUPPORT_WHATSAPP to show it.
   const whatsapp = process.env.SUPPORT_WHATSAPP?.trim();
 
-  // The app's seven setup steps, in the Getting started hub's order
-  // (mobile/lib/setup-steps.ts), so the email and the app count the same.
-  const items: Item[] = [
+  // The app's Getting started hub (mobile/lib/setup-steps.ts, Review 4):
+  // three Go live steps that count, then the optional Grow steps. A tick
+  // only for something actually done.
+  const goLive: Item[] = [
     { done: liveTiers > 0, title: "Build your first plan", hint: `start from Boiler Care at ${examplePounds}` },
-    { done: e.stripeChargesEnabled, title: "Get paid", hint: "about 3 minutes with Stripe" },
+    { done: Boolean(e.gasSafeVerifiedAt), title: "Gas Safe check", hint: e.gasSafeCardUrl ? "your number and ID photo are in, we're checking them" : "add a photo of your Gas Safe ID card" },
+    { done: e.stripeChargesEnabled && e.stripePayoutsEnabled, title: "Get paid", hint: "about 3 minutes with Stripe" },
+  ];
+  const grow: Item[] = [
     { done: Boolean(e.profilePublishedAt), title: "Get found on Google", hint: "your free profile page" },
     { done: Boolean(e.websiteConnectedAt), title: "Connect your website", hint: "sell plans there too" },
     { done: customerCount > 0, title: "Bring in your customers", hint: `each one worth up to ${wholePounds(perCustomer)} a year to you` },
     { done: Boolean(e.inviteSharedAt) || referralCount > 0, title: "Invite engineers you know", hint: `earn ${REFERRAL_FIRST_YEAR_PERCENT}% of our fee on their plans` },
-    { done: Boolean(e.packRequestedAt), title: "Member pack", hint: "posts once your Gas Safe check is done" },
   ];
-  const doneCount = items.filter((i) => i.done).length;
+  const doneCount = goLive.filter((i) => i.done).length;
 
   const rows = `
   <tr><td bgcolor="${EMAIL.navy}" style="background:${EMAIL.navy};padding:4px 32px 30px;">
@@ -82,11 +85,16 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
   </td></tr>
 
   <tr><td style="padding:22px 32px 4px;">
-    <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${EMAIL.blue};text-transform:uppercase;">Your setup · ${doneCount} of ${items.length} done</div>
-    <div style="font-size:13px;color:${EMAIL.muted};padding:4px 0 10px;">About 10 minutes in total. Pick up where you left off any time.</div>
+    <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${EMAIL.blue};text-transform:uppercase;">Go live · ${doneCount} of ${goLive.length} done</div>
+    <div style="font-size:13px;color:${EMAIL.muted};padding:4px 0 10px;">Three steps and you can take customers. About 5 minutes.</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:15px;line-height:21px;color:${EMAIL.ink};">
-      ${items.map((it, i) => checklistRow(it, i === items.length - 1)).join("")}
+      ${goLive.map((it, i) => checklistRow(it, i === goLive.length - 1)).join("")}
     </table>
+    <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${EMAIL.blue};text-transform:uppercase;padding-top:18px;">Grow · any time</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:15px;line-height:21px;color:${EMAIL.ink};padding-top:6px;">
+      ${grow.map((it, i) => checklistRow(it, i === grow.length - 1)).join("")}
+    </table>
+    <div style="font-size:13px;color:${EMAIL.muted};padding-top:12px;"><b style="color:${EMAIL.ink};">Your member pack</b> · ${e.packShippedAt ? "posted, arrives in 2–3 days" : "posts when your Verified Member badge goes live"}</div>
   </td></tr>
 
   <tr><td align="center" style="padding:22px 32px 8px;">
@@ -142,7 +150,7 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
     subject: `Welcome to TradeSura, ${e.firstName || "there"}`,
     html: emailShell({
       title: `Welcome to TradeSura, ${e.firstName || "there"}`,
-      preheader: "Your free account is ready. Build your first plan and set up payments in about 10 minutes.",
+      preheader: "Your free account is ready. Three steps and you can take customers, about 5 minutes.",
       rows,
       footerExtra,
     }),

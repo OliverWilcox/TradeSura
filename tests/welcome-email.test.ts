@@ -56,14 +56,23 @@ describe("welcome email (Build Review 3, P1)", () => {
     expect(html).toContain("company no. 17325346");
   });
 
-  it("lists the app's 7 setup steps in the hub's order, with an Outlook-safe button", async () => {
+  it("never ticks the Gas Safe check or Get paid before they're really done", async () => {
+    m.engineer.mockResolvedValue({ ...engineer, gasSafeCardUrl: "https://x/card.jpg", stripeChargesEnabled: true, stripePayoutsEnabled: false });
+    const { html } = await engineerWelcomeEmailHtml("e1");
+    expect(html).toContain("Go live · 0 of 3 done");
+    expect(html).toContain("<b>Gas Safe check</b>");
+    expect(html).toContain("we're checking them");
+  });
+
+  it("lists the hub's Go live then Grow steps in order, with an Outlook-safe button", async () => {
     m.engineer.mockResolvedValue(engineer);
     const { html } = await engineerWelcomeEmailHtml("e1");
-    const order = ["Build your first plan", "Get paid", "Get found on Google", "Connect your website", "Bring in your customers", "Invite engineers you know", "Member pack"];
+    const order = ["Build your first plan", "Gas Safe check", "Get paid", "Get found on Google", "Connect your website", "Bring in your customers", "Invite engineers you know"];
     const at = order.map((t) => html.indexOf(`<b>${t}</b>`));
     expect(at.every((i) => i > 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
-    expect(html).toContain("0 of 7 done");
+    expect(html).toContain("Go live · 0 of 3 done");
+    expect(html).toContain("Your member pack</b> · posts when your Verified Member badge goes live");
     expect(html).toContain("<v:roundrect");
     expect(html).not.toContain("Gas Safe verified");
   });
