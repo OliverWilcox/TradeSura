@@ -21,7 +21,7 @@ export const EMAIL = {
 // Where replies to TradeSura's own emails land (Build Review 3, P2
 // "Mailboxes" — a person keeps this inbox monitored). EMAIL_REPLY_TO
 // overrides it per environment.
-export const SUPPORT_EMAIL = "support@tradesura.com";
+export const SUPPORT_EMAIL = "info@tradesura.com";
 
 export const COMPANY_LINE =
   "TradeSura Ltd, registered in England and Wales, company no. 17325346. Registered office: Unit A3, Gateway Tower, 32 Western Gateway, London E16 1YL.";

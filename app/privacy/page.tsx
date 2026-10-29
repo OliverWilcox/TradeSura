@@ -20,7 +20,7 @@ export default function Page() {
           finalised with our solicitor and will be published here before launch.
         </p>
         <p className="mt-4 leading-7">
-          Questions in the meantime: support@tradesura.com
+          Questions in the meantime: info@tradesura.com
         </p>
       </main>
     </>

@@ -22,7 +22,7 @@ export default function Page() {
           to every customer on it. Each plan&apos;s services are described in the plan document the
           customer receives when they join.
         </p>
-        <p className="mt-4 leading-7">Questions: support@tradesura.com</p>
+        <p className="mt-4 leading-7">Questions: info@tradesura.com</p>
       </main>
     </>
   );
