@@ -11,6 +11,7 @@ import {
   cleanRates,
   isPlaceholderName,
   serviceRuleError,
+  tierCanBeDeleted,
   withRequiredClauses,
 } from "@/lib/clauses";
 
@@ -166,8 +167,8 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
   });
 }
 
-// Delete exists only for drafts that never went live (Part 7.2 LAW). A plan
-// that ever had a customer can be stopped, never deleted.
+// Review 4 — a plan that never had a customer (draft or live) can be
+// deleted; one that ever had a customer can be stopped, never deleted.
 export async function DELETE(req: Request, ctx: { params: Promise<{ tierId: string }> }) {
   const engineerId = await getEngineerId();
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
@@ -178,7 +179,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ tierId: stri
     include: { _count: { select: { plans: true } } },
   });
   if (!tier) return NextResponse.json({ error: "Plan not found." }, { status: 404 });
-  if (tier.status !== "DRAFT" || tier._count.plans > 0) {
+  if (!tierCanBeDeleted(tier._count.plans)) {
     return NextResponse.json(
       { error: "A plan that's ever had a customer can be stopped, never deleted." },
       { status: 409 },

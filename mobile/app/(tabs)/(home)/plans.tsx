@@ -6,6 +6,8 @@ import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Pill, Tick, Button, ScreenTitle } from "@/components/ui";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 import { formatPounds } from "@/lib/earnings";
+import { useAuth } from "@/lib/auth-context";
+import { offerLock, readyLabel } from "@/lib/offer-lock";
 
 type Tier = {
   id: string;
@@ -13,6 +15,8 @@ type Tier = {
   priceMonthlyPence: number;
   status: "DRAFT" | "LIVE" | "STOPPED";
   clauseTitles: string[];
+  /** Review 4 — with the small print ("after the customer's 3rd payment"). */
+  clauseLines?: { title: string; note: string | null }[];
   activePlanCount: number;
 };
 
@@ -59,6 +63,8 @@ function PlansSkeleton() {
 // or live), this is the room every door lands on, forever after.
 export default function PlansHub() {
   const { from } = useLocalSearchParams<{ from?: string }>();
+  const { me } = useAuth();
+  const lock = offerLock(me ? { ...me, hasPlan: true } : me);
   const [tiers, setTiers] = useState<Tier[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -135,7 +141,9 @@ export default function PlansHub() {
 
         {tiers.map((t) => {
           const fee = Math.floor(t.priceMonthlyPence * FEE_RATE); // rounded down, engineer's favour
-          const pill = STATUS_PILL[t.status];
+          const pill =
+            t.status === "LIVE" && lock ? { tone: "info" as const, label: () => readyLabel(lock) } : STATUS_PILL[t.status];
+          const lines = t.clauseLines ?? t.clauseTitles.map((title) => ({ title, note: null }));
           return (
             <Card key={t.id}>
               <View className="flex-row items-baseline justify-between">
@@ -149,10 +157,13 @@ export default function PlansHub() {
                 You keep £{((t.priceMonthlyPence - fee) / 100).toFixed(2)} a month per customer.
               </Text>
               <View className="mt-2.5 gap-1">
-                {t.clauseTitles.map((line) => (
-                  <View key={line} className="flex-row items-start gap-2">
+                {lines.map((line) => (
+                  <View key={line.title} className="flex-row items-start gap-2">
                     <Tick size={12} />
-                    <Text className="flex-1 text-[14px] text-ink">{line}</Text>
+                    <View className="flex-1">
+                      <Text className="text-[14px] text-ink">{line.title}</Text>
+                      {line.note ? <Text className="text-[12.5px] text-muted">{line.note}</Text> : null}
+                    </View>
                   </View>
                 ))}
               </View>

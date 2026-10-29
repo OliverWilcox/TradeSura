@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Pill, RowLine, Chevron, Button } from "@/components/ui";
 import { Skeleton, Bone, RowBone } from "@/components/skeleton";
 import { formatPounds } from "@/lib/earnings";
+import { offerLock, readyLabel } from "@/lib/offer-lock";
 
 // Build Guide v2 Part 7.4 — "Edit plan": three rows, each opening its wizard
 // step pre-filled, plus the stop/start toggle. This screen is a menu into
@@ -26,7 +27,7 @@ const STATUS_PILL: Record<TierDetail["status"], { tone: "info" | "off"; label: (
 };
 
 export default function EditPlan() {
-  const { refreshMe } = useAuth();
+  const { me, refreshMe } = useAuth();
   const { tierId } = useLocalSearchParams<{ tierId: string }>();
   const [tier, setTier] = useState<TierDetail | null>(null);
   const [activePlanCount, setActivePlanCount] = useState(0);
@@ -86,7 +87,13 @@ export default function EditPlan() {
   }
 
   async function deleteDraft() {
-    Alert.alert("Delete this draft?", "It's never been offered — this can't be undone.", [
+    const draft = tier?.status === "DRAFT";
+    Alert.alert(
+      draft ? "Delete this draft?" : "Delete this plan?",
+      draft
+        ? "It's never been offered — this can't be undone."
+        : "No customer has ever joined it, so it can go. This can't be undone.",
+      [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
@@ -97,13 +104,14 @@ export default function EditPlan() {
             await api(`/api/tiers/${tierId}`, { method: "DELETE" });
             router.replace("/(tabs)/(home)/plans");
           } catch (e) {
-            setError(e instanceof ApiError ? e.message : "Couldn't delete this draft.");
+            setError(e instanceof ApiError ? e.message : "Couldn't delete this plan.");
           } finally {
             setBusy(false);
           }
         },
       },
-    ]);
+      ],
+    );
   }
 
   if (loadError) {
@@ -140,7 +148,9 @@ export default function EditPlan() {
     );
   }
 
-  const pill = STATUS_PILL[tier.status];
+  const lock = offerLock(me ? { ...me, hasPlan: true } : me);
+  const pill =
+    tier.status === "LIVE" && lock ? { tone: "info" as const, label: () => readyLabel(lock) } : STATUS_PILL[tier.status];
 
   return (
     <View className="flex-1 bg-panel">
@@ -178,7 +188,17 @@ export default function EditPlan() {
             />
           </Pressable>
           <Pressable onPress={() => openStep(3)}>
-            <RowLine left="Name" right={<Chevron />} />
+            <RowLine
+              left="Name"
+              right={
+                <View className="flex-row items-center gap-1.5">
+                  <Text className="text-sm text-ink" numberOfLines={1}>
+                    {tier.name}
+                  </Text>
+                  <Chevron />
+                </View>
+              }
+            />
           </Pressable>
         </Card>
 
@@ -204,9 +224,12 @@ export default function EditPlan() {
             Start offering again
           </Button>
         )}
-        {tier.status === "DRAFT" && !everHadCustomer && (
+        {/* Review 4 — any plan that's never had a customer can be deleted. */}
+        {!everHadCustomer && (
           <Pressable onPress={deleteDraft} disabled={busy} className="items-center py-2.5">
-            <Text className="font-sans text-sm text-danger">Delete this draft</Text>
+            <Text className="font-sans text-sm text-danger">
+              {tier.status === "DRAFT" ? "Delete this draft" : "Delete this plan"}
+            </Text>
           </Pressable>
         )}
         <Micro className="text-center">

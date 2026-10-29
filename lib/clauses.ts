@@ -390,7 +390,10 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     kind: "ADD",
     status: "SAFE",
     category: CAT_LANDLORD,
-    upliftPence: 300,
+    // Review 4 — a CP12 is a £60–£90 job on its own, so it weighs ~£5 a
+    // month in the guide price (was £3, which put Landlord Care at £14 vs
+    // Boiler Care's £13).
+    upliftPence: 500,
     bodyText:
       "One landlord gas safety record (CP12) per property in each 12-month plan period.",
   },
@@ -511,6 +514,22 @@ export function clauseLine(
   return c.note ? `${title} — ${c.note}` : title;
 }
 
+// My plans card (Review 4): the engineer sees the same small print as the
+// customer — "after the customer's 3rd payment", the attendance waiver.
+export function hubClauseLine(c: { title: string; note?: string | null; engineerNote?: string | null }): {
+  title: string;
+  note: string | null;
+} {
+  return { title: c.title, note: c.engineerNote ?? c.note ?? null };
+}
+
+// Review 4 — any plan that has never had a customer (no plan row of any
+// status, so no sign-up, offer or history hangs off it) can be deleted, live
+// or not. Once one has, it can only be stopped.
+export function tierCanBeDeleted(planCount: number): boolean {
+  return planCount === 0;
+}
+
 export function withRequiredClauses(codes: string[]): string[] {
   return [...new Set([...codes, ...REQUIRED_CLAUSE_CODES])];
 }
@@ -620,19 +639,13 @@ export const TIER_PRESETS = [
     clauseCodes: ["ANNUAL_SERVICE", "PRIORITY_48H", "ANNUAL_REMINDER", "SERVICE_HISTORY"],
   },
   {
+    // Review 4 — six options (the builder's recommended maximum), so our own
+    // preset never trips the "Over 6 options" warning. The reminder and
+    // service-history lines went: certificate storage already reminds them.
     name: "Landlord Care",
-    priceMonthlyPence: 1500,
+    priceMonthlyPence: 1600,
     isRecommended: false,
-    clauseCodes: [
-      "ANNUAL_SERVICE",
-      "PRIORITY_48H",
-      "NO_CALLOUT_FEE",
-      "SERVICE_HISTORY",
-      "ANNUAL_REMINDER",
-      "CP12",
-      "SMOKE_CO_CHECKS",
-      "CERT_STORAGE",
-    ],
+    clauseCodes: ["ANNUAL_SERVICE", "PRIORITY_48H", "NO_CALLOUT_FEE", "CP12", "SMOKE_CO_CHECKS", "CERT_STORAGE"],
   },
 ] as const;
 

@@ -53,3 +53,12 @@ export function offerLock(me: {
   }
   return null;
 }
+
+// Review 4 — a live plan nobody can join yet says "Ready · unlocks when…"
+// instead of "Live" (My plans, Edit plan).
+export function readyLabel(lock: OfferLock): string {
+  if (lock.needsGasSafe && lock.needsPayments) return "Ready · unlocks when your Gas Safe check and payments are done";
+  if (lock.needsGasSafe) return "Ready · unlocks when your Gas Safe check is done";
+  if (lock.needsPayments) return "Ready · unlocks when payments are set up";
+  return "Ready";
+}

@@ -6,6 +6,8 @@ import {
   TIER_PRICE_MIN_PENCE,
   appFeePence,
   clauseLine,
+  hubClauseLine,
+  tierCanBeDeleted,
   isLandlordPlan,
   missingRateError,
   serviceRuleError,
@@ -133,5 +135,37 @@ describe("plan service library", () => {
       if (c.note) expect(checkWording(c.note).ok, c.code).toBe(true);
       if (c.engineerNote) expect(checkWording(c.engineerNote).ok, c.code).toBe(true);
     }
+  });
+});
+
+describe("quick-start presets (Review 4)", () => {
+  const byCode = new Map(CLAUSE_TEMPLATES.map((c) => [c.code, c]));
+  const guide = (codes: readonly string[]) =>
+    suggestedPricePence(codes.map((c) => byCode.get(c)?.upliftPence ?? null));
+
+  it("never has more than the recommended 6 options", () => {
+    for (const p of TIER_PRESETS) expect(p.clauseCodes.length).toBeLessThanOrEqual(6);
+  });
+  it("only uses options that exist and are offerable", () => {
+    for (const p of TIER_PRESETS) for (const c of p.clauseCodes) expect(byCode.get(c)?.status).toBe("SAFE");
+  });
+  it("guides Landlord Care clearly above Boiler Care (the CP12 is real work)", () => {
+    const landlord = TIER_PRESETS.find((p) => p.name === "Landlord Care")!;
+    const boiler = TIER_PRESETS.find((p) => p.name === "Boiler Care")!;
+    expect(guide(landlord.clauseCodes)).toBe(1600);
+    expect(guide(boiler.clauseCodes)).toBe(1300);
+  });
+});
+
+describe("My plans and deleting a plan (Review 4)", () => {
+  it("shows the engineer's small print on the hub card", () => {
+    const annual = CLAUSE_TEMPLATES.find((c) => c.code === "ANNUAL_SERVICE")!;
+    expect(hubClauseLine(annual).note).toBe("available after the customer's 3rd payment");
+    const callout = CLAUSE_TEMPLATES.find((c) => c.code === "NO_CALLOUT_FEE")!;
+    expect(hubClauseLine(callout).note).toBe("your attendance charge is waived when you attend");
+  });
+  it("lets a plan that never had a customer be deleted, whatever its status", () => {
+    expect(tierCanBeDeleted(0)).toBe(true);
+    expect(tierCanBeDeleted(1)).toBe(false);
   });
 });
