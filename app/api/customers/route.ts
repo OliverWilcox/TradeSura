@@ -147,6 +147,10 @@ const PostBody = z.object({
   firstName: z.string().min(1).max(60),
   lastName: z.string().min(1).max(60),
   phone: z.string().min(6).max(20),
+  email: z.string().trim().email().max(200).optional(),
+  // Review 4 — the same "my own customer" tick as import. Optional so older
+  // app builds still save; the current app always sends it.
+  confirmOwn: z.literal(true).optional(),
   addressLine1: z.string().max(120).optional(),
   town: z.string().max(60).optional(),
   postcode: z.string().max(12).optional(),
@@ -186,9 +190,12 @@ export async function POST(req: Request) {
   }
   const customer = await prisma.customer.upsert({
     where: { engineerId_phone: { engineerId, phone } },
-    update: { firstName: b.firstName, lastName: b.lastName },
-    create: { engineerId, addedById, firstName: b.firstName, lastName: b.lastName, phone, source: "added" },
+    update: { firstName: b.firstName, lastName: b.lastName, ...(b.email ? { email: b.email } : {}) },
+    create: { engineerId, addedById, firstName: b.firstName, lastName: b.lastName, phone, email: b.email, source: "added" },
   });
+  if (b.confirmOwn) {
+    await track("import_consent_confirmed", { type: "ENGINEER", id: actor.actorId }, { source: "added", count: 1 });
+  }
 
   if (b.addressLine1 && b.postcode) {
     const existingProperty = await prisma.property.findFirst({ where: { customerId: customer.id } });
