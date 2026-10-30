@@ -110,7 +110,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     } else {
       await recordSave(plan.id, { reason: body.reason ?? "too_expensive", offer: "cheaper_plan", outcome: "downgraded" });
     }
-    await notifyEngineer(plan.engineerId, `${who} switched to ${tier.name} (${pounds(tier.priceMonthlyPence)} a month) instead of cancelling.`);
+    await notifyEngineer(plan.engineerId, `${who} switched to ${tier.name} (${pounds(tier.priceMonthlyPence)} a month) instead of cancelling.`, {
+      template: "plan_switched",
+      vars: [who, tier.name, pounds(tier.priceMonthlyPence)],
+    });
     return NextResponse.json({ ok: true, priceMonthlyPence: tier.priceMonthlyPence, tierName: tier.name });
   }
 
@@ -123,7 +126,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       return NextResponse.json({ error: "Couldn't pause your plan. Try again in a minute." }, { status: 502 });
     }
     await recordSave(plan.id, { reason: body.reason ?? "other", offer: "pause", outcome: "paused" });
-    await notifyEngineer(plan.engineerId, `${who} paused their plan until ${longDate(resumesAt)} instead of cancelling.`);
+    await notifyEngineer(plan.engineerId, `${who} paused their plan until ${longDate(resumesAt)} instead of cancelling.`, {
+      template: "plan_paused",
+      vars: [who, longDate(resumesAt)],
+    });
     return NextResponse.json({ ok: true, resumesAt: resumesAt.toISOString() });
   }
 
@@ -152,6 +158,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   await notifyEngineer(
     plan.engineerId,
     `${who} is moving to ${body.postcode.toUpperCase()}${when} and wants to keep their plan. Update their address in the app.`,
+    {
+      template: "customer_moving",
+      vars: [who, body.postcode.toUpperCase(), moveDate ? `on ${longDate(moveDate)}` : "date not given yet"],
+    },
   );
   await sendPushNotification(plan.engineerId, `${who} is moving`, `Keeping their plan · new postcode ${body.postcode.toUpperCase()}`, {
     url: `/customer/${plan.customerId}`,

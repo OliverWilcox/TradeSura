@@ -97,6 +97,7 @@ export async function alertEngineerOfMessage(enquiryId: string, emergency: strin
   await notifyEngineer(
     q.engineerId,
     `TradeSura: new enquiry from ${who}${back ? ` (${back})` : ""}: "${snippet}" Open the app to reply.`,
+    { template: "new_enquiry", vars: [`${who}${back ? ` (${back})` : ""}`, snippet] },
   ).catch((err) => console.error("[enquiry] engineer text failed:", err));
   const brand = brandName(q.engineer);
   await sendEmail({

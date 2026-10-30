@@ -110,7 +110,7 @@ export async function recordReferralEarning(opts: {
   if (isFirst) {
     const name = invitee.tradingName?.trim() || "Your referral";
     const body = `💷 ${name}'s first customer just paid — you now earn ${ratePercent}% of our fee on every plan they sell.`;
-    await notifyEngineer(invitee.referrerId, body);
+    await notifyEngineer(invitee.referrerId, body, { template: "referral_earning", vars: [name, String(ratePercent)] });
     await sendPushNotification(invitee.referrerId, "You're earning from a referral", body, {
       url: "/referral",
     });

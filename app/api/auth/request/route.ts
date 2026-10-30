@@ -507,6 +507,7 @@ export async function POST(req: Request) {
         await notifyEngineer(
           referrer.id,
           `👋 ${engineer.tradingName?.trim() || engineer.firstName || "Someone"} just signed up with your referral link.`,
+          { template: "referral_signed_up", vars: [engineer.tradingName?.trim() || engineer.firstName || "Someone"] },
         );
         await sendPushNotification(
           referrer.id,

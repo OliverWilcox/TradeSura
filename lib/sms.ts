@@ -7,6 +7,8 @@ import { brandName } from "@/lib/engineer";
 import type { MessageClass } from "@/lib/generated/prisma/enums";
 import { isSuppressed } from "@/lib/suppression";
 import { sendPushNotification } from "@/lib/push";
+import { sendWhatsApp, whatsappReady } from "@/lib/whatsapp";
+import { templateForFixedText, type WhatsAppMessage } from "@/lib/whatsapp-templates";
 
 // Alphanumeric sender IDs (used below for every engineer-branded send) are
 // one-way on real networks — Twilio's own STOP-keyword filtering doesn't
@@ -109,12 +111,20 @@ export async function sendVerificationCode(to: string, code: string): Promise<{ 
 // row, no STOP suffix, no quiet hours; it goes to the account holder about
 // their own account. Sent from the shared long code so it comes from a real
 // number. No-op if the engineer has no verified phone or Twilio is unset.
-export async function notifyEngineer(engineerId: string, body: string) {
+// Goes by WhatsApp instead when the installer opted in and the message's
+// template is approved (`whatsapp`, or a fixed text matched to its
+// template); a WhatsApp send that fails falls back to this text.
+export async function notifyEngineer(engineerId: string, body: string, whatsapp?: WhatsAppMessage) {
   const engineer = await prisma.engineer.findUnique({
     where: { id: engineerId },
-    select: { phone: true },
+    select: { phone: true, whatsappOptInAt: true },
   });
   if (!engineer?.phone) return;
+  const fixed = templateForFixedText(body);
+  const message = whatsapp ?? (fixed ? { template: fixed, vars: [] } : null);
+  if (engineer.whatsappOptInAt && message && whatsappReady(message.template)) {
+    if (await sendWhatsApp(engineer.phone, message)) return;
+  }
   await deliver("TradeSura", engineer.phone, body, { fromLongCode: true });
 }
 

@@ -6,6 +6,7 @@ import { uniqueSlug } from "@/lib/slug";
 import { standingCopy, gasSafeStatus, paymentsStatus } from "@/lib/verification-state";
 
 import { smsAvailable } from "@/lib/contact-verification";
+import { whatsappConfigured } from "@/lib/whatsapp";
 
 const Body = z.object({
   // Blank is allowed for a company with a Companies House name on file —
@@ -44,6 +45,10 @@ export async function GET() {
     phone: engineer.phone,
     smsSignInEnabled: engineer.smsSignInEnabled,
     smsAvailable: smsAvailable(),
+    // Installer messages on WhatsApp — the switch only shows once the
+    // automated number is set up.
+    whatsappAvailable: whatsappConfigured() && Boolean(engineer.phone),
+    whatsappUpdates: Boolean(engineer.whatsappOptInAt),
     phoneVerifiedAt: engineer.phoneVerifiedAt,
     businessType: engineer.businessType,
     companyNumber: engineer.companyNumber,

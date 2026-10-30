@@ -607,6 +607,10 @@ tap and your plan carries on as normal:</p>
     `${who}'s ${poundsLabel(amountPence)} payment didn't go through. We've texted them a link to update their bank details. A quick call from you helps.${
       plan.customer.phone ? ` ${ukPhoneDisplay(plan.customer.phone)}` : ""
     }`,
+    {
+      template: "payment_failed",
+      vars: [who, poundsLabel(amountPence), ukPhoneDisplay(plan.customer.phone) ?? "their details are in the app"],
+    },
   );
   await sendPushNotification(
     plan.engineerId,
@@ -714,7 +718,10 @@ export async function endUnpaidPlans(now = new Date()): Promise<number> {
       consentBasis: "plan-member-transactional",
       sendAfter: nextAllowedSendTime(now),
     });
-    await notifyEngineer(plan.engineerId, `${who}'s plan has ended: their payment was still unpaid after ${RESCUE_GRACE_DAYS} days.`);
+    await notifyEngineer(plan.engineerId, `${who}'s plan has ended: their payment was still unpaid after ${RESCUE_GRACE_DAYS} days.`, {
+      template: "plan_ended_unpaid",
+      vars: [who, String(RESCUE_GRACE_DAYS)],
+    });
     await sendPushNotification(plan.engineerId, "Plan ended", `${who}'s plan ended after an unpaid payment.`, {
       url: `/customer/${plan.customerId}`,
     });

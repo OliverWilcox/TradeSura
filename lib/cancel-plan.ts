@@ -209,7 +209,10 @@ export async function requestCancel(
   if (opts.source === "customer") {
     const ends = endedNow ? "Plan ended (cooling-off)" : `Plan ends ${shortDate(effectiveAt)}`;
     const line = `${who} wants to cancel · Reason: ${reasonLabel(opts.reason)} · ${ends}`;
-    await notifyEngineer(plan.engineerId, endedNow ? `${line}.` : `${line}. A quick call saves most customers.`);
+    await notifyEngineer(plan.engineerId, endedNow ? `${line}.` : `${line}. A quick call saves most customers.`, {
+      template: "cancel_requested",
+      vars: [who, reasonLabel(opts.reason), endedNow ? ends : `${ends}. A quick call saves most customers`],
+    });
     await sendPushNotification(plan.engineerId, `${who} wants to cancel`, `Reason: ${reasonLabel(opts.reason)} · ${ends}`, {
       url: `/customer/${plan.customerId}`,
     });
@@ -284,7 +287,7 @@ export async function undoCancellation(
     : { type: "ENGINEER", id: plan.engineerId }, { planId: plan.id, by });
   if (by === "customer") {
     const who = `${plan.customer.firstName} ${plan.customer.lastName}`;
-    await notifyEngineer(plan.engineerId, `${who} is keeping their plan after all.`);
+    await notifyEngineer(plan.engineerId, `${who} is keeping their plan after all.`, { template: "plan_kept", vars: [who] });
     await sendPushNotification(plan.engineerId, "Plan kept", `${who} is keeping their plan after all.`, {
       url: `/customer/${plan.customerId}`,
     });

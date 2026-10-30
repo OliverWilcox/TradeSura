@@ -78,7 +78,10 @@ export async function moveFollowUps(now = new Date()): Promise<{ leads: number; 
     if (engineer && !engineer.leftAt && !engineer.deletedAt) {
       const text = newOwnerLeadText(passport.addressLine1, r.moveDate);
       await sendPushNotification(r.engineerId, "New owner lead", text);
-      await notifyEngineer(r.engineerId, text).catch((err) => console.error("[move] lead text failed:", err));
+      const when = r.moveDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
+      await notifyEngineer(r.engineerId, text, { template: "new_owner_lead", vars: [passport.addressLine1, when] }).catch(
+        (err) => console.error("[move] lead text failed:", err),
+      );
       leads += 1;
     }
 

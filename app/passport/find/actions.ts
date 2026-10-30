@@ -45,7 +45,10 @@ export async function requestPassportAccess(formData: FormData) {
   });
   if (engineer) {
     const msg = `TradeSura: ${name} (${phone ?? contact}) asked for access to the Home Passport at ${view!.passport.addressLine1}, ${view!.passport.postcode}. Check with the homeowner before sharing anything.`;
-    await notifyEngineer(engineer.id, msg).catch(() => {});
+    await notifyEngineer(engineer.id, msg, {
+      template: "passport_access",
+      vars: [name, phone ?? contact, `${view!.passport.addressLine1}, ${view!.passport.postcode}`],
+    }).catch(() => {});
     await sendPushNotification(engineer.id, "Home Passport request", `${name} asked for access to a home you look after.`);
   }
   redirect(`${back}&sent=1`);

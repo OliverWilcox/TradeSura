@@ -34,6 +34,8 @@ type Settings = {
   companyNumber: string | null;
   legalName?: string | null;
   vatRegistered?: boolean;
+  whatsappAvailable?: boolean;
+  whatsappUpdates?: boolean;
   postcode: string | null;
   packAddress?: string | null;
   packShipped?: boolean;
@@ -167,6 +169,9 @@ function OwnerAccount() {
 
   const [vatBusy, setVatBusy] = useState(false);
   const [vatError, setVatError] = useState<string | null>(null);
+
+  const [waBusy, setWaBusy] = useState(false);
+  const [waError, setWaError] = useState<string | null>(null);
 
   const [winback, setWinback] = useState<WinbackOffer | null>(null);
   const [winbackBusy, setWinbackBusy] = useState(false);
@@ -334,6 +339,24 @@ function OwnerAccount() {
       setVatError(e instanceof ApiError ? e.message : "Couldn't save that — try again.");
     } finally {
       setVatBusy(false);
+    }
+  }
+
+  // Installer updates (new customer, cancel requests, failed payments…) by
+  // WhatsApp instead of text. Turning it on is the opt-in Meta requires.
+  async function setWhatsapp(next: boolean) {
+    if (!settings) return;
+    const prev = Boolean(settings.whatsappUpdates);
+    setSettings({ ...settings, whatsappUpdates: next });
+    setWaBusy(true);
+    setWaError(null);
+    try {
+      await api("/api/settings/whatsapp", { method: "POST", body: JSON.stringify({ enabled: next }) });
+    } catch (e) {
+      setSettings((s) => (s ? { ...s, whatsappUpdates: prev } : s));
+      setWaError(e instanceof ApiError ? e.message : "Couldn't save that — try again.");
+    } finally {
+      setWaBusy(false);
     }
   }
 
@@ -640,6 +663,26 @@ function OwnerAccount() {
             {flushResult && (
               <Text className="mt-1.5 font-semibold text-xs text-ink">{flushResult}</Text>
             )}
+          </Card>
+        )}
+
+        {settings?.whatsappAvailable && (
+          <Card>
+            <View className="flex-row items-center justify-between gap-3">
+              <View className="shrink">
+                <Text className="font-sans text-sm text-ink">Updates on WhatsApp</Text>
+                <Text className="font-sans text-[11px] text-faint">
+                  New customers, cancel requests and failed payments come to WhatsApp instead of a text.
+                </Text>
+              </View>
+              <Toggle
+                value={Boolean(settings.whatsappUpdates)}
+                onValueChange={setWhatsapp}
+                disabled={waBusy}
+                accessibilityLabel="Updates on WhatsApp"
+              />
+            </View>
+            {waError && <Text className="mt-1.5 font-sans text-xs text-danger">{waError}</Text>}
           </Card>
         )}
 

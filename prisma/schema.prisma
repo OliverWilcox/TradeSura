@@ -65,6 +65,9 @@ model Engineer {
   emailVerifiedAt            DateTime?
   smsSignInEnabled           Boolean           @default(false)
   phoneVerifiedAt            DateTime?
+  // Installer messages on WhatsApp (lib/whatsapp.ts): Meta needs a recorded
+  // opt-in. Null = texts only; a WhatsApp STOP clears it.
+  whatsappOptInAt            DateTime?
   // Sign in with Apple's stable user id (the identity token's `sub`), set
   // when the engineer signs up with "Continue with Apple" (30 Sept build
   // notes, step 1 item 5). Apple only sends name/email the first time, so

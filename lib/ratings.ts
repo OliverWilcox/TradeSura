@@ -237,7 +237,11 @@ async function alertLowRating(ratingId: string) {
   const who = `${r.plan.customer.firstName} ${r.plan.customer.lastName}`;
   const line = `${who} rated their service ${r.stars} star${r.stars === 1 ? "" : "s"}${r.comment ? `: "${r.comment.slice(0, 120)}"` : "."}`;
   await sendPushNotification(r.engineerId, "Low rating", `${line} A quick call often helps.`, { url: "/ratings" });
-  await notifyEngineer(r.engineerId, `TradeSura: ${line} You can reply publicly from Ratings in the app.`).catch(
+  const rated = `${r.stars} star${r.stars === 1 ? "" : "s"}${r.comment ? `: "${r.comment.slice(0, 120)}"` : ""}`;
+  await notifyEngineer(r.engineerId, `TradeSura: ${line} You can reply publicly from Ratings in the app.`, {
+    template: "low_rating",
+    vars: [who, rated],
+  }).catch(
     (err) => console.error("[ratings] engineer text failed:", err),
   );
   const admin = process.env.ADMIN_EMAIL?.trim() || "info@tradesura.com";

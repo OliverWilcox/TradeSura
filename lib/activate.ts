@@ -93,6 +93,16 @@ export async function activatePlan(
   await notifyEngineer(
     plan.engineerId,
     `🎉 ${plan.customer.firstName} ${plan.customer.lastName} just joined ${plan.tier?.name ?? "your plan"} — £${yearly}/yr added. ${count} plan${count === 1 ? "" : "s"} live, £${Math.round(totalPence / 100)}/mo.`,
+    {
+      template: "plan_joined",
+      vars: [
+        `${plan.customer.firstName} ${plan.customer.lastName}`,
+        plan.tier?.name ?? "your plan",
+        String(yearly),
+        `${count} plan${count === 1 ? "" : "s"}`,
+        String(Math.round(totalPence / 100)),
+      ],
+    },
   );
   // Review 3 §3 — the very first customer deep-links to the celebration.
   const isFirst = count === 1 && (await prisma.plan.count({ where: { engineerId: plan.engineerId, activatedAt: { not: null } } })) === 1;

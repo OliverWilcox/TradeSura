@@ -60,7 +60,10 @@ describe("moveFollowUps", () => {
     expect(await moveFollowUps(now)).toEqual({ leads: 0, letters: 0 });
     expect(m.push).toHaveBeenCalledTimes(1);
     expect(m.notify).toHaveBeenCalledTimes(1);
-    expect(m.notify).toHaveBeenCalledWith("eng1", expect.stringContaining("New owner moving into 12 Oak Road around 14 Nov"));
+    expect(m.notify).toHaveBeenCalledWith("eng1", expect.stringContaining("New owner moving into 12 Oak Road around 14 Nov"), {
+      template: "new_owner_lead",
+      vars: ["12 Oak Road", "14 Nov"],
+    });
     const letters = m.events.filter((e) => e.name === "welcome_letter_queued");
     expect(letters).toHaveLength(1);
     expect(letters[0].meta).toMatchObject({ passportId: "pp1", engineerId: "eng1", letterFor: "new_owner" });
