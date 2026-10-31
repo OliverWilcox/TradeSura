@@ -84,7 +84,7 @@ export function customerSearch(term: string): Prisma.CustomerWhereInput {
 }
 
 /** The plan that best describes where a customer is now: live first, then the newest. */
-function currentPlan<T extends { status: PlanStatus; createdAt: Date }>(plans: T[]): T | null {
+export function currentPlan<T extends { status: PlanStatus; createdAt: Date }>(plans: T[]): T | null {
   const rank: Record<PlanStatus, number> = { ACTIVE: 0, PAUSED: 1, PENDING: 2, CANCELLED: 3 };
   return [...plans].sort((a, b) => rank[a.status] - rank[b.status] || b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null;
 }

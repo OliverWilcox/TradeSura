@@ -203,6 +203,9 @@ describe("the client's lists", () => {
     const md = (await call(engineerRoute, { params: { engineerId: f.md.id } })).body;
     expect(md.counts).toMatchObject({ customers: 3, customersOnPlans: 2 });
     expect(md.steps.map((s: { reached: boolean }) => s.reached)).toEqual([true, true, true, true, true]);
+    // The record's customers carry the same statuses as the customer list.
+    const recent = Object.fromEntries(md.recentCustomers.map((c: { name: string; status: string }) => [c.name, c.status]));
+    expect(recent).toEqual({ "Oliver Wilcox": "active", "Sam Taylor": "dd_started", "Jess Brown": "offer_unconfirmed" });
   });
 
   it("filter customers by the status they show", async () => {

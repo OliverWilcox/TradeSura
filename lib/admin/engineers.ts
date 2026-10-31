@@ -10,8 +10,24 @@ import { conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
 import { personName, verificationStatus } from "@/lib/admin/verifications";
 import { exactContactSearch, maskEmail, maskPhone } from "@/lib/admin/mask";
-import { FUNNEL_STEPS, STEP_LABELS, activeEngineerIds, milestones, testMarks, type FunnelStep, type Milestones, type TestMarks } from "@/lib/admin/metrics";
+import {
+  FUNNEL_STEPS,
+  STEP_LABELS,
+  activeEngineerIds,
+  customerStatus,
+  milestones,
+  offers,
+  payments,
+  testMarks,
+  type FunnelStep,
+  type Milestones,
+  type TestMarks,
+} from "@/lib/admin/metrics";
+
+/** No test marks: statuses for every row a record shows (test rows are labelled, not hidden). */
+const EVERYONE: TestMarks = { engineers: [], customers: [] };
 import { testMarkOf } from "@/lib/admin/test-data";
+import { currentPlan } from "@/lib/admin/customers";
 import { companyProfile } from "@/lib/admin/companies";
 
 // Engineers for the admin API: find them, see one in full, and change their
@@ -352,7 +368,10 @@ export async function getEngineer(id: string) {
       where: { engineerId: id },
       orderBy: { createdAt: "desc" },
       take: 50,
-      include: { properties: { select: { postcode: true }, take: 1 }, plans: { select: { status: true, activatedAt: true, createdAt: true } } },
+      include: {
+        properties: { select: { postcode: true }, take: 1 },
+        plans: { select: { id: true, status: true, activatedAt: true, createdAt: true, mandateStatus: true, priceMonthlyPence: true, linkOpenedAt: true, paymentFailedAt: true, paymentRecoveredAt: true } },
+      },
     }),
     engineerPayouts(e.stripeAccountId),
     prisma.engineer.findMany({
@@ -367,7 +386,14 @@ export async function getEngineer(id: string) {
     e.companyNumber ? companyProfile(e.companyNumber) : Promise.resolve(null),
     cancelReasonCounts(id),
   ]);
-  const active = await activeEngineerIds(marks, new Date(), [id, ...invitees.map((i) => i.id)]);
+  const recentPlanIds = recentCustomers.flatMap((c) => c.plans.map((p) => p.id));
+  const [active, recentOffers, recentPaid] = await Promise.all([
+    activeEngineerIds(marks, new Date(), [id, ...invitees.map((i) => i.id)]),
+    recentPlanIds.length ? offers(EVERYONE, { planIds: recentPlanIds }) : [],
+    recentPlanIds.length ? payments(EVERYONE, { planIds: recentPlanIds }) : [],
+  ]);
+  const offerByPlan = new Map(recentOffers.map((o) => [o.planId, o]));
+  const paidPlans = new Set(recentPaid.map((p) => p.planId));
   const reached = steps.get(id)!;
   const byInvitee = invitees.length
     ? await prisma.referralEarning.groupBy({ by: ["inviteeId"], where: { referrerId: id, inviteeId: { in: invitees.map((i) => i.id) } }, _sum: { amountPence: true }, _max: { ratePercent: true, createdAt: true } })
@@ -478,12 +504,13 @@ export async function getEngineer(id: string) {
       customersOnIt: t._count.plans,
     })),
     recentCustomers: recentCustomers.map((c) => {
-      const plan = [...c.plans].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+      const plan = currentPlan(c.plans);
       return {
         id: c.id,
         name: `${c.firstName} ${c.lastName}`.trim(),
         postcode: c.properties[0]?.postcode ?? null,
         planStatus: plan?.status ?? null,
+        status: customerStatus(plan ?? null, { offer: plan ? (offerByPlan.get(plan.id) ?? null) : null, paid: plan ? paidPlans.has(plan.id) : false }),
         since: (plan?.activatedAt ?? c.createdAt).toISOString(),
       };
     }),
