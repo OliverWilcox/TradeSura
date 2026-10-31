@@ -2,7 +2,10 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { displayName } from "@/lib/engineer";
 import { deleteOwnerAccount, deleteStaffAccount } from "@/lib/delete-account";
+import { offerNearbyEngineers } from "@/lib/installer-leaves";
+import { formatUkDate } from "@/lib/admin/time";
 import { adminEvent } from "@/lib/admin-api/audit";
+import { conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
 import { engineerSearch, engineerStatus, STATUS_WHERE, type EngineerStanding } from "@/lib/admin/engineers";
 import { customerSearch } from "@/lib/admin/customers";
@@ -51,11 +54,46 @@ async function openPlans(where: Prisma.PlanWhereInput, keyOf: (p: { engineerId: 
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-function engineerBlocker(plans: PlanCounts) {
+function engineerBlocker(plans: PlanCounts, told: Told = { at: null, untold: plans.live }) {
   if (!plans.live) return null;
-  return plans.live === 1
-    ? "Has a live customer plan. It has to end first: the engineer can end it from the customer's page in the app."
-    : `Has ${plans.live} live customer plans. They have to end first: the engineer can end them from each customer's page in the app.`;
+  // 7.3: their customers hear first, and are offered a TradeSura engineer near them.
+  if (told.untold) {
+    return told.untold === plans.live
+      ? `Has ${plans.live === 1 ? "a live customer plan" : `${plans.live} live customer plans`}. Tell ${plans.live === 1 ? "the customer" : "those customers"} first: they're offered a TradeSura engineer near them.`
+      : `${told.untold} customer${told.untold === 1 ? " has" : "s have"} joined since the others were told. Tell them too.`;
+  }
+  return `Customers told on ${formatUkDate(told.at!)}. It can be deleted once their ${plans.live === 1 ? "plan has" : `${plans.live} plans have`} ended: each customer chooses whether to move.`;
+}
+
+type Told = { at: Date | null; untold: number };
+
+/**
+ * When each engineer's customers were last told they're leaving (the app's
+ * installer-leaves notice), and how many on a live plan joined since.
+ */
+async function customersTold(engineerIds: string[]): Promise<Map<string, Told>> {
+  if (!engineerIds.length) return new Map();
+  const told = await prisma.$queryRaw<{ id: string; at: Date }[]>`
+    SELECT meta->>'engineerId' AS id, max(ts) AS at FROM "Event"
+    WHERE name = 'installer_left_customers_offered' AND meta->>'engineerId' = ANY(${engineerIds}::text[]) GROUP BY 1`;
+  const at = new Map(told.map((t) => [t.id, t.at]));
+  const live = await prisma.plan.findMany({ where: { engineerId: { in: engineerIds }, ...LIVE_PLAN }, select: { engineerId: true, activatedAt: true, createdAt: true } });
+  const out = new Map<string, Told>(engineerIds.map((id) => [id, { at: at.get(id) ?? null, untold: 0 }]));
+  for (const p of live) {
+    const t = out.get(p.engineerId)!;
+    if (!t.at || (p.activatedAt ?? p.createdAt) > t.at) t.untold++;
+  }
+  return out;
+}
+
+/** 7.3: tells every customer on one of the engineer's live plans that they're leaving, with TradeSura engineers near them. */
+export async function tellCustomers(admin: AdminPrincipal, engineerId: string) {
+  const e = await prisma.engineer.findFirst({ where: { id: engineerId, deletedAt: null }, select: { ownerId: true } });
+  if (!e) throw notFound("There's no engineer with that ID.");
+  if (e.ownerId) throw conflict("Staff don't have customers of their own.");
+  const { offered } = await offerNearbyEngineers(engineerId);
+  await adminEvent(admin, "engineer_customers_told", { engineerId, offered });
+  return { offered };
 }
 
 // A customer on their own has no engineer leaving to explain an ending plan
@@ -138,7 +176,10 @@ export async function listEngineerAccounts(q: EngineerAccountQuery) {
     prisma.engineer.count({ where }),
   ]);
   const owners = rows.filter((e) => !e.ownerId).map((e) => e.id);
-  const byEngineer = owners.length ? await openPlans({ engineerId: { in: owners } }, (p) => p.engineerId) : new Map<string, PlanCounts>();
+  const [byEngineer, told] = await Promise.all([
+    owners.length ? openPlans({ engineerId: { in: owners } }, (p) => p.engineerId) : new Map<string, PlanCounts>(),
+    customersTold(owners),
+  ]);
   const items = rows.map((e) => {
     // Staff sell inside the owner's business: plans and customers are the owner's.
     const plans = byEngineer.get(e.id) ?? noPlans();
@@ -157,7 +198,9 @@ export async function listEngineerAccounts(q: EngineerAccountQuery) {
       customers: e.ownerId ? 0 : e._count.customers,
       plans,
       stripeAccount: !e.ownerId && !!e.stripeAccountId,
-      blocked: e.ownerId ? null : engineerBlocker(plans),
+      blocked: e.ownerId ? null : engineerBlocker(plans, told.get(e.id)),
+      /** Customers on a live plan not yet told they're leaving: Tell customers is offered while there are any. */
+      untoldCustomers: e.ownerId ? 0 : (told.get(e.id)?.untold ?? 0),
     };
   });
   return { items, page: q.page, size: q.size, total };

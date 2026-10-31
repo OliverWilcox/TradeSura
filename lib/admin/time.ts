@@ -48,3 +48,10 @@ export function daysBetween(fromDay: string, toDay: string): string[] {
   for (let d = fromDay; d < toDay; d = addDays(d, 1)) out.push(d);
   return out;
 }
+
+const ukLongDate = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "numeric", month: "long", year: "numeric" });
+
+/** "31 October 2026", in UK time: for messages the admin app shows as they are. */
+export function formatUkDate(d: Date): string {
+  return ukLongDate.format(d);
+}
