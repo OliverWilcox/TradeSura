@@ -66,3 +66,27 @@ export function businessTypeMismatch(b: { tradingName: string | null; legalName:
   if (isCompany && registered && !COMPANY_WORD.test(registered)) return "type_says_company";
   return null;
 }
+
+export type CompanySearchHit = { number: string; name: string; status: string; type: string; address: string | null };
+
+/** Companies whose name matches, best first: for a business that says it's a company but gave no company number. */
+export async function searchCompanies(name: string, limit = 3): Promise<CompanySearchHit[] | null> {
+  const key = process.env.COMPANIES_HOUSE_API_KEY;
+  if (!key || !name.trim()) return null;
+  try {
+    const res = await fetch(`https://api.company-information.service.gov.uk/search/companies?q=${encodeURIComponent(name.trim())}&items_per_page=${limit}`, {
+      headers: { Authorization: `Basic ${Buffer.from(`${key}:`).toString("base64")}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) {
+      console.error(`[admin-api] Companies House search failed (${res.status})`);
+      return null;
+    }
+    const d = (await res.json()) as { items?: { company_number?: string; title?: string; company_status?: string; company_type?: string; address_snippet?: string }[] };
+    return (d.items ?? []).slice(0, limit).map((i) => ({ number: i.company_number ?? "", name: i.title ?? "", status: i.company_status ?? "", type: i.company_type ?? "", address: i.address_snippet ?? null }));
+  } catch (err) {
+    console.error("[admin-api] Companies House search failed:", err);
+    return null;
+  }
+}

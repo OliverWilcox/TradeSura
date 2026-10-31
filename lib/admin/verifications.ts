@@ -4,7 +4,10 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { CLAUSE_TEMPLATES } from "@/lib/clauses";
 import { confirmedQualifications } from "@/lib/plan-rules";
-import { companyOfficers, officerMatches } from "@/lib/companies-house";
+import { companyOfficers } from "@/lib/companies-house";
+import { matchPersonName, type NameMatch } from "@/lib/admin/names";
+import { businessTypeMismatch, companyProfile, searchCompanies } from "@/lib/admin/companies";
+import { maskEmail, maskPhone } from "@/lib/admin/mask";
 import { displayName } from "@/lib/engineer";
 import { notifyEngineer } from "@/lib/sms";
 import { sendEmail } from "@/lib/email";
@@ -13,7 +16,7 @@ import { sendPushNotification } from "@/lib/push";
 import { standingState } from "@/lib/verification-state";
 import { adminEvent } from "@/lib/admin-api/audit";
 import { likeTerm } from "@/lib/admin-api/db";
-import { conflict, notFound } from "@/lib/admin-api/route";
+import { AdminApiError, conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
 
 // The Gas Safe verification queue for the admin API: the same queue, rules
@@ -62,7 +65,9 @@ const ROW_SELECT = {
   companyNumber: true,
   companyStatus: true,
   postcode: true,
+  town: true,
   gasSafeNo: true,
+  gasSafeCategories: true,
   gasSafeCardUrl: true,
   gasSafeReviewRequestedAt: true,
   gasSafeVerifiedAt: true,
@@ -104,19 +109,12 @@ export function verificationStatus(e: Pick<Row, "gasSafeNo" | "gasSafeVerifiedAt
   return e.gasSafeNo ? ("pending" as const) : ("not_submitted" as const);
 }
 
-const nameWords = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z]+/g, " ").trim().split(" ").filter(Boolean);
-
 /**
- * The register says "D. Smith": a match is the same surname and first initial.
- * Both sides are normalised alike, so "Armstrong-Medhurst" and "O'Brien" match themselves.
+ * The register says "D. Smith": a match is the same surname and first initial
+ * (lib/admin/names.ts, which Companies House officers are matched with too).
  */
 export function registerNameMatches(registerName: string, firstName: string | null, lastName: string | null) {
-  if (!firstName?.trim() || !lastName?.trim()) return false;
-  const register = nameWords(registerName);
-  const surname = nameWords(lastName);
-  if (register.length <= surname.length) return false;
-  const tail = register.slice(-surname.length);
-  return tail.every((w, i) => w === surname[i]) && register[0][0] === nameWords(firstName)[0]?.[0];
+  return matchPersonName(registerName, firstName, lastName) === "match";
 }
 
 type DuplicateReason = "company_number" | "name_and_postcode";
@@ -168,13 +166,35 @@ async function registerRecords(rows: Row[]) {
   return new Map(records.map((r) => [r.regNo, r]));
 }
 
+const REGISTER_RESULT: Record<NameMatch, "match" | "likely_match" | "name_mismatch"> = { match: "match", likely: "likely_match", none: "name_mismatch" };
+
 function registerCheck(row: Row, records: Map<string, { name: string; company: string; categories: string }>) {
   const record = row.gasSafeNo ? records.get(row.gasSafeNo) : undefined;
   if (!record) return { result: "not_found" as const, record: null };
   return {
-    result: registerNameMatches(record.name, row.firstName, row.lastName) ? ("match" as const) : ("name_mismatch" as const),
+    result: REGISTER_RESULT[matchPersonName(record.name, row.firstName, row.lastName)],
     record: { name: record.name, company: record.company, categories: record.categories },
   };
+}
+
+/** When the application was last sent in: the latest card upload, or signing up (the first one is uploaded then). */
+async function waitingSince(rows: Row[]): Promise<Map<string, Date>> {
+  const ids = rows.map((r) => r.id);
+  const uploads = ids.length
+    ? await prisma.event.groupBy({ by: ["actorId"], where: { name: "gas_safe_card_added", actorId: { in: ids } }, _max: { ts: true } })
+    : [];
+  const latest = new Map(uploads.map((u) => [u.actorId!, u._max.ts!]));
+  return new Map(rows.map((r) => [r.id, latest.get(r.id) ?? r.createdAt]));
+}
+
+/** Where the register copy's import date is kept (set by scripts/import-gas-safe.ts). */
+export const REGISTER_IMPORTED_SETTING = "gas_safe_register_imported_at";
+
+/** How much of the Gas Safe register we hold, and from when, if that's recorded. */
+async function registerCopy() {
+  const [records, imported] = await Promise.all([prisma.gasSafeRecord.count(), prisma.appSetting.findUnique({ where: { key: REGISTER_IMPORTED_SETTING } })]);
+  const at = imported?.value ? new Date(imported.value) : null;
+  return { records, importedAt: at && !Number.isNaN(at.getTime()) ? at.toISOString() : null };
 }
 
 /** The business name as displayName() shows it, for sorting in SQL. */
@@ -284,14 +304,16 @@ export async function listVerifications(q: {
     ]);
     duplicates = await duplicatesFor(rows);
   }
-  const [records, claims, counts] = await Promise.all([registerRecords(rows), freshClaims(rows.map((r) => r.id)), verificationCounts(wholeQueue)]);
+  const [records, claims, counts, since] = await Promise.all([registerRecords(rows), freshClaims(rows.map((r) => r.id)), verificationCounts(wholeQueue), waitingSince(rows)]);
   const items = rows.map((r) => ({
     id: r.id,
     name: personName(r),
     business: displayName(r),
     businessType: r.businessType,
     gasSafeNo: r.gasSafeNo,
+    town: r.town,
     submittedAt: r.createdAt.toISOString(),
+    waitingSince: since.get(r.id)!.toISOString(),
     status: verificationStatus(r),
     decidedAt: (r.gasSafeVerifiedAt ?? r.gasSafeRejectedAt)?.toISOString() ?? null,
     rejectReason: r.gasSafeRejectReason,
@@ -300,6 +322,7 @@ export async function listVerifications(q: {
       hasCard: Boolean(r.gasSafeCardUrl),
       register: registerCheck(r, records).result,
       companyNotActive: Boolean(r.companyStatus && r.companyStatus !== "active"),
+      typeMismatch: businessTypeMismatch(r),
       duplicates: duplicates.get(r.id)?.length ?? 0,
       registerMismatchAtSignup: Boolean(r.gasSafeReviewRequestedAt),
     },
@@ -322,7 +345,7 @@ async function lastDecision(engineerId: string) {
   };
 }
 
-export async function getVerification(engineerId: string) {
+export async function getVerification(engineerId: string, opts: { withContact?: boolean } = {}) {
   const row = await prisma.engineer.findFirst({
     where: { id: engineerId, ...live },
     select: {
@@ -334,17 +357,25 @@ export async function getVerification(engineerId: string) {
       stripeAccountId: true,
       stripeDetailsSubmitted: true,
       stripeChargesEnabled: true,
+      email: true,
+      phone: true,
       ...REVISION_SELECT,
       owner: { select: { id: true, tradingName: true, legalName: true, slug: true } },
     },
   });
   if (!row) return null;
-  const [duplicates, records, decision, officers, claims] = await Promise.all([
+  const typeMismatch = businessTypeMismatch(row);
+  const [duplicates, records, decision, officers, claims, profile, search, copy, since] = await Promise.all([
     duplicatesFor([row]),
     registerRecords([row]),
     lastDecision(row.id),
     row.businessType === "ltd" && row.companyNumber ? companyOfficers(row.companyNumber) : Promise.resolve(null),
     freshClaims([row.id]),
+    row.companyNumber ? companyProfile(row.companyNumber) : Promise.resolve(null),
+    // A name that says it's a company with no company number given: look it up by name.
+    typeMismatch === "name_says_company" && !row.companyNumber ? searchCompanies(row.legalName ?? row.tradingName ?? "") : Promise.resolve(null),
+    registerCopy(),
+    waitingSince([row]),
   ]);
   const status = verificationStatus(row);
   // Where it sits among the applications in the same tab (new or flagged duplicates).
@@ -360,7 +391,7 @@ export async function getVerification(engineerId: string) {
     queue = { position: at + 1, total: ids.length, previousId: ids[at - 1] ?? null, nextId: ids[at + 1] ?? null };
   }
   const register = registerCheck(row, records);
-  return {
+  const detail = {
     id: row.id,
     name: personName(row),
     firstName: row.firstName,
@@ -371,6 +402,7 @@ export async function getVerification(engineerId: string) {
     businessType: row.businessType,
     teamOf: row.owner ? { id: row.owner.id, business: displayName(row.owner) } : null,
     submittedAt: row.createdAt.toISOString(),
+    waitingSince: since.get(row.id)!.toISOString(),
     status,
     tab,
     /** Send back with a decision: if the application changes in the meantime, the decision is refused. */
@@ -383,7 +415,12 @@ export async function getVerification(engineerId: string) {
       onRegister: register.record,
       mismatchAtSignup: Boolean(row.gasSafeReviewRequestedAt),
       registerUrl: "https://www.gassaferegister.co.uk/",
+      copy,
     },
+    /** What the engineer gave, to set beside the register. The card's expiry isn't asked for at sign-up. */
+    submitted: { name: personName(row), business: displayName(row), categories: row.gasSafeCategories, postcode: row.postcode, town: row.town, cardExpiry: null },
+    /** Masked, for admins who may see contact details (the full value comes from the audited reveal). */
+    contact: opts.withContact ? { email: maskEmail(row.email), phone: row.phone ? maskPhone(row.phone) : null } : null,
     card: { available: Boolean(row.gasSafeCardUrl) },
     company:
       row.businessType === "ltd" || row.companyNumber
@@ -391,9 +428,16 @@ export async function getVerification(engineerId: string) {
             name: row.legalName ?? row.tradingName,
             number: row.companyNumber,
             status: row.companyStatus,
-            officers: officers?.map((o) => ({ ...o, matchesApplicant: officerMatches(o.name, row.firstName, row.lastName) })) ?? null,
+            officers:
+              officers?.map((o) => {
+                const match = matchPersonName(o.name, row.firstName, row.lastName);
+                return { ...o, match, matchesApplicant: match !== "none" };
+              }) ?? null,
+            profile,
           }
         : null,
+    /** 3.4: the business's name and type disagree, and what Companies House has under that name. */
+    typeMismatch: typeMismatch ? { kind: typeMismatch, search } : null,
     qualifications: Object.entries(confirmedQualifications(row.qualificationConfirmations)).map(([code, at]) => ({
       code,
       title: CLAUSE_TEMPLATES.find((c) => c.code === code)?.title ?? code,
@@ -403,9 +447,41 @@ export async function getVerification(engineerId: string) {
     decision: decision ?? (status === "verified" || status === "rejected" ? { outcome: status, at: (row.gasSafeVerifiedAt ?? row.gasSafeRejectedAt)!.toISOString(), byName: null, reason: row.gasSafeRejectReason } : null),
     queue,
   };
+  return { ...detail, warnings: caseWarnings(detail) };
 }
 
 export type VerificationDetail = NonNullable<Awaited<ReturnType<typeof getVerification>>>;
+
+export type CaseWarning = { code: string; message: string };
+
+/** Everything still open on an application, in the words the checker sees: what approving over needs a note for. */
+export function caseWarnings(d: {
+  duplicates: unknown[];
+  gasSafe: { register: "match" | "likely_match" | "name_mismatch" | "not_found"; mismatchAtSignup: boolean };
+  card: { available: boolean };
+  company: { status: string | null; officers: { match: NameMatch }[] | null } | null;
+  typeMismatch: { kind: "name_says_company" | "type_says_company" } | null;
+}): CaseWarning[] {
+  const w: CaseWarning[] = [];
+  if (d.duplicates.length) w.push({ code: "duplicate", message: "Another account shares this company number, or this name and postcode." });
+  if (d.gasSafe.register === "not_found") w.push({ code: "not_on_register", message: "The Gas Safe number isn't in our copy of the register." });
+  if (d.gasSafe.register === "name_mismatch") w.push({ code: "register_name", message: "The name on the Gas Safe register doesn't match the applicant." });
+  if (d.gasSafe.register === "likely_match") w.push({ code: "register_name_likely", message: "The name on the Gas Safe register is only a likely match." });
+  if (d.gasSafe.mismatchAtSignup) w.push({ code: "mismatch_at_signup", message: "Their number didn't match the register when they signed up." });
+  if (!d.card.available) w.push({ code: "no_card", message: "There's no photo of their Gas Safe ID card." });
+  if (d.company?.status && d.company.status !== "active") w.push({ code: "company_not_active", message: `The company is ${d.company.status} at Companies House.` });
+  const officers = d.company?.officers;
+  if (officers?.length && !officers.some((o) => o.match === "match")) {
+    w.push(
+      officers.some((o) => o.match === "likely")
+        ? { code: "officer_likely", message: "The applicant is only a likely match for a company officer." }
+        : { code: "no_officer", message: "No current company officer matches the applicant." },
+    );
+  }
+  if (d.typeMismatch?.kind === "name_says_company") w.push({ code: "type_mismatch", message: "The business name says it's a company, but it was signed up as one that isn't." });
+  if (d.typeMismatch?.kind === "type_says_company") w.push({ code: "type_mismatch", message: "It was signed up as a limited company, but the registered name doesn't say Ltd or Limited." });
+  return w;
+}
 
 // --- Deciding ---------------------------------------------------------------
 
@@ -507,6 +583,9 @@ export async function decideVerification(
   // 500 characters) and are kept together, as the engineer is told them.
   const parts = [input.reason?.trim(), input.note?.trim()].filter(Boolean);
   const reason = parts.length ? parts.join(": ") : null;
+  // 3.7: approving over open warnings takes a note saying why, kept with the decision.
+  const current = approved ? await getVerification(engineerId) : null;
+  const warnings = current?.status === "pending" ? current.warnings : [];
   const now = new Date();
   // "Move straight on" stays in the same tab: the next new application, or the next flagged duplicate.
   const waiting = await waitingQueue();
@@ -528,6 +607,9 @@ export async function decideVerification(
         throw conflict("This application changed while you had it open. Reload to see the latest before deciding.");
       }
     }
+    if (warnings.length && !reason) {
+      throw new AdminApiError(400, "VALIDATION", "Say why you're approving with open warnings.", { reason: ["Say why you're approving with open warnings."] });
+    }
     // Only while it's still waiting, so two admins can't both decide it.
     const { count } = await tx.engineer.updateMany({
       where: { id: engineerId, ...TAB_WHERE.pending },
@@ -545,12 +627,45 @@ export async function decideVerification(
     await adminEvent(
       admin,
       approved ? "gas_safe_verified" : "gas_safe_rejected",
-      { engineerId, reason, before: "pending", ...(input.duplicateOf ? { duplicateOf: input.duplicateOf } : {}) },
+      { engineerId, reason, before: "pending", ...(input.duplicateOf ? { duplicateOf: input.duplicateOf } : {}), ...(warnings.length ? { warnings: warnings.map((w) => w.code) } : {}) },
       tx,
     );
   });
   await afterResponse(() => tellEngineer(engineerId, approved, reason));
   return { id: engineerId, outcome: approved ? ("verified" as const) : ("rejected" as const), decidedAt: now.toISOString(), nextId: sameTab[0]?.id ?? null };
+}
+
+// --- Chasing an applicant ----------------------------------------------------
+
+export type ChaseWhat = "photo" | "details";
+
+const CHASE_TEXT: Record<ChaseWhat, { sms: string; subject: string; html: string }> = {
+  photo: {
+    sms: "TradeSura here: to finish your Gas Safe check we need a photo of your Gas Safe ID card. Add it in the app under Settings, Gas Safe card.",
+    subject: "Add your Gas Safe ID card to finish your check",
+    html: "<p>To finish checking your Gas Safe registration we need a photo of your Gas Safe ID card. Open the TradeSura app and add it under Settings, Gas Safe card. We check every upload within the hour.</p>",
+  },
+  details: {
+    sms: "TradeSura here: we couldn't match some of your details to the Gas Safe Register. Open the app to check your name and Gas Safe number.",
+    subject: "Check your details to finish your Gas Safe check",
+    html: "<p>We couldn't match some of your sign-up details to the Gas Safe Register. Open the TradeSura app to check your name and Gas Safe number match your Gas Safe ID card.</p>",
+  },
+};
+
+/**
+ * Asks a waiting applicant for what's missing, by text (from TradeSura's own
+ * number) or email. Only while the application is waiting; recorded.
+ */
+export async function chaseApplicant(admin: AdminPrincipal, engineerId: string, input: { what: ChaseWhat; channel: "sms" | "email" }) {
+  const row = await prisma.engineer.findFirst({ where: { id: engineerId, ...live }, select: { gasSafeNo: true, gasSafeVerifiedAt: true, gasSafeRejectedAt: true, phone: true, email: true } });
+  if (!row) throw notFound("There's no engineer with that ID.");
+  if (verificationStatus(row) !== "pending") throw conflict("This application isn't waiting for a check.");
+  if (input.channel === "sms" && !row.phone) throw conflict("There's no mobile number on this account.");
+  const text = CHASE_TEXT[input.what];
+  if (input.channel === "sms") await notifyEngineer(engineerId, text.sms);
+  else await emailEngineer(engineerId, text.subject, text.html);
+  await adminEvent(admin, "verification_chased", { engineerId, what: input.what, channel: input.channel });
+  return { chased: true, channel: input.channel };
 }
 
 // --- The ID card photo ------------------------------------------------------
