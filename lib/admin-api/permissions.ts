@@ -14,6 +14,7 @@ export const ADMIN_PERMISSIONS = [
   "engineers:view_as",
   "customers:read",
   "customers:notes",
+  "customers:contact",
   "pii:reveal",
   "money:read",
   "money:refund",

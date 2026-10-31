@@ -1,11 +1,18 @@
+import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
-import { displayName } from "@/lib/engineer";
+import { brandName, displayName } from "@/lib/engineer";
+import { appUrl } from "@/lib/app-url";
+import { sendSms } from "@/lib/sms";
+import { parseWinbackOffer, winbackBody, winbackSettingKey } from "@/lib/retention";
 import { adminEvent } from "@/lib/admin-api/audit";
 import { bounded, likeTerm } from "@/lib/admin-api/db";
-import { notFound } from "@/lib/admin-api/route";
+import { conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
 import { exactContactSearch, maskEmail, maskPhone } from "@/lib/admin/mask";
+import { HIDE_ZERO_INVOICES, customerStatus, firstPaidByPlan, offers, payments, testMarks, type CustomerStatus, type TestMarks } from "@/lib/admin/metrics";
+import { isSuppressed } from "@/lib/suppression";
+import { testMarkOf } from "@/lib/admin/test-data";
 
 // Homeowners for the admin API, across every engineer's book. Phone and email
 // are masked unless revealed (recorded); the address shows, because support
@@ -29,6 +36,8 @@ export type CustomerListQuery = {
   cancelledFrom?: Date;
   cancelledTo?: Date;
   source?: string;
+  /** Where they are with their current plan, by the metrics layer's customerStatus. */
+  status?: CustomerStatus;
   sort?: CustomerSort;
   dir?: "asc" | "desc";
   page: number;
@@ -80,14 +89,53 @@ function currentPlan<T extends { status: PlanStatus; createdAt: Date }>(plans: T
   return [...plans].sort((a, b) => rank[a.status] - rank[b.status] || b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null;
 }
 
+const PLAN_SELECT = {
+  id: true,
+  ref: true,
+  status: true,
+  priceMonthlyPence: true,
+  createdAt: true,
+  activatedAt: true,
+  cancelledAt: true,
+  mandateStatus: true,
+  linkOpenedAt: true,
+  paymentsCleared: true,
+  paymentFailedAt: true,
+  paymentRecoveredAt: true,
+  tier: { select: { name: true, priceMonthlyPence: true } },
+  cancellations: { orderBy: { createdAt: "desc" as const }, take: 1, select: { reason: true } },
+} satisfies Prisma.PlanSelect;
+
 const LIST_INCLUDE = {
   engineer: { select: { id: true, tradingName: true, legalName: true, slug: true } },
   // The first home added; the postcode sort uses the same one.
   properties: { select: { town: true, postcode: true }, orderBy: { id: "asc" }, take: 1 },
-  plans: {
-    select: { id: true, ref: true, status: true, priceMonthlyPence: true, createdAt: true, activatedAt: true, paymentsCleared: true, paymentFailedAt: true, paymentRecoveredAt: true, tier: { select: { name: true } } },
-  },
+  plans: { select: PLAN_SELECT },
 } satisfies Prisma.CustomerInclude;
+
+type ListRow = Prisma.CustomerGetPayload<{ include: typeof LIST_INCLUDE }>;
+
+/** No test marks: every plan, for working out a status the list shows (test rows are labelled, not hidden). */
+const EVERYONE: TestMarks = { engineers: [], customers: [] };
+
+/** What a list answer needs for its rows: who's test data, and each current plan's offer and payments. */
+async function rowFacts(rows: ListRow[]) {
+  const planIds = rows.flatMap((r) => r.plans.map((p) => p.id));
+  const [marks, sent, paid] = await Promise.all([
+    testMarks(),
+    planIds.length ? offers(EVERYONE, { planIds }) : [],
+    planIds.length ? payments(EVERYONE, { planIds }) : [],
+  ]);
+  return { marks, offerByPlan: new Map(sent.map((o) => [o.planId, o])), firstPaid: firstPaidByPlan(paid) };
+}
+type RowFacts = Awaited<ReturnType<typeof rowFacts>>;
+
+/** A plan's monthly price: what the customer agreed to, or until they pick, the plan they were offered. */
+const planPrice = (p: { priceMonthlyPence: number | null; tier: { priceMonthlyPence: number } | null }) => p.priceMonthlyPence ?? p.tier?.priceMonthlyPence ?? null;
+
+function statusOf(plan: ListRow["plans"][number] | null, facts: RowFacts): CustomerStatus {
+  return customerStatus(plan, { offer: plan ? (facts.offerByPlan.get(plan.id) ?? null) : null, paid: plan ? facts.firstPaid.has(plan.id) : false });
+}
 
 type ComputedSort = "since" | "postcode" | "engineer" | "price";
 
@@ -121,8 +169,16 @@ async function computedPage(ids: string[], sort: ComputedSort, dir: "asc" | "des
   return rows.map((r) => r.id);
 }
 
+/** The status filter: worked out for the customers the other filters match, as the rows show it. */
+async function withStatus(where: Prisma.CustomerWhereInput, status: CustomerStatus | undefined): Promise<Prisma.CustomerWhereInput> {
+  if (!status) return where;
+  const rows = await prisma.customer.findMany({ where, include: LIST_INCLUDE });
+  const facts = await rowFacts(rows);
+  return { AND: [where, { id: { in: rows.filter((r) => statusOf(currentPlan(r.plans), facts) === status).map((r) => r.id) } }] };
+}
+
 export async function listCustomers(q: CustomerListQuery) {
-  const where = listWhere(q);
+  const where = await withStatus(listWhere(q), q.status);
   const dir = q.dir ?? (q.sort === "name" || q.sort === "postcode" || q.sort === "engineer" ? "asc" : "desc");
   const skip = (q.page - 1) * q.size;
   let rows: Prisma.CustomerGetPayload<{ include: typeof LIST_INCLUDE }>[];
@@ -147,11 +203,13 @@ export async function listCustomers(q: CustomerListQuery) {
       prisma.customer.count({ where }),
     ]);
   }
-  return { items: rows.map(listItem), page: q.page, size: q.size, total };
+  const facts = await rowFacts(rows);
+  return { items: rows.map((r) => listItem(r, facts)), page: q.page, size: q.size, total };
 }
 
-function listItem(c: Prisma.CustomerGetPayload<{ include: typeof LIST_INCLUDE }>) {
+function listItem(c: ListRow, facts: RowFacts) {
   const plan = currentPlan(c.plans);
+  const firstPaid = c.plans.map((p) => facts.firstPaid.get(p.id)).filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime())[0];
   return {
     id: c.id,
     name: `${c.firstName} ${c.lastName}`.trim(),
@@ -165,11 +223,16 @@ function listItem(c: Prisma.CustomerGetPayload<{ include: typeof LIST_INCLUDE }>
           ref: plan.ref,
           name: plan.tier?.name ?? null,
           status: plan.status,
-          priceMonthlyPence: plan.priceMonthlyPence,
+          priceMonthlyPence: planPrice(plan),
           startedAt: plan.activatedAt?.toISOString() ?? null,
-          payment: plan.paymentFailedAt && !plan.paymentRecoveredAt ? ("failing" as const) : plan.paymentsCleared > 0 ? ("paid" as const) : ("none" as const),
+          cancelledAt: plan.cancelledAt?.toISOString() ?? null,
+          cancelReason: plan.status === "CANCELLED" ? (plan.cancellations[0]?.reason ?? null) : null,
+          payment: plan.paymentFailedAt && !plan.paymentRecoveredAt ? ("failing" as const) : facts.firstPaid.has(plan.id) ? ("paid" as const) : ("none" as const),
         }
       : null,
+    status: statusOf(plan, facts),
+    firstPaymentAt: firstPaid?.toISOString() ?? null,
+    isTest: facts.marks.customers.includes(c.id) || facts.marks.engineers.includes(c.engineerId),
     source: c.source,
     addedAt: c.createdAt.toISOString(),
   };
@@ -177,7 +240,7 @@ function listItem(c: Prisma.CustomerGetPayload<{ include: typeof LIST_INCLUDE }>
 
 /** Every customer matching the list's filters, newest first, in batches: what a CSV export streams. */
 export async function* exportCustomers(q: Omit<CustomerListQuery, "page" | "size" | "sort" | "dir">, batch = 500) {
-  const where = listWhere({ ...q, page: 1, size: batch });
+  const where = await withStatus(listWhere({ ...q, page: 1, size: batch }), q.status);
   let after: string | undefined;
   for (;;) {
     const rows = await prisma.customer.findMany({
@@ -188,7 +251,8 @@ export async function* exportCustomers(q: Omit<CustomerListQuery, "page" | "size
       include: LIST_INCLUDE,
     });
     if (!rows.length) return;
-    yield rows.map(listItem);
+    const facts = await rowFacts(rows);
+    yield rows.map((r) => listItem(r, facts));
     if (rows.length < batch) return;
     after = rows[rows.length - 1].id;
   }
@@ -198,7 +262,7 @@ export async function getCustomer(id: string) {
   const c = await prisma.customer.findFirst({
     where: { id, engineer: { deletedAt: null } },
     include: {
-      engineer: { select: { id: true, tradingName: true, legalName: true, slug: true } },
+      engineer: { select: { id: true, tradingName: true, legalName: true, slug: true, leftAt: true, bannedAt: true } },
       addedBy: { select: { id: true, firstName: true, lastName: true } },
       properties: {
         include: {
@@ -209,7 +273,7 @@ export async function getCustomer(id: string) {
       plans: {
         orderBy: { createdAt: "desc" },
         include: {
-          tier: { select: { name: true } },
+          tier: { select: { name: true, priceMonthlyPence: true } },
           cancellations: { orderBy: { createdAt: "desc" }, select: { id: true, reason: true, offer: true, outcome: true, source: true, createdAt: true, resolvedAt: true } },
           ratings: { where: { ratedAt: { not: null } }, select: { id: true, stars: true, comment: true, ratedAt: true, removedAt: true } },
         },
@@ -218,14 +282,30 @@ export async function getCustomer(id: string) {
   });
   if (!c) return null;
   const iso = (d: Date | null) => d?.toISOString() ?? null;
-  const payments = await customerPayments(c.plans.map((p) => p.stripeSubscriptionId).filter((s): s is string => !!s));
+  const planIds = c.plans.map((p) => p.id);
+  const [history, marks, sent, paid, suppressed, test] = await Promise.all([
+    customerPayments(c.plans.map((p) => p.stripeSubscriptionId).filter((s): s is string => !!s)),
+    testMarks(),
+    planIds.length ? offers(EVERYONE, { planIds }) : [],
+    planIds.length ? payments(EVERYONE, { planIds }) : [],
+    isSuppressed("sms", c.phone),
+    testMarkOf("customer", id),
+  ]);
+  const offerByPlan = new Map(sent.map((o) => [o.planId, o]));
+  const firstPaid = firstPaidByPlan(paid);
+  const current = currentPlan(c.plans);
+  const shown = HIDE_ZERO_INVOICES ? history.filter((h) => h.amountPence > 0) : history;
   return {
     id: c.id,
     name: `${c.firstName} ${c.lastName}`.trim(),
     firstName: c.firstName,
     lastName: c.lastName,
     contact: { phone: maskPhone(c.phone), email: c.email ? maskEmail(c.email) : null, revealed: false },
-    smsOptOut: c.smsOptOut,
+    smsOptOut: c.smsOptOut || suppressed,
+    status: customerStatus(current, { offer: current ? (offerByPlan.get(current.id) ?? null) : null, paid: current ? firstPaid.has(current.id) : false }),
+    firstPaymentAt: paid[0]?.paidAt.toISOString() ?? null,
+    test: { ...test, viaEngineer: marks.engineers.includes(c.engineerId) },
+    winBack: winBackFor({ optedOut: c.smsOptOut || suppressed, plan: current, engineer: c.engineer }),
     stripeCustomerId: c.plans.find((p) => p.stripeCustomerId)?.stripeCustomerId ?? c.stripeCustomerId,
     source: c.source,
     addedAt: c.createdAt.toISOString(),
@@ -246,7 +326,9 @@ export async function getCustomer(id: string) {
       status: p.status,
       tier: p.tier?.name ?? null,
       options: agreedOptions(p.agreedTier),
-      priceMonthlyPence: p.priceMonthlyPence,
+      priceMonthlyPence: planPrice(p),
+      offer: offerByPlan.has(p.id) ? { channel: offerByPlan.get(p.id)!.channel, sentAt: offerByPlan.get(p.id)!.sentAt.toISOString(), delivery: offerByPlan.get(p.id)!.delivery } : null,
+      firstPaymentAt: iso(firstPaid.get(p.id) ?? null),
       billingInterval: p.billingInterval,
       createdAt: p.createdAt.toISOString(),
       activatedAt: iso(p.activatedAt),
@@ -262,8 +344,21 @@ export async function getCustomer(id: string) {
       cancellations: p.cancellations.map((x) => ({ ...x, createdAt: x.createdAt.toISOString(), resolvedAt: iso(x.resolvedAt) })),
       ratings: p.ratings.map((r) => ({ ...r, ratedAt: iso(r.ratedAt), removedAt: iso(r.removedAt) })),
     })),
-    payments,
+    payments: shown,
+    /** £0 trial invoices left out of `payments` (HIDE_ZERO_INVOICES). */
+    zeroInvoicesHidden: history.length - shown.length,
   };
+}
+
+/**
+ * Whether a win-back text can go: only to someone whose plan has ended, who
+ * hasn't opted out of texts, with an engineer still on TradeSura.
+ */
+function winBackFor(c: { optedOut: boolean; plan: { status: string } | null; engineer: { leftAt: Date | null; bannedAt: Date | null } }) {
+  if (c.optedOut) return { available: false, reason: "They've opted out of texts." };
+  if (!c.plan || c.plan.status !== "CANCELLED") return { available: false, reason: "Only for customers whose plan has been cancelled." };
+  if (c.engineer.leftAt || c.engineer.bannedAt) return { available: false, reason: "Their engineer isn't taking customers on TradeSura." };
+  return { available: true, reason: null };
 }
 
 /** What the customer agreed to: the options in the plan as it was when they signed up. */
@@ -299,18 +394,51 @@ async function customerPayments(subscriptionIds: string[]) {
   }));
 }
 
-/** Anything recorded about the customer (admin actions, their plan's events), newest first. */
+/**
+ * What's happened with the customer, newest first: anything recorded about
+ * them or any of their plans (the offer, opening the link, picking a plan,
+ * the Direct Debit, payments, pauses, cancelling and why, and admin
+ * actions), with each cancellation request's retention offer and choice.
+ */
 export async function customerActivity(id: string, q: { page: number; size: number }) {
-  const where = { OR: [{ meta: { path: ["customerId"], equals: id } }, { meta: { path: ["subjectId"], equals: id } }] } satisfies Prisma.EventWhereInput;
-  const [events, total] = await Promise.all([
-    prisma.event.findMany({ where, orderBy: { ts: "desc" }, skip: (q.page - 1) * q.size, take: q.size }),
-    prisma.event.count({ where }),
-  ]);
-  const items = events.map((ev) => {
-    const meta = (ev.meta ?? {}) as Record<string, unknown>;
-    return { id: ev.id, name: ev.name, at: ev.ts.toISOString(), actor: { type: ev.actorType, id: ev.actorId, name: typeof meta.adminName === "string" ? meta.adminName : null } };
+  const plans = await prisma.plan.findMany({
+    where: { customerId: id },
+    select: { id: true, cancellations: { select: { id: true, reason: true, offer: true, outcome: true, source: true, createdAt: true, resolvedAt: true } } },
   });
-  return { items, page: q.page, size: q.size, total };
+  const where = {
+    OR: [
+      { meta: { path: ["customerId"], equals: id } },
+      { meta: { path: ["subjectId"], equals: id } },
+      { actorType: "CUSTOMER" as const, actorId: id },
+      ...plans.map((p) => ({ meta: { path: ["planId"], equals: p.id } })),
+    ],
+  } satisfies Prisma.EventWhereInput;
+  const events = await prisma.event.findMany({ where, orderBy: { ts: "desc" }, take: 500 });
+  const items = [
+    ...events.map((ev) => {
+      const meta = (ev.meta ?? {}) as Record<string, unknown>;
+      const str = (k: string) => (typeof meta[k] === "string" ? (meta[k] as string) : null);
+      return {
+        id: ev.id,
+        name: ev.name,
+        at: ev.ts,
+        actor: { type: ev.actorType, id: ev.actorId, name: str("adminName") },
+        detail: { channel: str("channel"), reason: str("reason"), amountPence: typeof meta.amountPence === "number" ? meta.amountPence : null, offer: null as string | null, outcome: null as string | null },
+      };
+    }),
+    // The retention screen: what they were offered and what they chose.
+    ...plans.flatMap((p) =>
+      p.cancellations.map((x) => ({
+        id: x.id,
+        name: "cancel_requested",
+        at: x.createdAt,
+        actor: { type: x.source === "engineer_logged" ? ("ENGINEER" as const) : ("CUSTOMER" as const), id: null, name: null },
+        detail: { channel: null, reason: x.reason, amountPence: null, offer: x.offer, outcome: x.outcome },
+      })),
+    ),
+  ].sort((a, b) => b.at.getTime() - a.at.getTime());
+  const page = items.slice((q.page - 1) * q.size, q.page * q.size).map((i) => ({ ...i, at: i.at.toISOString() }));
+  return { items: page, page: q.page, size: q.size, total: items.length };
 }
 
 export type CustomerDetail = NonNullable<Awaited<ReturnType<typeof getCustomer>>>;
@@ -327,4 +455,34 @@ export async function revealCustomerContact(admin: AdminPrincipal, id: string, o
 
 export async function customerExists(id: string) {
   return (await prisma.customer.count({ where: { id, engineer: { deletedAt: null } } })) > 0;
+}
+
+/**
+ * Texts a customer whose plan has ended a link to rejoin it: the app's own
+ * win-back message, with the engineer's win-back offer, from the engineer's
+ * name. lib/sms.ts adds the STOP line, honours opt-outs and holds it until
+ * 08:00 if it's late. Recorded either way.
+ */
+export async function sendWinBack(admin: AdminPrincipal, id: string) {
+  const c = await prisma.customer.findFirst({
+    where: { id, engineer: { deletedAt: null } },
+    include: { engineer: true, plans: { orderBy: { createdAt: "desc" }, select: { id: true, status: true, createdAt: true, rejoinToken: true } } },
+  });
+  if (!c) throw notFound("There's no customer with that ID.");
+  const plan = currentPlan(c.plans);
+  const optedOut = c.smsOptOut || (await isSuppressed("sms", c.phone));
+  const check = winBackFor({ optedOut, plan, engineer: c.engineer });
+  if (!check.available || !plan) throw conflict(check.reason ?? "This customer can't be sent a win-back text.");
+  let token = plan.rejoinToken;
+  if (!token) {
+    token = randomBytes(16).toString("base64url");
+    await prisma.plan.update({ where: { id: plan.id }, data: { rejoinToken: token } });
+  }
+  const setting = await prisma.appSetting.findUnique({ where: { key: winbackSettingKey(c.engineerId) } });
+  const body = winbackBody({ firstName: c.firstName, brand: brandName(c.engineer), offer: parseWinbackOffer(setting?.value), link: `${appUrl()}/rejoin/${token}`, winter: false });
+  const result = await sendSms({ engineerId: c.engineerId, to: c.phone, body, messageClass: "MARKETING", consentBasis: "marketing", cancelKey: `winback:admin:${plan.id}` });
+  if ("reason" in result && result.reason === "opted-out") throw conflict("They've opted out of texts.");
+  const status = result.sent ? ("sent" as const) : ("queued" as const);
+  await adminEvent(admin, "customer_win_back_sent", { customerId: id, planId: plan.id, engineerId: c.engineerId, status });
+  return { status };
 }

@@ -1,9 +1,15 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { GET as statsRoute } from "@/app/api/admin/v1/dashboard/stats/route";
 import { GET as signupsRoute } from "@/app/api/admin/v1/dashboard/signups/route";
 import { GET as funnelRoute } from "@/app/api/admin/v1/dashboard/funnel/route";
 import { GET as moneyRoute } from "@/app/api/admin/v1/dashboard/money/route";
+import { GET as customersRoute } from "@/app/api/admin/v1/customers/route";
+import { GET as customerRoute } from "@/app/api/admin/v1/customers/[customerId]/route";
+import { GET as customerActivityRoute } from "@/app/api/admin/v1/customers/[customerId]/activity/route";
+import { POST as winBackRoute } from "@/app/api/admin/v1/customers/[customerId]/win-back/route";
+import { GET as engineersRoute } from "@/app/api/admin/v1/engineers/route";
+import { GET as engineerRoute } from "@/app/api/admin/v1/engineers/[engineerId]/route";
 import { computeApplicationFeePence } from "@/lib/stripe";
 import { customerStatus, deliveryOf, funnelOf, payments, testMarks, type Milestones } from "@/lib/admin/metrics";
 import { call, resetDb } from "./helpers";
@@ -13,7 +19,19 @@ import { clientFixture, OCTOBER } from "./client-fixture";
 // The client's dashboard of 31 October 2026, rebuilt (client-fixture.ts):
 // every card, funnel step and list must tell the same story.
 
-beforeEach(resetDb);
+// Texts are recorded, never sent.
+const texts = vi.hoisted(() => [] as { to: string; body: string; messageClass: string }[]);
+vi.mock("@/lib/sms", () => ({
+  sendSms: async (o: { to: string; body: string; messageClass: string }) => {
+    texts.push(o);
+    return { sent: true, id: "sms_1" };
+  },
+}));
+
+beforeEach(async () => {
+  texts.length = 0;
+  await resetDb();
+});
 
 const steps = (body: { label: string; count: number }[]) => body.map((s) => [s.label, s.count]);
 
@@ -156,5 +174,99 @@ describe("an offer's delivery and a customer's status", () => {
     expect(customerStatus({ ...plan, status: "ACTIVE", mandateStatus: "active" }, { ...unpaid, paid: true })).toBe("active");
     expect(customerStatus({ ...plan, status: "ACTIVE", paymentFailedAt: new Date() }, { ...unpaid, paid: true })).toBe("payment_failing");
     expect(customerStatus({ ...plan, status: "CANCELLED" }, unpaid)).toBe("cancelled");
+  });
+});
+
+describe("the client's lists", () => {
+  it("agree with the dashboard on customers, payments and who's active", async () => {
+    const f = await clientFixture();
+    const customers = (await call(customersRoute, { query: { engineerId: f.md.id, size: "50" } })).body.items;
+    const byName = Object.fromEntries(customers.map((c: { name: string }) => [c.name, c]));
+    // 2.1: Oliver paid, and is the one first payment and the £12.
+    expect(byName["Oliver Wilcox"]).toMatchObject({ status: "active", firstPaymentAt: "2026-10-29T09:00:00.000Z", plan: { payment: "paid", priceMonthlyPence: 1200 } });
+    // Sam's Direct Debit is set up; nothing collected yet (only the £0 trial invoice).
+    expect(byName["Sam Taylor"]).toMatchObject({ status: "dd_started", plan: { payment: "none" } });
+    // 5.3: Jess's WhatsApp offer never went; she isn't "awaiting mandate". 5.4: the price is the plan she was offered.
+    expect(byName["Jess Brown"]).toMatchObject({ status: "offer_unconfirmed", plan: { status: "PENDING", priceMonthlyPence: 2299 } });
+
+    // Customers on plan (2) and plans live (2) are Oliver and Sam.
+    expect(customers.filter((c: { status: string }) => ["active", "dd_started"].includes(c.status))).toHaveLength(2);
+
+    // 2.2: only 302 MD LTD sent a delivered offer in the last 7 days.
+    const engineers = (await call(engineersRoute, { query: { size: "50" } })).body.items;
+    const active = engineers.filter((e: { status: string }) => e.status === "active").map((e: { id: string }) => e.id);
+    expect(active).toEqual([f.md.id]);
+    // Test data is listed, labelled.
+    expect(engineers.filter((e: { isTest: boolean }) => e.isTest).map((e: { id: string }) => e.id).sort()).toEqual(f.testers.map((t) => t.id).sort());
+
+    // 4.3: on plan and in book, on the record.
+    const md = (await call(engineerRoute, { params: { engineerId: f.md.id } })).body;
+    expect(md.counts).toMatchObject({ customers: 3, customersOnPlans: 2 });
+    expect(md.steps.map((s: { reached: boolean }) => s.reached)).toEqual([true, true, true, true, true]);
+  });
+
+  it("filter customers by the status they show", async () => {
+    const f = await clientFixture();
+    const ids = async (status: string) => (await call(customersRoute, { query: { status } })).body.items.map((c: { id: string }) => c.id);
+    expect(await ids("offer_unconfirmed")).toEqual([f.jess.id]);
+    expect(await ids("dd_started")).toEqual([f.sam.id]);
+  });
+});
+
+describe("a customer's record", () => {
+  it("hides the £0 trial invoices and never counts them as a first payment", async () => {
+    const f = await clientFixture();
+    const sam = (await call(customerRoute, { params: { customerId: f.sam.id } })).body;
+    expect(sam.payments).toEqual([]);
+    expect(sam.zeroInvoicesHidden).toBe(1);
+    expect(sam.firstPaymentAt).toBeNull();
+    const oliver = (await call(customerRoute, { params: { customerId: f.oliver.id } })).body;
+    expect(oliver.payments.map((p: { amountPence: number }) => p.amountPence)).toEqual([1200]);
+    expect(oliver).toMatchObject({ status: "active", source: "doorstep", firstPaymentAt: "2026-10-29T09:00:00.000Z" });
+  });
+
+  // 5.5: built from the events, not "Nothing yet".
+  it("has a timeline from the offer onwards, with the retention screen and the reason", async () => {
+    const f = await clientFixture();
+    await prisma.event.createMany({
+      data: [
+        { name: "signup_opened", actorType: "CUSTOMER", actorId: f.oliver.id, ts: new Date("2026-10-20T10:05:00Z"), meta: { planId: f.oliverPlan.id } },
+        { name: "mandate_active", actorType: "CUSTOMER", actorId: f.oliver.id, ts: new Date("2026-10-20T12:00:00Z"), meta: { planId: f.oliverPlan.id } },
+        { name: "payment_confirmed", actorType: "SYSTEM", ts: new Date("2026-10-29T09:00:00Z"), meta: { planId: f.oliverPlan.id, amountPence: 1200 } },
+        { name: "plan_cancelled", actorType: "SYSTEM", ts: new Date("2026-10-30T09:00:00Z"), meta: { planId: f.oliverPlan.id, reason: "end_of_paid_period" } },
+      ],
+    });
+    await prisma.cancelRequest.create({ data: { planId: f.oliverPlan.id, engineerId: f.md.id, reason: "too_expensive", offer: "cheaper_plan", outcome: "cancelled", createdAt: new Date("2026-10-29T12:00:00Z") } });
+    const items = (await call(customerActivityRoute, { params: { customerId: f.oliver.id } })).body.items;
+    expect(items.map((i: { name: string }) => i.name)).toEqual(["plan_cancelled", "cancel_requested", "payment_confirmed", "mandate_active", "signup_opened", "offer_sent"]);
+    expect(items[1].detail).toMatchObject({ reason: "too_expensive", offer: "cheaper_plan", outcome: "cancelled" });
+    expect(items[5].detail.channel).toBe("sms");
+  });
+});
+
+describe("win back (5.7)", () => {
+  it("texts a cancelled customer their rejoin link, and records it", async () => {
+    const f = await clientFixture();
+    await prisma.plan.update({ where: { id: f.oliverPlan.id }, data: { status: "CANCELLED", cancelledAt: new Date() } });
+    const res = await call(winBackRoute, { params: { customerId: f.oliver.id } });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: "sent" });
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).toMatchObject({ to: f.oliver.phone, messageClass: "MARKETING" });
+    const token = (await prisma.plan.findUniqueOrThrow({ where: { id: f.oliverPlan.id } })).rejoinToken;
+    expect(texts[0].body).toContain(`/rejoin/${token}`);
+    expect(await prisma.event.findFirst({ where: { name: "customer_win_back_sent" } })).toMatchObject({ actorType: "ADMIN" });
+  });
+
+  it("refuses anyone who opted out, or whose plan hasn't ended", async () => {
+    const f = await clientFixture();
+    expect((await call(winBackRoute, { params: { customerId: f.oliver.id } })).status).toBe(409); // still on their plan
+    await prisma.plan.update({ where: { id: f.oliverPlan.id }, data: { status: "CANCELLED", cancelledAt: new Date() } });
+    await prisma.suppression.create({ data: { channel: "sms", value: f.oliver.phone, source: "sms_stop" } });
+    const res = await call(winBackRoute, { params: { customerId: f.oliver.id } });
+    expect(res.status).toBe(409);
+    expect(res.body.error.message).toBe("They've opted out of texts.");
+    expect((await call(customerRoute, { params: { customerId: f.oliver.id } })).body.winBack).toEqual({ available: false, reason: "They've opted out of texts." });
+    expect(texts).toHaveLength(0);
   });
 });

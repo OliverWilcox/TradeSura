@@ -45,7 +45,7 @@ export async function clientFixture() {
     postcode: "E16 1YL",
     attribution: { heardVia: "online" },
   });
-  await prisma.planTier.create({ data: { engineerId: md.id, name: "Boiler Care", priceMonthlyPence: 2299, sortOrder: 0, status: "LIVE" } });
+  const boilerCare = await prisma.planTier.create({ data: { engineerId: md.id, name: "Boiler Care", priceMonthlyPence: 2299, sortOrder: 0, status: "LIVE" } });
   await prisma.event.createMany({
     data: [
       { name: "plan_live", actorType: "ENGINEER", actorId: md.id, ts: at("2026-10-13T09:00:00Z") },
@@ -82,7 +82,7 @@ export async function clientFixture() {
   // Jess: offered by WhatsApp, which never went. Her plan waits as PENDING
   // with no price, as every offer does until the customer picks.
   const jess = await makeCustomer(md.id, { firstName: "Jess", lastName: "Brown" });
-  const jessPlan = await makePlan(md.id, jess.id, { status: "PENDING", priceMonthlyPence: null, activatedAt: null, createdAt: at("2026-10-29T15:00:00Z") });
+  const jessPlan = await makePlan(md.id, jess.id, { tierId: boilerCare.id, status: "PENDING", priceMonthlyPence: null, activatedAt: null, createdAt: at("2026-10-29T15:00:00Z") });
   await offer(md.id, jessPlan.id, jess.id, "whatsapp", "2026-10-29T15:00:00Z");
 
   // A staff engineer on 302 MD LTD's team: not an engineer of their own.

@@ -23,5 +23,8 @@ export const customerFilters = {
   payment: z.enum(["failing", "paid", "none"]).optional(),
   cancelledFrom: isoDay.optional(),
   cancelledTo: isoDay.optional(),
-  source: z.enum(["added", "doorstep", "web", "import", "contacts"]).optional(),
+  source: z.enum(["added", "doorstep", "web", "website", "import", "contacts"]).optional(),
+  status: z
+    .enum(["offer_sent", "offer_failed", "offer_unconfirmed", "offer_opened", "thinking", "dd_started", "active", "payment_failing", "paused", "cancelled", "no_plan"])
+    .optional(),
 };
