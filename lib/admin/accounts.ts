@@ -318,3 +318,37 @@ export async function deleteAccounts(admin: AdminPrincipal, input: { engineerIds
   for (const id of customerIds) await attempt("customer", id, () => deleteCustomer(run, id));
   return { items };
 }
+
+// --- Wiping test data ----------------------------------------------------------
+
+export type WipePlan = {
+  engineers: { id: string; name: string; customers: number; livePlans: number; canDelete: boolean }[];
+  customers: { id: string; name: string; engineerId: string; livePlans: number; canDelete: boolean }[];
+};
+
+/**
+ * What wiping test data would do, changing nothing: every marked engineer and
+ * customer still on record, how much goes with them, and whether the Delete
+ * accounts rules below let them go yet: an engineer with a customer on a live
+ * plan, or a customer whose plan hasn't ended, stays until it does.
+ */
+export async function planWipe(): Promise<WipePlan> {
+  const marks = await prisma.adminTestMark.findMany();
+  const engineerIds = marks.filter((m) => m.subjectType === "engineer").map((m) => m.subjectId);
+  const customerIds = marks.filter((m) => m.subjectType === "customer").map((m) => m.subjectId);
+  const [engineers, customers] = await Promise.all([
+    prisma.engineer.findMany({
+      where: { id: { in: engineerIds }, deletedAt: null },
+      select: { id: true, tradingName: true, legalName: true, slug: true, _count: { select: { customers: true, plans: { where: LIVE_PLAN } } } },
+    }),
+    prisma.customer.findMany({
+      // A marked engineer's customers go with them.
+      where: { id: { in: customerIds }, engineerId: { notIn: engineerIds }, engineer: { deletedAt: null }, NOT: { firstName: "Deleted", lastName: "customer" } },
+      select: { id: true, firstName: true, lastName: true, engineerId: true, _count: { select: { plans: { where: OPEN_PLAN } } } },
+    }),
+  ]);
+  return {
+    engineers: engineers.map((e) => ({ id: e.id, name: e.tradingName || e.legalName || e.slug, customers: e._count.customers, livePlans: e._count.plans, canDelete: e._count.plans === 0 })),
+    customers: customers.map((c) => ({ id: c.id, name: `${c.firstName} ${c.lastName}`.trim(), engineerId: c.engineerId, livePlans: c._count.plans, canDelete: c._count.plans === 0 })),
+  };
+}
