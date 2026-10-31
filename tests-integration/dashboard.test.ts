@@ -36,7 +36,8 @@ describe("dashboard sign-ups", () => {
       { date: "2026-07-04", count: 0 },
       { date: "2026-07-05", count: 1 },
     ]);
-    expect(res.body.channels[0]).toEqual({ channel: "letter", count: 2, share: 0.5 });
+    // "Letter" without a claim code is their own answer, kept apart from letters we can trace.
+    expect(res.body.channels[0]).toEqual({ channel: "letter_unverified", count: 2, share: 0.5 });
     expect((await call(statsRoute, { query: JULY })).body.signups).toBe(4);
   });
 });
@@ -45,19 +46,25 @@ describe("dashboard headline numbers", () => {
   it("count offers, sign-ups from them, live plans, customers and active engineers", async () => {
     const e = await makeEngineer({ gasSafeVerifiedAt: new Date("2026-06-01") });
     const [c1, c2, c3] = [await makeCustomer(e.id), await makeCustomer(e.id), await makeCustomer(e.id)];
-    await makePlan(e.id, c1.id, { createdAt: new Date("2026-07-10"), activatedAt: new Date("2026-07-12"), mandateStatus: "active" });
-    await makePlan(e.id, c2.id, { createdAt: new Date("2026-07-20"), status: "PENDING", activatedAt: null });
+    const p1 = await makePlan(e.id, c1.id, { createdAt: new Date("2026-07-10"), activatedAt: new Date("2026-07-12"), mandateStatus: "active" });
+    const p2 = await makePlan(e.id, c2.id, { createdAt: new Date("2026-07-28"), status: "PENDING", activatedAt: null });
     await makePlan(e.id, c3.id, { createdAt: new Date("2026-05-01"), activatedAt: new Date("2026-05-02"), cancelledAt: new Date("2026-07-15"), status: "CANCELLED" });
     await makeEngineer({ gasSafeVerifiedAt: new Date("2026-06-01") }); // verified, sent nothing
+    await prisma.event.createMany({
+      data: [
+        { name: "offer_sent", actorType: "ENGINEER", actorId: e.id, ts: new Date("2026-07-10"), meta: { planId: p1.id, channel: "sms" } },
+        { name: "offer_sent", actorType: "ENGINEER", actorId: e.id, ts: new Date("2026-07-28"), meta: { planId: p2.id, channel: "sms" } },
+      ],
+    });
 
     const s = (await call(statsRoute, { query: JULY })).body;
     expect(s).toMatchObject({
-      offers: 2,
+      offers: { delivered: 2, failed: 0, unconfirmed: 0 },
       conversion: { sent: 2, converted: 1, rate: 0.5 },
       plansLive: 1, // c3's ended mid-July
       customers: 1,
-      active: 1,
-      verified: { inPeriod: 0, allTime: 2 },
+      active: 1, // the offer on 28 July is within 7 days of the end
+      verified: { ofSignups: 0, total: 2 },
     });
   });
 
@@ -84,36 +91,43 @@ describe("dashboard headline numbers", () => {
 
 describe("the activation funnel", () => {
   it("follows each new engineer through the steps", async () => {
-    const a = await makeEngineer({ createdAt: new Date("2026-07-01T09:00:00Z"), stripeChargesEnabled: true });
+    const a = await makeEngineer({ createdAt: new Date("2026-07-01T09:00:00Z"), gasSafeVerifiedAt: new Date("2026-07-02T09:00:00Z"), stripeChargesEnabled: true });
     await makeEngineer({ createdAt: new Date("2026-07-02T09:00:00Z") });
     await prisma.event.createMany({
       data: [
-        { name: "stripe_onboarded", actorType: "ENGINEER", actorId: a.id, ts: new Date("2026-07-03T09:00:00Z") },
         { name: "plan_live", actorType: "ENGINEER", actorId: a.id, ts: new Date("2026-07-04T09:00:00Z"), meta: { tierId: "t1" } },
+        { name: "stripe_onboarded", actorType: "ENGINEER", actorId: a.id, ts: new Date("2026-07-05T09:00:00Z") },
       ],
     });
     const c = await makeCustomer(a.id);
-    await makePlan(a.id, c.id, { createdAt: new Date("2026-07-05"), activatedAt: new Date("2026-07-08T09:00:00Z") });
+    await makePlan(a.id, c.id, { createdAt: new Date("2026-07-05"), activatedAt: new Date("2026-07-08T09:00:00Z"), stripeSubscriptionId: "sub_a" });
+    await prisma.stripeWebhookEvent.create({
+      data: { id: "evt_a", type: "invoice.paid", payload: { data: { object: { id: "in_a", amount_paid: 1500, subscription: "sub_a", status_transitions: { paid_at: Date.parse("2026-07-15T09:00:00Z") / 1000 } } } } },
+    });
 
     const steps = (await call(funnelRoute, { query: JULY })).body;
     expect(steps.map((s: { label: string; count: number }) => [s.label, s.count])).toEqual([
       ["Signed up", 2],
-      ["Payments set up", 1],
+      ["Verified", 1],
       ["First plan live", 1],
-      ["First customer", 1],
-      ["First payment", 0],
+      ["Payments set up", 1],
+      ["First payment", 1],
     ]);
-    expect(steps[1]).toMatchObject({ ofStart: 0.5, fromPrevious: 0.5, medianDaysFromPrevious: 2 });
-    expect(steps[3].medianDaysFromPrevious).toBe(4);
+    expect(steps[1]).toMatchObject({ ofStart: 0.5, fromPrevious: 0.5, medianDaysFromPrevious: 1 });
+    expect(steps[2].medianDaysFromPrevious).toBe(2);
+    expect(steps[4].medianDaysFromPrevious).toBe(10);
   });
 });
 
 describe("dashboard money", () => {
   it("adds up paid invoices from the Stripe events, by UK month", async () => {
+    const e = await makeEngineer();
+    const c = await makeCustomer(e.id);
+    await makePlan(e.id, c.id, { stripeSubscriptionId: "sub_1" });
     const paid = (id: string, at: string, amount: number, fee: number | null) => ({
       id,
       type: "invoice.paid",
-      payload: { data: { object: { amount_paid: amount, application_fee_amount: fee, status_transitions: { paid_at: Math.floor(new Date(at).getTime() / 1000) } } } },
+      payload: { data: { object: { amount_paid: amount, application_fee_amount: fee, subscription: "sub_1", status_transitions: { paid_at: Math.floor(new Date(at).getTime() / 1000) } } } },
     });
     await prisma.stripeWebhookEvent.createMany({
       data: [
