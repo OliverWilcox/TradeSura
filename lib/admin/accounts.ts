@@ -4,7 +4,7 @@ import { displayName } from "@/lib/engineer";
 import { deleteOwnerAccount, deleteStaffAccount } from "@/lib/delete-account";
 import { adminEvent } from "@/lib/admin-api/audit";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
-import { engineerSearch, engineerStatus, STATUS_WHERE, type EngineerStatus } from "@/lib/admin/engineers";
+import { engineerSearch, engineerStatus, STATUS_WHERE, type EngineerStanding } from "@/lib/admin/engineers";
 import { customerSearch } from "@/lib/admin/customers";
 import { personName, verificationStatus } from "@/lib/admin/verifications";
 import { maskEmail, maskPhone } from "@/lib/admin/mask";
@@ -111,7 +111,7 @@ const CUSTOMER_SELECT = {
 export type EngineerAccountQuery = {
   q?: string;
   role?: "owner" | "staff";
-  status?: EngineerStatus;
+  status?: EngineerStanding;
   /** yes: can be deleted now; no: an owner with a live customer plan. */
   deletable?: "yes" | "no";
   joinedFrom?: Date;

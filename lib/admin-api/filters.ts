@@ -5,9 +5,9 @@ import { isoDay } from "@/lib/admin-api/schemas";
 
 export const engineerFilters = {
   q: z.string().trim().max(100).optional(),
-  status: z.enum(["active", "paused", "banned", "left"]).optional(),
+  status: z.enum(["active", "inactive", "paused", "banned", "left"]).optional(),
   verification: z.enum(["verified", "pending", "rejected", "not_submitted"]).optional(),
-  step: z.enum(["signed_up", "payments", "plan", "customer", "payout"]).optional(),
+  step: z.enum(["signed_up", "verified", "plan_live", "payments_set_up", "first_payment"]).optional(),
   town: z.string().trim().max(80).optional(),
   type: z.enum(["sole_trader", "ltd", "partnership"]).optional(),
   channel: z.enum(["letter", "email", "engineer", "online", "other"]).optional(),

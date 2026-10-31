@@ -10,6 +10,9 @@ import { conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
 import { personName, verificationStatus } from "@/lib/admin/verifications";
 import { exactContactSearch, maskEmail, maskPhone } from "@/lib/admin/mask";
+import { FUNNEL_STEPS, STEP_LABELS, activeEngineerIds, milestones, testMarks, type FunnelStep, type Milestones, type TestMarks } from "@/lib/admin/metrics";
+import { testMarkOf } from "@/lib/admin/test-data";
+import { companyProfile } from "@/lib/admin/companies";
 
 // Engineers for the admin API: find them, see one in full, and change their
 // standing. Pause and ban are the fields the app already enforces everywhere
@@ -17,11 +20,20 @@ import { exactContactSearch, maskEmail, maskPhone } from "@/lib/admin/mask";
 // them here takes effect on the engineer's next request. Contact details are
 // masked unless revealed, and every reveal is recorded.
 
-export type EngineerStatus = "active" | "paused" | "banned" | "left";
+/** The account's standing: what pause and ban change. */
+export type EngineerStanding = "active" | "paused" | "banned" | "left";
+
+/**
+ * What the admin shows as an engineer's status: banned, left or paused when
+ * the standing says so, otherwise active or inactive by the metrics layer's
+ * definition (a delivered offer in the last ACTIVE_WINDOW_DAYS), so a list
+ * and the dashboard's Active engineers agree.
+ */
+export type EngineerStatus = Exclude<EngineerStanding, "active"> | "active" | "inactive";
 
 const live = { deletedAt: null } satisfies Prisma.EngineerWhereInput;
 
-export const STATUS_WHERE: Record<EngineerStatus, Prisma.EngineerWhereInput> = {
+export const STATUS_WHERE: Record<EngineerStanding, Prisma.EngineerWhereInput> = {
   active: { bannedAt: null, pausedAt: null, leftAt: null },
   paused: { bannedAt: null, pausedAt: { not: null } },
   banned: { bannedAt: { not: null } },
@@ -37,11 +49,27 @@ const VERIFICATION_WHERE = {
 
 export type VerificationFilter = keyof typeof VERIFICATION_WHERE;
 
-export function engineerStatus(e: { bannedAt: Date | null; pausedAt: Date | null; leftAt: Date | null }): EngineerStatus {
+export function engineerStatus(e: { bannedAt: Date | null; pausedAt: Date | null; leftAt: Date | null }): EngineerStanding {
   if (e.bannedAt) return "banned";
   if (e.leftAt) return "left";
   if (e.pausedAt) return "paused";
   return "active";
+}
+
+/** The status the admin shows, given who's active now (activeEngineerIds). */
+export function displayStatus(e: { id: string; bannedAt: Date | null; pausedAt: Date | null; leftAt: Date | null }, active: Set<string>): EngineerStatus {
+  const standing = engineerStatus(e);
+  return standing !== "active" ? standing : active.has(e.id) ? "active" : "inactive";
+}
+
+/** The furthest step an engineer has reached, taking the steps in order (as the funnel does). */
+export function furthestStep(m: Milestones): FunnelStep {
+  let furthest: FunnelStep = FUNNEL_STEPS[0];
+  for (const step of FUNNEL_STEPS) {
+    if (!m[step].reached) break;
+    furthest = step;
+  }
+  return furthest;
 }
 
 function channelOf(attribution: unknown): string | null {
@@ -77,21 +105,6 @@ const LIST_SELECT = {
   },
 } satisfies Prisma.EngineerSelect;
 
-/** How far through getting started an engineer is: the furthest step they've reached. */
-export type ActivationStep = "signed_up" | "payments" | "plan" | "customer" | "payout";
-
-const hasLiveTier = { tiers: { some: { status: { in: ["LIVE", "STOPPED"] } } } } satisfies Prisma.EngineerWhereInput;
-const hasCustomer = { plans: { some: { activatedAt: { not: null } } } } satisfies Prisma.EngineerWhereInput;
-const hasPayment = { plans: { some: { paymentsCleared: { gte: 1 } } } } satisfies Prisma.EngineerWhereInput;
-
-const STEP_WHERE: Record<ActivationStep, Prisma.EngineerWhereInput> = {
-  signed_up: { stripeChargesEnabled: false, NOT: hasLiveTier },
-  payments: { stripeChargesEnabled: true, NOT: hasLiveTier },
-  plan: { ...hasLiveTier, NOT: hasCustomer },
-  customer: { ...hasCustomer, NOT: hasPayment },
-  payout: hasPayment,
-};
-
 /**
  * plans: customer plans live now (ACTIVE); tiers: the engineer's own plans on
  * sale (LIVE); customers: everyone on their book; customersOnPlans: customers
@@ -103,7 +116,7 @@ export type EngineerListQuery = {
   q?: string;
   status?: EngineerStatus;
   verification?: VerificationFilter;
-  step?: ActivationStep;
+  step?: FunnelStep;
   town?: string;
   type?: "sole_trader" | "ltd" | "partnership";
   channel?: string;
@@ -116,18 +129,35 @@ export type EngineerListQuery = {
   size: number;
 };
 
-function listWhere(q: EngineerListQuery): Prisma.EngineerWhereInput {
+/**
+ * The list's filters. Active, inactive and the furthest step reached come
+ * from the metrics layer, worked out for the engineers the other filters
+ * match, so they can't drift from the dashboard.
+ */
+async function listWhere(q: EngineerListQuery, marks: TestMarks, active: Set<string>): Promise<Prisma.EngineerWhereInput> {
   const and: Prisma.EngineerWhereInput[] = [live];
-  if (q.status) and.push(STATUS_WHERE[q.status]);
+  if (q.status === "active" || q.status === "inactive") {
+    and.push(STATUS_WHERE.active, q.status === "active" ? { id: { in: [...active] } } : { id: { notIn: [...active] } });
+  } else if (q.status) and.push(STATUS_WHERE[q.status]);
   if (q.verification) and.push(VERIFICATION_WHERE[q.verification]);
   if (q.type) and.push({ businessType: q.type });
-  if (q.step) and.push(STEP_WHERE[q.step]);
   if (q.town) and.push({ town: { equals: q.town, mode: "insensitive" } });
   if (q.channel) and.push({ attribution: { path: ["heardVia"], equals: q.channel } });
   if (q.staff) and.push(q.staff === "staff" ? { ownerId: { not: null } } : { ownerId: null });
   if (q.joinedFrom || q.joinedTo) and.push({ createdAt: { ...(q.joinedFrom ? { gte: q.joinedFrom } : {}), ...(q.joinedTo ? { lt: q.joinedTo } : {}) } });
   if (q.q) and.push(engineerSearch(q.q));
+  if (q.step) {
+    const ids = (await prisma.engineer.findMany({ where: { AND: and }, select: { id: true } })).map((r) => r.id);
+    const steps = await milestones(marks, { ids });
+    and.push({ id: { in: ids.filter((id) => steps.has(id) && furthestStep(steps.get(id)!) === q.step) } });
+  }
   return { AND: and };
+}
+
+/** What every list answer needs: who's test data, and who's active now. */
+async function listContext() {
+  const marks = await testMarks();
+  return { marks, active: await activeEngineerIds(marks, new Date()) };
 }
 
 /** What a search box matches: names, business, town, postcode, Gas Safe and company numbers, or a whole email or phone number. */
@@ -208,7 +238,8 @@ async function customersOnPlans(ids: string[]): Promise<Map<string, number>> {
 }
 
 export async function listEngineers(q: EngineerListQuery) {
-  const where = listWhere(q);
+  const ctx = await listContext();
+  const where = await listWhere(q, ctx.marks, ctx.active);
   const skip = (q.page - 1) * q.size;
   let rows: ListRow[];
   let total: number;
@@ -227,13 +258,13 @@ export async function listEngineers(q: EngineerListQuery) {
       prisma.engineer.count({ where }),
     ]);
   }
-  return { items: await listItems(rows), page: q.page, size: q.size, total };
+  return { items: await listItems(rows, ctx), page: q.page, size: q.size, total };
 }
 
 type ListRow = Prisma.EngineerGetPayload<{ select: typeof LIST_SELECT }>;
 
 /** List rows as the API shows them, with each one's latest offer and customers on a plan. */
-async function listItems(rows: ListRow[]) {
+async function listItems(rows: ListRow[], ctx: { marks: TestMarks; active: Set<string> }) {
   const [lastOffers, onPlans] = await Promise.all([
     rows.length ? prisma.plan.groupBy({ by: ["engineerId"], where: { engineerId: { in: rows.map((r) => r.id) } }, _max: { createdAt: true } }) : [],
     customersOnPlans(rows.map((r) => r.id)),
@@ -248,7 +279,8 @@ async function listItems(rows: ListRow[]) {
     type: r.businessType,
     channel: channelOf(r.attribution),
     isStaff: Boolean(r.ownerId),
-    status: engineerStatus(r),
+    isTest: ctx.marks.engineers.includes(r.id),
+    status: displayStatus(r, ctx.active),
     verification: verificationStatus(r),
     paymentsReady: r.stripeChargesEnabled,
     plansLive: r._count.plans,
@@ -265,7 +297,8 @@ async function listItems(rows: ListRow[]) {
  * a CSV export streams. One query per batch, however many there are.
  */
 export async function* exportEngineers(q: Omit<EngineerListQuery, "page" | "size" | "sort" | "dir">, batch = 500) {
-  const where = listWhere({ ...q, page: 1, size: batch });
+  const ctx = await listContext();
+  const where = await listWhere({ ...q, page: 1, size: batch }, ctx.marks, ctx.active);
   let after: string | undefined;
   for (;;) {
     const rows = await prisma.engineer.findMany({
@@ -276,7 +309,7 @@ export async function* exportEngineers(q: Omit<EngineerListQuery, "page" | "size
       select: LIST_SELECT,
     });
     if (!rows.length) return;
-    yield await listItems(rows);
+    yield await listItems(rows, ctx);
     if (rows.length < batch) return;
     after = rows[rows.length - 1].id;
   }
@@ -303,7 +336,8 @@ export async function getEngineer(id: string) {
   });
   if (!e) return null;
   const weekAgo = new Date(Date.now() - 7 * 86_400_000);
-  const [planCounts, tiersLive, mrr, earnings, ratings, tiers, recentCustomers, payouts, invitees, milestones, offersLast7Days, onPlans] = await Promise.all([
+  const marks = await testMarks();
+  const [planCounts, tiersLive, mrr, earnings, ratings, tiers, recentCustomers, payouts, invitees, steps, offersLast7Days, onPlans, test, company, cancelReasons] = await Promise.all([
     prisma.plan.groupBy({ by: ["status"], where: { engineerId: id }, _count: { _all: true } }),
     prisma.planTier.count({ where: { engineerId: id, status: "LIVE" } }),
     prisma.plan.aggregate({ where: { engineerId: id, status: "ACTIVE" }, _sum: { priceMonthlyPence: true } }),
@@ -326,10 +360,15 @@ export async function getEngineer(id: string) {
       orderBy: { createdAt: "desc" },
       select: { id: true, tradingName: true, legalName: true, slug: true, createdAt: true, bannedAt: true, pausedAt: true, leftAt: true },
     }),
-    engineerMilestones(id, e.stripeAccountId),
+    milestones(marks, { ids: [id] }),
     prisma.plan.count({ where: { engineerId: id, createdAt: { gte: weekAgo } } }),
     customersOnPlans([id]),
+    testMarkOf("engineer", id),
+    e.companyNumber ? companyProfile(e.companyNumber) : Promise.resolve(null),
+    cancelReasonCounts(id),
   ]);
+  const active = await activeEngineerIds(marks, new Date(), [id, ...invitees.map((i) => i.id)]);
+  const reached = steps.get(id)!;
   const byInvitee = invitees.length
     ? await prisma.referralEarning.groupBy({ by: ["inviteeId"], where: { referrerId: id, inviteeId: { in: invitees.map((i) => i.id) } }, _sum: { amountPence: true }, _max: { ratePercent: true, createdAt: true } })
     : [];
@@ -355,12 +394,25 @@ export async function getEngineer(id: string) {
     town: e.town,
     postcode: e.postcode,
     serviceArea: e.serviceArea,
+    /**
+     * Each address on its own: the areas the engineer says they cover, the
+     * postcode given at sign-up, the postal address packs go to, and the
+     * registered office Companies House holds (limited companies).
+     */
+    addresses: {
+      areasCovered: (e.serviceArea ?? "").split(",").map((a) => a.trim()).filter(Boolean),
+      signupPostcode: e.postcode,
+      postal: e.packAddress,
+      registeredOffice: company?.registeredOffice ?? null,
+    },
+    company: company ? { name: company.name, type: company.type, status: company.status } : null,
     contact: { email: maskEmail(e.email), phone: e.phone ? maskPhone(e.phone) : null, revealed: false },
     joinedAt: e.createdAt.toISOString(),
     channel: attribution.heardVia ?? null,
     letterBatch: attribution.letterBatch ?? null,
-    status: engineerStatus(e),
+    status: displayStatus(e, active),
     standing: standingState(e),
+    test,
     pause: e.pausedAt ? { at: e.pausedAt.toISOString(), reason: e.pauseReason } : null,
     ban: e.bannedAt ? { at: e.bannedAt.toISOString(), reason: e.banReason } : null,
     leftAt: e.leftAt?.toISOString() ?? null,
@@ -387,6 +439,7 @@ export async function getEngineer(id: string) {
       websiteConnected: Boolean(e.websiteConnectedAt),
     },
     counts: { customers: e._count.customers, customersOnPlans: onPlans.get(id) ?? 0, plans, tiersLive, enquiries: e._count.enquiries, stickers: e._count.stickers },
+    cancelReasons,
     money: { monthlyPlanValuePence: monthly, tradesuraFeePence: Math.floor(monthly * TRADESURA_FEE_RATE) },
     team: {
       owner: e.owner ? { id: e.owner.id, business: displayName(e.owner) } : null,
@@ -411,7 +464,7 @@ export async function getEngineer(id: string) {
         id: i.id,
         business: displayName(i),
         joinedAt: i.createdAt.toISOString(),
-        status: engineerStatus(i),
+        status: displayStatus(i, active),
         earnedPence: earnedBy.get(i.id)?._sum.amountPence ?? 0,
         currentRatePercent: earnedBy.get(i.id)?._max.ratePercent ?? null,
       })),
@@ -436,7 +489,8 @@ export async function getEngineer(id: string) {
     }),
     payouts: payouts.recent,
     lifetimePayoutsPence: payouts.totalPence,
-    milestones,
+    /** The activation steps, in the funnel's order, from the same source as the funnel. */
+    steps: FUNNEL_STEPS.map((step) => ({ key: step, label: STEP_LABELS[step], reached: reached[step].reached, at: reached[step].at?.toISOString() ?? null })),
     offersLast7Days,
     ratings: { count: ratings._count._all, average: ratings._avg.stars === null ? null : Math.round(ratings._avg.stars * 10) / 10 },
     memberPack: { requestedAt: e.packRequestedAt?.toISOString() ?? null, shippedAt: e.packShippedAt?.toISOString() ?? null },
@@ -469,23 +523,18 @@ async function engineerPayouts(accountId: string | null) {
   };
 }
 
-/** When the engineer reached each step, from their events and plans. */
-async function engineerMilestones(id: string, accountId: string | null) {
-  const [row] = await bounded(prisma.$queryRaw<{ signedUp: Date; payments: Date | null; planLive: Date | null; firstCustomer: Date | null; firstPayout: Date | null }[]>`
-    SELECT e."createdAt" AS "signedUp",
-      (SELECT min(ts) FROM "Event" WHERE name = 'stripe_onboarded' AND "actorId" = e.id) AS payments,
-      (SELECT min(ts) FROM "Event" WHERE name = 'plan_live' AND "actorType" = 'ENGINEER' AND "actorId" = e.id) AS "planLive",
-      (SELECT min("activatedAt") FROM "Plan" WHERE "engineerId" = e.id) AS "firstCustomer",
-      (SELECT min("processedAt") FROM "StripeWebhookEvent" WHERE type = 'payout.paid' AND payload->>'account' = ${accountId ?? ""}) AS "firstPayout"
-    FROM "Engineer" e WHERE e.id = ${id}`);
-  const iso = (d: Date | null | undefined) => d?.toISOString() ?? null;
-  return {
-    signedUpAt: iso(row?.signedUp),
-    paymentsSetUpAt: iso(row?.payments),
-    firstPlanLiveAt: iso(row?.planLive),
-    firstCustomerAt: iso(row?.firstCustomer),
-    firstPayoutAt: iso(row?.firstPayout),
-  };
+/** Why their customers cancelled: each cancelled plan's latest reason, counted. */
+async function cancelReasonCounts(engineerId: string) {
+  const cancelled = await prisma.plan.findMany({
+    where: { engineerId, status: "CANCELLED" },
+    select: { cancellations: { orderBy: { createdAt: "desc" }, take: 1, select: { reason: true } } },
+  });
+  const counts = new Map<string, number>();
+  for (const p of cancelled) {
+    const reason = p.cancellations[0]?.reason ?? "none";
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  }
+  return [...counts].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason));
 }
 
 /** What happened to an engineer: their own actions and anything done to them, newest first. */

@@ -252,7 +252,8 @@ describe("L5: CSV exports", () => {
     const e = await makeEngineer();
     await makeEngineer({ pausedAt: new Date() });
     for (let i = 0; i < 3; i++) await makeCustomer(e.id);
-    const res = await call(engineerExport, { query: { status: "active" } });
+    // Neither has sent an offer, so the one not paused is inactive.
+    const res = await call(engineerExport, { query: { status: "inactive" } });
     expect(res.headers.get("content-type")).toContain("application/x-ndjson");
     const lines = (res.body as string).trim().split("\n").map((l) => JSON.parse(l));
     expect(lines).toHaveLength(2);
