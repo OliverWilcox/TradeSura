@@ -5,7 +5,12 @@ import { adminEvent, adminEvents } from "@/lib/admin-api/audit";
 import { likeTerm } from "@/lib/admin-api/db";
 import { conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
-import { personName } from "@/lib/admin/verifications";
+import { afterResponse, personName } from "@/lib/admin/verifications";
+import { companyProfile } from "@/lib/admin/companies";
+import { planLinkUrl, profileUrl } from "@/lib/public-url";
+import { sendEmail } from "@/lib/email";
+import { escapeHtml } from "@/lib/email-layout";
+import { sendPushNotification } from "@/lib/push";
 
 // Founding-member packs for the admin API (Part 17.4). A pack is requested at
 // signup, but the Verified Member seal never ships to an unverified, paused or
@@ -48,6 +53,8 @@ const SELECT = {
   pausedAt: true,
   bannedAt: true,
   businessType: true,
+  companyNumber: true,
+  town: true,
 } satisfies Prisma.EngineerSelect;
 
 type Row = Prisma.EngineerGetPayload<{ select: typeof SELECT }>;
@@ -58,6 +65,36 @@ function heldBecause(r: Row): "not_verified" | "paused" | "banned" | null {
   if (r.pausedAt) return "paused";
   if (!r.gasSafeVerifiedAt) return "not_verified";
   return null;
+}
+
+const UK_POSTCODE = /([A-Z]{1,2}\d[A-Z\d]?) ?(\d[A-Z]{2})/i;
+const postcodeOf = (text: string | null) => {
+  const m = text?.match(UK_POSTCODE);
+  return m ? `${m[1]}${m[2]}`.toUpperCase() : null;
+};
+
+/**
+ * 6.1: whether the pack's postal address can go to the printer. Missing, or
+ * at a limited company's registered office (Companies House's postcode),
+ * it's blocked: the engineer gave sign-up the registered office, not where
+ * they trade. Until the app asks engineers to confirm the address, that's as
+ * far as it can be checked; "unchecked" is a company Companies House didn't
+ * answer for.
+ */
+export type AddressCheck = "ok" | "unchecked" | "missing" | "registered_office";
+
+async function addressChecks(rows: Row[]): Promise<Map<string, AddressCheck>> {
+  const checks = await Promise.all(
+    rows.map(async (r): Promise<[string, AddressCheck]> => {
+      if (!r.packAddress?.trim()) return [r.id, "missing"];
+      if (r.businessType !== "ltd" || !r.companyNumber) return [r.id, "ok"];
+      const profile = await companyProfile(r.companyNumber);
+      if (!profile) return [r.id, "unchecked"];
+      const office = postcodeOf(profile.registeredOffice);
+      return [r.id, office && office === postcodeOf(r.packAddress) ? "registered_office" : "ok"];
+    }),
+  );
+  return new Map(checks);
 }
 
 /** Name, business or address containing the search text. */
@@ -77,13 +114,23 @@ export async function listMemberPacks(q: { tab: PackTab; q?: string; page: numbe
     prisma.engineer.count({ where: TAB_WHERE.posted }),
   ]);
   const iso = (d: Date | null) => d?.toISOString() ?? null;
+  const checks = q.tab === "posted" ? new Map<string, AddressCheck>() : await addressChecks(rows);
   return {
     items: rows.map((r) => ({
       id: r.id,
       name: personName(r),
+      firstName: r.firstName,
       business: displayName(r),
       businessType: r.businessType,
+      town: r.town,
       address: r.packAddress,
+      addressCheck: checks.get(r.id) ?? "ok",
+      /** Which pack: Founding (with its town) arrives with the Founding spot; Standard until then. */
+      version: { kind: "standard" as const, town: null },
+      // What Ali's mail-merge template prints: their live page, referral code and the QR the app shows.
+      livePage: profileUrl(r.slug),
+      referralCode: r.slug,
+      qrLink: `${planLinkUrl(r.slug)}?src=qr`,
       requestedAt: iso(r.packRequestedAt),
       verifiedAt: iso(r.gasSafeVerifiedAt),
       postedAt: iso(r.packShippedAt),
@@ -94,6 +141,25 @@ export async function listMemberPacks(q: { tab: PackTab; q?: string; page: numbe
     total,
     counts: { to_post: toPost, held, posted },
   };
+}
+
+/** 6.4: tells each engineer their pack is on its way, by push and email. A failed send never undoes the posting. */
+async function tellPacksPosted(engineerIds: string[]) {
+  const engineers = engineerIds.length ? await prisma.engineer.findMany({ where: { id: { in: engineerIds } }, select: { id: true, email: true, firstName: true } }) : [];
+  for (const e of engineers) {
+    try {
+      await sendPushNotification(e.id, "Your member pack is on its way", "Your TradeSura member pack is in the post.", { url: "/more" });
+      if (e.email) {
+        await sendEmail({
+          to: e.email,
+          subject: "Your member pack is on its way",
+          html: `<p>Hi ${escapeHtml(e.firstName ?? "there")},</p><p>Your TradeSura member pack is on its way. It's in the post today, so it should be with you in a few days.</p>`,
+        });
+      }
+    } catch (err) {
+      console.error("[admin-api] pack posted notice failed:", err);
+    }
+  }
 }
 
 /** Marks a pack as posted. Only one that may go out and hasn't yet: two admins can't both post it. */
@@ -117,6 +183,7 @@ export async function markPackPosted(admin: AdminPrincipal, engineerId: string) 
     }
     await adminEvent(admin, "member_pack_shipped", { engineerId }, tx);
   });
+  await afterResponse(() => tellPacksPosted([engineerId]));
   return { id: engineerId, postedAt: now.toISOString() };
 }
 
@@ -137,7 +204,7 @@ function notPostable(row: Row | undefined): string {
  */
 export async function markPacksPosted(admin: AdminPrincipal, engineerIds: string[], postedOn?: string) {
   const at = postedOn ? new Date(`${postedOn}T12:00:00Z`) : new Date();
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const updated = await tx.$queryRaw<{ id: string }[]>`
       UPDATE "Engineer" SET "packShippedAt" = ${at}, "updatedAt" = now()
       WHERE id = ANY(${engineerIds}) AND "deletedAt" IS NULL AND "packRequestedAt" IS NOT NULL AND "packShippedAt" IS NULL
@@ -154,4 +221,6 @@ export async function markPacksPosted(admin: AdminPrincipal, engineerIds: string
       skipped: others.map((id) => ({ id, reason: notPostable(byId.get(id)) })),
     };
   });
+  await afterResponse(() => tellPacksPosted(result.posted));
+  return result;
 }

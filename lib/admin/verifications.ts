@@ -539,7 +539,7 @@ export function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
  * text and email providers. Outside a Next.js request (scripts, tests) there's
  * no "after", so it runs straight away.
  */
-function afterResponse(task: () => Promise<void>): Promise<void> | void {
+export function afterResponse(task: () => Promise<void>): Promise<void> | void {
   try {
     after(task);
   } catch {
