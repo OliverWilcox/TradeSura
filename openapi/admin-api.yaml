@@ -131,31 +131,42 @@ components:
         holderId: { type: string }
         holderName: { type: string }
         until: { type: string, format: date-time }
-    Register: { type: string, enum: [match, name_mismatch, not_found] }
+    Register: { type: string, enum: [match, likely_match, name_mismatch, not_found], description: "The register's name against the applicant's (lib/admin/names.ts): likely_match is a short form, middle name or shared start." }
+    NameMatch: { type: string, enum: [match, likely, none] }
+    TypeMismatch: { type: string, enum: [name_says_company, type_says_company], description: "The name says Ltd, Limited, PLC or LLP and the type isn't a company, or the reverse." }
+    CustomerStatus:
+      type: string
+      enum: [offer_sent, offer_failed, offer_unconfirmed, offer_opened, thinking, dd_started, active, payment_failing, paused, cancelled, no_plan]
+      description: "Where a customer is with their current plan (lib/admin/metrics.ts customerStatus): offered (sent, failed, not confirmed, opened), thinking about it, started Direct Debit, active, cancelled."
+    TestMark: { type: object, required: [isTest, markedAt, markedBy], properties: { isTest: { type: boolean }, markedAt: { type: [string, "null"] }, markedBy: { type: [string, "null"] } } }
     VerificationStatus: { type: string, enum: [pending, verified, rejected, not_submitted] }
-    EngineerStatus: { type: string, enum: [active, paused, banned, left] }
+    EngineerStatus: { type: string, enum: [active, inactive, paused, banned, left], description: "Banned, left or paused by standing; otherwise active with a delivered offer in the last 7 days (lib/admin/metrics.ts), else inactive." }
+    EngineerStanding: { type: string, enum: [active, paused, banned, left] }
     PlanStatus: { type: string, enum: [PENDING, ACTIVE, PAUSED, CANCELLED] }
     VerificationRow:
       type: object
-      required: [id, name, business, businessType, gasSafeNo, submittedAt, status, decidedAt, rejectReason, claimedBy, signals]
+      required: [id, name, business, businessType, gasSafeNo, town, submittedAt, waitingSince, status, decidedAt, rejectReason, claimedBy, signals]
       properties:
         id: { type: string, description: The engineer's ID (an application is the engineer's) }
         name: { type: string }
         business: { type: string }
         businessType: { type: [string, "null"], description: sole_trader, ltd or partnership }
         gasSafeNo: { type: [string, "null"] }
+        town: { type: [string, "null"] }
         submittedAt: { type: string, format: date-time }
+        waitingSince: { type: string, format: date-time, description: "Their latest card upload, or signing up" }
         status: { $ref: "#/components/schemas/VerificationStatus" }
         decidedAt: { type: [string, "null"], format: date-time }
         rejectReason: { type: [string, "null"] }
         claimedBy: { type: [string, "null"], description: Who is checking it now }
         signals:
           type: object
-          required: [hasCard, register, companyNotActive, duplicates, registerMismatchAtSignup]
+          required: [hasCard, register, companyNotActive, typeMismatch, duplicates, registerMismatchAtSignup]
           properties:
             hasCard: { type: boolean }
             register: { $ref: "#/components/schemas/Register" }
             companyNotActive: { type: boolean }
+            typeMismatch: { oneOf: [{ $ref: "#/components/schemas/TypeMismatch" }, { type: "null" }] }
             duplicates: { type: integer }
             registerMismatchAtSignup: { type: boolean }
     VerificationPage:
@@ -177,7 +188,7 @@ components:
                 decided: { type: integer }
     VerificationDetail:
       type: object
-      required: [id, name, firstName, lastName, business, businessType, submittedAt, status, tab, revision, lock, gasSafe, card, company, duplicates, decision, queue]
+      required: [id, name, firstName, lastName, business, businessType, submittedAt, waitingSince, status, tab, revision, lock, gasSafe, submitted, contact, card, company, typeMismatch, duplicates, decision, queue, warnings]
       properties:
         id: { type: string }
         name: { type: string }
@@ -189,6 +200,7 @@ components:
         businessType: { type: [string, "null"] }
         teamOf: { type: [object, "null"], properties: { id: { type: string }, business: { type: string } } }
         submittedAt: { type: string, format: date-time }
+        waitingSince: { type: string, format: date-time }
         status: { $ref: "#/components/schemas/VerificationStatus" }
         tab: { type: [string, "null"], enum: [new, duplicates, verified, rejected, null] }
         revision: { type: string, description: "Changes whenever anything the check looks at changes. Send it with a decision: if it no longer matches, the decision is refused (409)." }
@@ -203,6 +215,12 @@ components:
             onRegister: { type: [object, "null"], properties: { name: { type: string }, company: { type: string }, categories: { type: string } } }
             mismatchAtSignup: { type: boolean }
             registerUrl: { type: string }
+            copy: { type: object, description: "Our copy of the register: records held, and when imported (AppSetting gas_safe_register_imported_at), if recorded", properties: { records: { type: integer }, importedAt: { type: [string, "null"], format: date-time } } }
+        submitted:
+          type: object
+          description: What the engineer gave, to set beside the register. cardExpiry is always null (not asked for at sign-up).
+          properties: { name: { type: string }, business: { type: string }, categories: { type: [string, "null"] }, postcode: { type: [string, "null"] }, town: { type: [string, "null"] }, cardExpiry: { type: [string, "null"] } }
+        contact: { type: [object, "null"], description: "Masked; only for an admin with pii:reveal", properties: { email: { type: string }, phone: { type: [string, "null"] } } }
         card: { type: object, required: [available], properties: { available: { type: boolean } } }
         company:
           type: [object, "null"]
@@ -210,7 +228,14 @@ components:
             name: { type: [string, "null"] }
             number: { type: [string, "null"] }
             status: { type: [string, "null"] }
-            officers: { type: [array, "null"], items: { type: object, properties: { name: { type: string }, role: { type: string }, matchesApplicant: { type: boolean } } } }
+            officers: { type: [array, "null"], items: { type: object, properties: { name: { type: string }, role: { type: string }, match: { $ref: "#/components/schemas/NameMatch" }, matchesApplicant: { type: boolean, description: match or likely } } } }
+            profile: { type: [object, "null"], description: "Companies House's record, when it answered", properties: { number: { type: string }, name: { type: string }, type: { type: string }, status: { type: string }, registeredOffice: { type: [string, "null"] } } }
+        typeMismatch:
+          type: [object, "null"]
+          properties:
+            kind: { $ref: "#/components/schemas/TypeMismatch" }
+            search: { type: [array, "null"], description: "Companies House name search, when no company number was given", items: { type: object, properties: { number: { type: string }, name: { type: string }, status: { type: string }, type: { type: string }, address: { type: [string, "null"] } } } }
+        warnings: { type: array, description: "Everything still open. Approving over any needs a reason (400 otherwise).", items: { type: object, required: [code, message], properties: { code: { type: string }, message: { type: string } } } }
         qualifications: { type: array, items: { type: object, properties: { code: { type: string }, title: { type: string }, confirmedAt: { type: string } } } }
         duplicates:
           type: array
@@ -239,7 +264,7 @@ components:
             nextId: { type: [string, "null"] }
     EngineerRow:
       type: object
-      required: [id, name, business, slug, town, type, channel, isStaff, status, verification, paymentsReady, plansLive, tiersLive, customers, customersOnPlans, lastOfferAt, joinedAt]
+      required: [id, name, business, slug, town, type, channel, isStaff, isTest, status, verification, paymentsReady, plansLive, tiersLive, customers, customersOnPlans, lastOfferAt, joinedAt]
       properties:
         id: { type: string }
         name: { type: string }
@@ -249,6 +274,7 @@ components:
         type: { type: [string, "null"] }
         channel: { type: [string, "null"] }
         isStaff: { type: boolean }
+        isTest: { type: boolean, description: Marked as test data; left out of every figure }
         status: { $ref: "#/components/schemas/EngineerStatus" }
         verification: { $ref: "#/components/schemas/VerificationStatus" }
         paymentsReady: { type: boolean }
@@ -266,7 +292,7 @@ components:
     EngineerDetail:
       type: object
       description: The fields the admin app reads; the response carries a few more (see lib/admin/engineers.ts getEngineer).
-      required: [id, name, business, type, companyNumber, town, postcode, serviceArea, contact, joinedAt, channel, letterBatch, status, pause, ban, leftAt, verification, payments, counts, team, referrals, tiers, recentCustomers, payouts, lifetimePayoutsPence, milestones, offersLast7Days]
+      required: [id, name, business, type, companyNumber, town, postcode, serviceArea, addresses, company, test, contact, joinedAt, channel, letterBatch, status, pause, ban, leftAt, verification, payments, counts, cancelReasons, team, referrals, tiers, recentCustomers, payouts, lifetimePayoutsPence, steps, offersLast7Days]
       properties:
         id: { type: string }
         name: { type: string }
@@ -276,6 +302,9 @@ components:
         town: { type: [string, "null"] }
         postcode: { type: [string, "null"] }
         serviceArea: { type: [string, "null"] }
+        addresses: { type: object, description: Each address apart, properties: { areasCovered: { type: array, items: { type: string } }, signupPostcode: { type: [string, "null"] }, postal: { type: [string, "null"], description: Where the member pack goes }, registeredOffice: { type: [string, "null"], description: From Companies House } } }
+        company: { type: [object, "null"], properties: { name: { type: string }, type: { type: string }, status: { type: string } } }
+        test: { $ref: "#/components/schemas/TestMark" }
         contact: { type: object, required: [email, phone], properties: { email: { type: string, description: Masked }, phone: { type: [string, "null"], description: Masked } } }
         joinedAt: { type: string, format: date-time }
         channel: { type: [string, "null"] }
@@ -293,7 +322,7 @@ components:
             verifiedAt: { type: [string, "null"] }
             rejectedAt: { type: [string, "null"] }
             rejectReason: { type: [string, "null"] }
-        payments: { type: object, required: [accountId, connected, payoutsEnabled], properties: { accountId: { type: [string, "null"] }, connected: { type: boolean }, payoutsEnabled: { type: boolean } } }
+        payments: { type: object, required: [accountId, connected, chargesEnabled, payoutsEnabled], properties: { accountId: { type: [string, "null"] }, connected: { type: boolean }, chargesEnabled: { type: boolean, description: Payments set up (the activation step reads the same flag) }, payoutsEnabled: { type: boolean } } }
         counts:
           type: object
           required: [customers, customersOnPlans, tiersLive, plans]
@@ -302,6 +331,7 @@ components:
             customersOnPlans: { type: integer }
             tiersLive: { type: integer }
             plans: { type: object, required: [ACTIVE, PENDING, PAUSED, CANCELLED], properties: { ACTIVE: { type: integer }, PENDING: { type: integer }, PAUSED: { type: integer }, CANCELLED: { type: integer } } }
+        cancelReasons: { type: array, description: "Each cancelled plan's latest reason, counted (none: no reason given)", items: { type: object, properties: { reason: { type: string }, count: { type: integer } } } }
         team:
           type: object
           required: [staff]
@@ -318,14 +348,14 @@ components:
             owedPence: { type: integer }
             people: { type: array, items: { type: object, properties: { id: { type: string }, business: { type: string }, joinedAt: { type: string }, status: { $ref: "#/components/schemas/EngineerStatus" }, earnedPence: { type: integer }, currentRatePercent: { type: [number, "null"] } } } }
         tiers: { type: array, items: { type: object, required: [id, name, status, priceMonthlyPence, options], properties: { id: { type: string }, name: { type: string }, status: { type: string, enum: [DRAFT, LIVE, STOPPED] }, priceMonthlyPence: { type: integer }, options: { type: array, items: { type: string } } } } }
-        recentCustomers: { type: array, items: { type: object, required: [id, name, postcode, planStatus, since], properties: { id: { type: string }, name: { type: string }, postcode: { type: [string, "null"] }, planStatus: { oneOf: [{ $ref: "#/components/schemas/PlanStatus" }, { type: "null" }] }, since: { type: string } } } }
+        recentCustomers: { type: array, items: { type: object, required: [id, name, postcode, planStatus, status, since], properties: { id: { type: string }, name: { type: string }, postcode: { type: [string, "null"] }, planStatus: { oneOf: [{ $ref: "#/components/schemas/PlanStatus" }, { type: "null" }] }, status: { $ref: "#/components/schemas/CustomerStatus" }, since: { type: string } } } }
         payouts: { type: array, items: { type: object, required: [id, paidOn, amountPence, status], properties: { id: { type: string }, paidOn: { type: string, format: date }, amountPence: { type: integer }, status: { const: paid } } } }
         lifetimePayoutsPence: { type: integer }
-        milestones: { type: object, properties: { signedUpAt: { type: [string, "null"] }, paymentsSetUpAt: { type: [string, "null"] }, firstPlanLiveAt: { type: [string, "null"] }, firstCustomerAt: { type: [string, "null"] }, firstPayoutAt: { type: [string, "null"] } } }
+        steps: { type: array, description: "The activation steps in the funnel's order (lib/admin/metrics.ts FUNNEL_STEPS); at is null when the step is reached without a recorded date", items: { type: object, required: [key, label, reached, at], properties: { key: { type: string }, label: { type: string }, reached: { type: boolean }, at: { type: [string, "null"] } } } }
         offersLast7Days: { type: integer }
     CustomerRow:
       type: object
-      required: [id, name, engineer, town, postcode, contact, plan, source, addedAt]
+      required: [id, name, engineer, town, postcode, contact, plan, status, firstPaymentAt, isTest, source, addedAt]
       properties:
         id: { type: string }
         name: { type: string }
@@ -336,15 +366,20 @@ components:
         plan:
           type: [object, "null"]
           description: "The plan that best describes them now: live first, then the newest. Sort price (its price) and since (its start, or addedAt with none)."
-          required: [id, ref, name, status, priceMonthlyPence, startedAt, payment]
+          required: [id, ref, name, status, priceMonthlyPence, startedAt, cancelledAt, cancelReason, payment]
           properties:
             id: { type: string }
             ref: { type: string }
             name: { type: [string, "null"] }
             status: { $ref: "#/components/schemas/PlanStatus" }
-            priceMonthlyPence: { type: [integer, "null"] }
+            priceMonthlyPence: { type: [integer, "null"], description: "Agreed, or until they pick, the offered plan's" }
             startedAt: { type: [string, "null"], format: date-time }
-            payment: { type: string, enum: [failing, paid, none] }
+            cancelledAt: { type: [string, "null"], format: date-time }
+            cancelReason: { type: [string, "null"] }
+            payment: { type: string, enum: [failing, paid, none], description: paid is a payment over £0 (lib/admin/metrics.ts payments) }
+        status: { $ref: "#/components/schemas/CustomerStatus" }
+        firstPaymentAt: { type: [string, "null"], format: date-time }
+        isTest: { type: boolean, description: The customer or their engineer is marked as test data }
         source: { type: string }
         addedAt: { type: string, format: date-time }
     CustomerPage:
@@ -355,13 +390,19 @@ components:
     CustomerDetail:
       type: object
       description: The fields the admin app reads; see lib/admin/customers.ts getCustomer for the rest.
-      required: [id, name, contact, stripeCustomerId, addedAt, engineer, homes, plans, payments]
+      required: [id, name, contact, smsOptOut, stripeCustomerId, source, addedAt, status, firstPaymentAt, test, winBack, engineer, homes, plans, payments, zeroInvoicesHidden]
       properties:
         id: { type: string }
         name: { type: string }
         contact: { type: object, properties: { phone: { type: string }, email: { type: [string, "null"] } }, description: Masked }
+        smsOptOut: { type: boolean, description: Their own opt-out or a platform suppression }
         stripeCustomerId: { type: [string, "null"] }
+        source: { type: string }
         addedAt: { type: string, format: date-time }
+        status: { $ref: "#/components/schemas/CustomerStatus" }
+        firstPaymentAt: { type: [string, "null"], format: date-time }
+        test: { allOf: [{ $ref: "#/components/schemas/TestMark" }, { type: object, properties: { viaEngineer: { type: boolean } } }] }
+        winBack: { type: object, properties: { available: { type: boolean }, reason: { type: [string, "null"] } } }
         engineer: { type: object, properties: { id: { type: string }, business: { type: string } } }
         homes: { type: array, items: { type: object, required: [addressLine1, addressLine2, town, postcode], properties: { addressLine1: { type: string }, addressLine2: { type: [string, "null"] }, town: { type: [string, "null"] }, postcode: { type: string } } } }
         plans:
@@ -380,17 +421,27 @@ components:
               activatedAt: { type: [string, "null"] }
               cancelledAt: { type: [string, "null"] }
               paymentFailedAt: { type: [string, "null"] }
+              offer: { type: [object, "null"], properties: { channel: { type: string, enum: [sms, whatsapp] }, sentAt: { type: string, format: date-time }, delivery: { type: string, enum: [delivered, failed, unconfirmed] } } }
+              firstPaymentAt: { type: [string, "null"] }
               cancellations: { type: array, items: { type: object, properties: { reason: { type: string }, source: { type: string } } } }
-        payments: { type: array, items: { type: object, required: [id, status, amountPence, feePence, at], properties: { id: { type: string }, status: { type: string, enum: [paid, failed] }, amountPence: { type: integer }, feePence: { type: [integer, "null"] }, at: { type: string, format: date-time } } } }
+        payments: { type: array, description: "Paid and failed invoices, newest first; £0 trial invoices left out while HIDE_ZERO_INVOICES is on", items: { type: object, required: [id, status, amountPence, feePence, at], properties: { id: { type: string }, status: { type: string, enum: [paid, failed] }, amountPence: { type: integer }, feePence: { type: [integer, "null"] }, at: { type: string, format: date-time } } } }
+        zeroInvoicesHidden: { type: integer }
     PackRow:
       type: object
-      required: [id, name, business, businessType, address, requestedAt, verifiedAt, postedAt, heldBecause]
+      required: [id, name, firstName, business, businessType, town, address, addressCheck, version, livePage, referralCode, qrLink, requestedAt, verifiedAt, postedAt, heldBecause]
       properties:
         id: { type: string, description: The engineer's ID }
         name: { type: string }
+        firstName: { type: [string, "null"] }
         business: { type: string }
         businessType: { type: [string, "null"] }
+        town: { type: [string, "null"] }
         address: { type: [string, "null"], description: The postal address as the engineer typed it, one line per line }
+        addressCheck: { type: string, enum: [ok, unchecked, missing, registered_office], description: "missing and registered_office are kept out of the print files" }
+        version: { type: object, properties: { kind: { type: string, enum: [standard, founding] }, town: { type: [string, "null"] } } }
+        livePage: { type: string }
+        referralCode: { type: string }
+        qrLink: { type: string, description: The link the app's own QR code encodes }
         requestedAt: { type: [string, "null"] }
         verifiedAt: { type: [string, "null"] }
         postedAt: { type: [string, "null"] }
@@ -418,7 +469,7 @@ components:
       properties: { live: { type: integer }, ending: { type: integer }, pending: { type: integer } }
     EngineerAccount:
       type: object
-      required: [id, role, name, business, ownerId, email, phone, status, verification, joinedAt, staff, customers, plans, stripeAccount, blocked]
+      required: [id, role, name, business, ownerId, email, phone, status, verification, joinedAt, staff, customers, plans, stripeAccount, blocked, untoldCustomers]
       properties:
         id: { type: string }
         role: { type: string, enum: [owner, staff] }
@@ -427,7 +478,7 @@ components:
         ownerId: { type: [string, "null"] }
         email: { type: string, description: Masked }
         phone: { type: [string, "null"], description: Masked }
-        status: { $ref: "#/components/schemas/EngineerStatus" }
+        status: { $ref: "#/components/schemas/EngineerStanding" }
         verification: { $ref: "#/components/schemas/VerificationStatus" }
         joinedAt: { type: string, format: date-time }
         staff: { type: integer, description: Staff accounts deleted with an owner }
@@ -435,6 +486,7 @@ components:
         plans: { $ref: "#/components/schemas/OpenPlans" }
         stripeAccount: { type: boolean, description: Has a Stripe Connect account, left open for TradeSura to close }
         blocked: { type: [string, "null"], description: Why it can't be deleted yet }
+        untoldCustomers: { type: integer, description: "Customers on a live plan not yet told the engineer is leaving (POST /accounts/engineers/{engineerId}/tell-customers)" }
     CustomerAccount:
       type: object
       required: [id, name, engineer, email, phone, addedAt, plans, blocked]
@@ -495,7 +547,7 @@ paths:
         default: { $ref: "#/components/responses/Error" }
   /dashboard/stats:
     get:
-      summary: "Sign-ups, verified (in period and all time), active engineers, live plans, customers on a plan, offers and offer-to-sign-up. Needs dashboard:read."
+      summary: "Sign-ups and verified (the funnel's first steps), verified engineers in total, active engineers, live plans, customers on a plan, offers by delivery and offer-to-sign-up, all from lib/admin/metrics.ts, test data and deleted accounts left out. Needs dashboard:read."
       parameters: [{ $ref: "#/components/parameters/from" }, { $ref: "#/components/parameters/to" }]
       responses:
         "200":
@@ -504,14 +556,15 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [signups, verified, active, plansLive, customers, offers, conversion]
+                required: [signups, verified, active, activeWindowDays, plansLive, customers, offers, conversion]
                 properties:
-                  signups: { type: integer }
-                  verified: { type: object, required: [inPeriod, allTime], properties: { inPeriod: { type: integer }, allTime: { type: integer } } }
-                  active: { type: integer }
+                  signups: { type: integer, description: "Owner accounts created in the range that still exist: the funnel's first step" }
+                  verified: { type: object, required: [ofSignups, total], properties: { ofSignups: { type: integer, description: "Of those, approved since: the funnel's second step" }, total: { type: integer, description: "Verified engineers at the end of the range: the core number's divisor" } } }
+                  active: { type: integer, description: Engineers with a delivered offer in the activeWindowDays before the end }
+                  activeWindowDays: { type: integer }
                   plansLive: { type: integer }
                   customers: { type: integer }
-                  offers: { type: integer }
+                  offers: { type: object, required: [delivered, failed, unconfirmed], properties: { delivered: { type: integer }, failed: { type: integer }, unconfirmed: { type: integer, description: WhatsApp offers whose link hasn't been opened } } }
                   conversion: { type: object, required: [sent, converted, rate], properties: { sent: { type: integer }, converted: { type: integer }, rate: { type: number } } }
         default: { $ref: "#/components/responses/Error" }
   /dashboard/signups:
@@ -528,23 +581,24 @@ paths:
                 required: [byDay, channels]
                 properties:
                   byDay: { type: array, items: { type: object, required: [date, count], properties: { date: { type: string, format: date }, count: { type: integer } } } }
-                  channels: { type: array, items: { type: object, required: [channel, count, share], properties: { channel: { type: string }, count: { type: integer }, share: { type: number } } } }
+                  channels: { type: array, items: { type: object, required: [channel, count, share], properties: { channel: { type: string, description: "heardVia; letter only with a redeemed claim code, letter_unverified for the answer alone, not_given for none" }, count: { type: integer }, share: { type: number } } } }
         default: { $ref: "#/components/responses/Error" }
   /dashboard/funnel:
     get:
-      summary: Engineers who signed up in the range, and how many reached each step since (with median days from the step before). Each step is grouped once, not per engineer. Needs dashboard:read.
+      summary: "A cohort: engineers who signed up in the range, and how many reached each step and every step before it (so none outgrows the one before), with median days from the step before. Steps in lib/admin/metrics.ts FUNNEL_STEPS order. Needs dashboard:read."
       parameters: [{ $ref: "#/components/parameters/from" }, { $ref: "#/components/parameters/to" }]
       responses:
         "200":
-          description: The five steps, in order
+          description: The steps, in order (Signed up, Verified, First plan live, Payments set up, First payment)
           content:
             application/json:
               schema:
                 type: array
                 items:
                   type: object
-                  required: [label, count, ofStart, fromPrevious, medianDaysFromPrevious]
+                  required: [key, label, count, ofStart, fromPrevious, medianDaysFromPrevious]
                   properties:
+                    key: { type: string, enum: [signed_up, verified, plan_live, payments_set_up, first_payment] }
                     label: { type: string }
                     count: { type: integer }
                     ofStart: { type: number }
@@ -670,6 +724,15 @@ paths:
         "409": { description: "Already decided, another admin is checking it, or it changed since it was opened (revision)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         default: { $ref: "#/components/responses/Error" }
 
+  /verifications/{engineerId}/chase:
+    post:
+      summary: Ask a waiting applicant for a missing card photo (what photo) or to check their details (what details), by text or email. Recorded. Needs verification:decide.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      requestBody: { content: { application/json: { schema: { type: object, required: [what, channel], properties: { what: { type: string, enum: [photo, details] }, channel: { type: string, enum: [sms, email] } } } } } }
+      responses:
+        "200": { description: Sent, content: { application/json: { schema: { type: object, properties: { chased: { type: boolean }, channel: { type: string } } } } } }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
   /member-packs:
     get:
       summary: Founding-member packs. to_post is badge live and not paused or banned; held is waiting on one of those; posted is done, latest first. Includes postal addresses. Needs member_packs:read.
@@ -722,9 +785,9 @@ paths:
       summary: Every engineer account (deleted ones excepted). Needs engineers:read.
       parameters:
         - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: Name, business, slug, town, postcode, email; Gas Safe, phone or company number by digits }
-        - { name: status, in: query, schema: { type: string, enum: [active, paused, banned, left] } }
+        - { name: status, in: query, schema: { type: string, enum: [active, inactive, paused, banned, left] }, description: Active and inactive as EngineerStatus }
         - { name: verification, in: query, schema: { type: string, enum: [verified, pending, rejected, not_submitted] } }
-        - { name: step, in: query, schema: { type: string, enum: [signed_up, payments, plan, customer, payout] }, description: The furthest getting-started step reached }
+        - { name: step, in: query, schema: { type: string, enum: [signed_up, verified, plan_live, payments_set_up, first_payment] }, description: "The furthest funnel step reached, taking the steps in order" }
         - { name: town, in: query, schema: { type: string } }
         - { name: type, in: query, schema: { type: string, enum: [sole_trader, ltd, partnership] } }
         - { name: channel, in: query, schema: { type: string, enum: [letter, email, engineer, online, other] } }
@@ -815,6 +878,21 @@ paths:
       responses:
         "200": { description: The engineer, content: { application/json: { schema: { $ref: "#/components/schemas/EngineerDetail" } } } }
         default: { $ref: "#/components/responses/Error" }
+  /engineers/{engineerId}/test-data:
+    post:
+      summary: Mark the engineer as test data, with their customers, offers and payments. Recorded. Needs data:delete.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string, maxLength: 500 } } } } } }
+      responses:
+        "200": { description: Marked, content: { application/json: { schema: { $ref: "#/components/schemas/TestMark" } } } }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Count the engineer again. Recorded. Needs data:delete.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string, maxLength: 500 } } } } } }
+      responses:
+        "200": { description: Unmarked, content: { application/json: { schema: { $ref: "#/components/schemas/TestMark" } } } }
+        default: { $ref: "#/components/responses/Error" }
   /engineers/{engineerId}/notes:
     get:
       summary: Staff notes, newest first. Needs engineers:read.
@@ -847,7 +925,8 @@ paths:
         - { name: payment, in: query, schema: { type: string, enum: [failing, paid, none] } }
         - { name: cancelledFrom, in: query, schema: { type: string, format: date } }
         - { name: cancelledTo, in: query, schema: { type: string, format: date } }
-        - { name: source, in: query, schema: { type: string, enum: [added, doorstep, web, import, contacts] } }
+        - { name: source, in: query, schema: { type: string, enum: [added, doorstep, web, website, import, contacts] } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/CustomerStatus" } }
         - { name: sort, in: query, schema: { type: string, enum: [added, name, since, postcode, engineer, price] }, description: Each orders by the value shown (see CustomerRow); blanks last }
         - { $ref: "#/components/parameters/dir" }
         - { $ref: "#/components/parameters/page" }
@@ -883,6 +962,27 @@ paths:
         - { name: field, in: query, schema: { type: string, enum: [email, phone] }, description: Just this one }
       responses:
         "200": { description: Contact, content: { application/json: { schema: { $ref: "#/components/schemas/Contact" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /customers/{customerId}/test-data:
+    post:
+      summary: Mark the customer as test data, with their plans and payments. Recorded. Needs data:delete.
+      parameters: [{ $ref: "#/components/parameters/customerId" }]
+      responses:
+        "200": { description: Marked, content: { application/json: { schema: { $ref: "#/components/schemas/TestMark" } } } }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Count the customer again. Recorded. Needs data:delete.
+      parameters: [{ $ref: "#/components/parameters/customerId" }]
+      responses:
+        "200": { description: Unmarked, content: { application/json: { schema: { $ref: "#/components/schemas/TestMark" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /customers/{customerId}/win-back:
+    post:
+      summary: Text a customer whose plan has ended the app's win-back message with their rejoin link (sent, or queued until 08:00). Refused (409) for anyone opted out or still on a plan. Recorded. Needs customers:contact.
+      parameters: [{ $ref: "#/components/parameters/customerId" }]
+      responses:
+        "200": { description: Sent or queued, content: { application/json: { schema: { type: object, properties: { status: { type: string, enum: [sent, queued] } } } } } }
+        "409": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
   /customers/{customerId}/notes:
     get:
@@ -924,6 +1024,13 @@ paths:
         "200":
           description: A page
           content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/Page" }, { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/EngineerAccount" } } } }] } } }
+        default: { $ref: "#/components/responses/Error" }
+  /accounts/engineers/{engineerId}/tell-customers:
+    post:
+      summary: Before a leaving engineer is deleted, tell every customer on one of their live plans, offering TradeSura engineers near them (lib/installer-leaves.ts offerNearbyEngineers, by text and email). Recorded. Needs data:delete.
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      responses:
+        "200": { description: Told, content: { application/json: { schema: { type: object, properties: { offered: { type: integer } } } } } }
         default: { $ref: "#/components/responses/Error" }
   /accounts/customers:
     get:
