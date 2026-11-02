@@ -54,7 +54,8 @@ export default function Welcome() {
     ref: refParam,
     name: referrerNameParam,
     src,
-  } = useLocalSearchParams<{ code?: string; ref?: string; name?: string; src?: string }>();
+    t: claimToken,
+  } = useLocalSearchParams<{ code?: string; ref?: string; name?: string; src?: string; t?: string }>();
 
   const [claim, setClaim] = useState<ClaimResolved | null>(null);
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -86,7 +87,9 @@ export default function Welcome() {
   useEffect(() => {
     if (!code) return;
     let cancelled = false;
-    api<ClaimResolved>(`/api/claim/resolve?code=${encodeURIComponent(code)}`)
+    // `t` comes from the personal link we text: only it unlocks the details
+    // they confirmed on the claim page (a bare code shows just the letter's).
+    api<ClaimResolved>(`/api/claim/resolve?code=${encodeURIComponent(code)}${claimToken ? `&t=${encodeURIComponent(claimToken)}` : ""}`)
       .then((r) => {
         if (!cancelled) setClaim(r);
       })
@@ -96,7 +99,7 @@ export default function Welcome() {
     return () => {
       cancelled = true;
     };
-  }, [code]);
+  }, [code, claimToken]);
 
   const source = claim?.valid && claim.personalised ? "claim" : refParam ? "referral" : "organic";
 
@@ -155,6 +158,7 @@ export default function Welcome() {
       pathname: "/sign-up",
       params: {
         ...(code ? { code } : {}),
+        ...(code && claimToken ? { t: claimToken } : {}),
         ...(refParam ? { ref: refParam } : {}),
         // e.g. ?src=email on a campaign link — sign-up records it and skips
         // "How did you hear about us?".

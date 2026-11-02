@@ -309,6 +309,7 @@ export default function SignUp() {
   const { signIn } = useAuth();
   const {
     code: claimCodeParam,
+    t: claimToken,
     ref: refParam,
     src: srcParam,
     appleToken: appleTokenParam,
@@ -317,6 +318,7 @@ export default function SignUp() {
     appleEmail,
   } = useLocalSearchParams<{
     code?: string;
+    t?: string;
     ref?: string;
     src?: string;
     // From sign-in's "Continue with Apple" with a new Apple ID (4 Oct notes 4.2).
@@ -556,7 +558,7 @@ export default function SignUp() {
     (async () => {
       try {
         const r = await api<ClaimResolved>(
-          `/api/claim/resolve?code=${encodeURIComponent(claimCodeParam)}`,
+          `/api/claim/resolve?code=${encodeURIComponent(claimCodeParam)}${claimToken ? `&t=${encodeURIComponent(claimToken)}` : ""}`,
         );
         if (cancelled) return;
         setClaim(r);
@@ -584,7 +586,7 @@ export default function SignUp() {
     return () => {
       cancelled = true;
     };
-  }, [claimCodeParam]);
+  }, [claimCodeParam, claimToken]);
 
   // Referral code — accepted or politely rejected, never blocking. Checked
   // as they type (debounced) so the answer is there before Continue.
