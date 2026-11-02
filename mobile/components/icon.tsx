@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+import Svg, { Path } from "react-native-svg";
 import { SymbolView, type SymbolWeight } from "expo-symbols";
 
 // Build Guide v2 Part 2.4: "Icons — one native family (SF Symbols), consistent
@@ -63,6 +65,17 @@ const ICONS = {
 
 export type IconName = keyof typeof ICONS;
 
+const WEB_PATHS: Partial<Record<IconName, string>> = {
+  check: "M5 12.5l4.5 4.5L19 7.5",
+  chevron: "M9 5l7 7-7 7",
+  back: "M15 5l-7 7 7 7",
+  chevronDown: "M5 9l7 7 7-7",
+  close: "M6 6l12 12M18 6L6 18",
+  lock: "M7 11V8a5 5 0 0110 0v3M5 11h14v10H5z",
+  plus: "M12 5v14M5 12h14",
+  minus: "M5 12h14",
+};
+
 export function Icon({
   name,
   size = 20,
@@ -76,6 +89,17 @@ export function Icon({
   weight?: SymbolWeight;
 }) {
   const symbol = ICONS[name];
+  // expo-symbols draws nothing in a browser, so in the web build (used only
+  // for testing and screenshots) the few glyphs that carry meaning on their
+  // own are drawn as plain strokes. Phones always get the native symbol.
+  const web = Platform.OS === "web" ? WEB_PATHS[name] : undefined;
+  if (web) {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d={web} stroke={color} strokeWidth={weight === "bold" ? 3 : 2.2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    );
+  }
   return (
     <SymbolView
       name={{ ios: symbol.ios, android: symbol.android }}

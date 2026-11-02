@@ -1,5 +1,5 @@
-import { useCallback, useEffect } from "react";
-import { View, Text, ScrollView, Pressable } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { View, Text, ScrollView, Pressable, Animated, AccessibilityInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
@@ -49,15 +49,11 @@ function GoLiveRow({ n, step, current }: { n: number; step: SetupStep; current: 
       accessibilityLabel={`${step.title}: ${step.status}`}
       className={`flex-row items-center gap-3.5 rounded-2xl border px-3.5 py-3.5 ${current ? "border-[1.5px] border-flame" : "border-line-strong"}`}
     >
-      {step.done ? (
-        <View className="h-10 w-10 items-center justify-center rounded-full bg-ok">
-          <Icon name="check" size={18} color="#0f2140" weight="bold" />
-        </View>
-      ) : (
-        <View className="h-10 w-10 items-center justify-center rounded-full border border-line-strong">
-          <Text className="text-[17px] font-semibold text-ink">{n}</Text>
-        </View>
-      )}
+      {/* Target hub (TARGET_getting_started_hub_grok_v2_FINAL): the number
+          stays; a done step gets the green tick on the right instead. */}
+      <View className="h-10 w-10 items-center justify-center rounded-full border border-line-strong">
+        <Text className="text-[17px] font-semibold text-ink">{n}</Text>
+      </View>
       <View className="flex-1">
         <Text className="text-[16.5px] font-semibold text-ink">{step.title}</Text>
         <Text className="mt-0.5 text-[13px] text-muted">
@@ -66,8 +62,43 @@ function GoLiveRow({ n, step, current }: { n: number; step: SetupStep; current: 
         </Text>
         <StatusPill tone={step.tone} label={step.status} />
       </View>
-      {!step.done && !step.waiting && step.cta && <SmallButton label={step.cta} primary={current} />}
+      {step.done ? <DoneTick /> : !step.waiting && step.cta && <SmallButton label={step.cta} primary={current} />}
     </Pressable>
+  );
+}
+
+// A plain tick, not a checkbox (Sign-up notes: "so nobody thinks they need
+// to tick it"): white on the done-green circle, as in the target hub. It
+// pops in once when the step turns done; reduce-motion skips the pop.
+function DoneTick() {
+  const [scale] = useState(() => new Animated.Value(0.4));
+  useEffect(() => {
+    let cancelled = false;
+    AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+      if (cancelled) return;
+      if (reduce) scale.setValue(1);
+      else Animated.spring(scale, { toValue: 1, friction: 5, tension: 140, useNativeDriver: true }).start();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [scale]);
+  return (
+    <Animated.View
+      accessibilityLabel="Done"
+      // Plain style, not className: NativeWind doesn't style Animated views.
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: "#3DD68C",
+        alignItems: "center",
+        justifyContent: "center",
+        transform: [{ scale }],
+      }}
+    >
+      <Icon name="check" size={17} color="#ffffff" weight="bold" />
+    </Animated.View>
   );
 }
 
@@ -103,6 +134,8 @@ function GrowRow({ step }: { step: SetupStep }) {
       </View>
       {step.locked ? (
         <Icon name="lock" size={16} color="#c9d6e6" weight="semibold" />
+      ) : step.done ? (
+        <DoneTick />
       ) : (
         step.cta && <SmallButton label={step.cta} />
       )}
