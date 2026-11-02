@@ -59,6 +59,11 @@ model Engineer {
   id                         String            @id @default(cuid())
   email                      String            @unique
   slug                       String            @unique
+  // Review 4 — the engineer picks their address (tradesura.com/{slug}) once
+  // at setup; after that renaming the business never moves it. Until then
+  // it follows the trading name, and every address it had keeps working.
+  slugChosenAt               DateTime?
+  previousSlugs              String[]          @default([])
   firstName                  String?
   lastName                   String?
   phone                      String?           @unique // E.164, verified by SMS OTP at signup
@@ -195,6 +200,8 @@ model Engineer {
   customers                  Customer[]
   tiers                      PlanTier[]
   plans                      Plan[]
+
+  @@index([previousSlugs], type: Gin)
 }
 
 model Customer {

@@ -11,7 +11,7 @@ import { normaliseUkPhone } from "@/lib/phone";
 import { newPlanRef, newToken } from "@/lib/plans";
 import { createSignupCheckout, ensureRecipientConfiguration, isMissingDestination, publishableKey } from "@/lib/stripe";
 import { snapshotTier } from "@/lib/plan-tier";
-import { appUrl } from "@/lib/app-url";
+import { signupUrl } from "@/lib/public-url";
 import { offerBlockedReason } from "@/lib/verification-state";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
@@ -128,7 +128,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   });
 
   const brand = brandName(engineer);
-  const base = `${appUrl()}/p/${engineer.slug}/signup/${plan.signupToken}`;
+  const base = signupUrl(engineer.slug, plan.signupToken);
 
   await track("tier_selected", { type: "CUSTOMER", id: customer.id }, {
     planId: plan.id,

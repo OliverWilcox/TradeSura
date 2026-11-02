@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
-import { uniqueSlug } from "@/lib/slug";
+import { moveSlug, uniqueSlug } from "@/lib/slug";
 import { standingCopy, gasSafeStatus, paymentsStatus } from "@/lib/verification-state";
 
 import { smsAvailable } from "@/lib/contact-verification";
@@ -44,6 +44,7 @@ export async function GET() {
     lastName: engineer.lastName,
     phone: engineer.phone,
     smsSignInEnabled: engineer.smsSignInEnabled,
+    slugChosen: Boolean(engineer.slugChosenAt),
     smsAvailable: smsAvailable(),
     // Installer messages on WhatsApp — the switch only shows once the
     // automated number is set up.
@@ -96,7 +97,16 @@ export async function PATCH(req: Request) {
     }
     tradingName = legal;
   }
-  const slug = await uniqueSlug(tradingName, engineerId);
+  // Review 4 — once the engineer has chosen their address, renaming the
+  // business never moves it; before that it follows the name and the old
+  // address keeps redirecting.
+  const current = await prisma.engineer.findUniqueOrThrow({
+    where: { id: engineerId },
+    select: { slug: true, previousSlugs: true, slugChosenAt: true },
+  });
+  const address = current.slugChosenAt
+    ? { slug: current.slug }
+    : moveSlug(current, await uniqueSlug(tradingName, engineerId));
   await prisma.engineer.update({
     where: { id: engineerId },
     data: {
@@ -104,8 +114,8 @@ export async function PATCH(req: Request) {
       ...(parsed.data.firstName ? { firstName: parsed.data.firstName } : {}),
       ...(parsed.data.lastName ? { lastName: parsed.data.lastName } : {}),
       logoUrl: parsed.data.logoUrl || null,
-      slug,
+      ...address,
     },
   });
-  return NextResponse.json({ ok: true, slug, tradingName });
+  return NextResponse.json({ ok: true, slug: address.slug, tradingName });
 }

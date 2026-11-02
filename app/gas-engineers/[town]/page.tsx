@@ -5,7 +5,7 @@ import { EMERGENCY_LINE } from "@/lib/compliance/interlock";
 import { brandName } from "@/lib/engineer";
 import { ratingSummary } from "@/lib/ratings";
 import { isWebsitePartner, loadTown, markTownPublished, townOrder } from "@/lib/town";
-import { gasEngineerPath, townPageUrl } from "@/lib/public-url";
+import { townPageUrl } from "@/lib/public-url";
 import { RingMark } from "@/components/ring-mark";
 import { PartnerBadge, RatingLine, RecruitBanner } from "@/components/engineer-profile";
 
@@ -107,7 +107,7 @@ export default async function TownPage({ params }: Params) {
           {rows.map((r) => (
             <li key={r.id}>
               <Link
-                href={gasEngineerPath(r.townSlug, r.slug)}
+                href={`/${r.slug}`}
                 className="block bg-paper border border-line rounded-xl p-3.5 hover:border-line-strong"
               >
                 <div className="flex flex-wrap items-center gap-2">

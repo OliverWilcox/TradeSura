@@ -32,7 +32,7 @@ export default function Demo() {
   const url =
     me && base
       ? practice
-        ? `${base}/p/${me.slug}?practice=1`
+        ? `${base}/${me.slug}?practice=1`
         : `${base}/${me.slug}?demo=1${me.role === "staff" ? `&by=${me.id}` : ""}`
       : null;
 

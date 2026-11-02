@@ -7,7 +7,7 @@ import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { createSignupCheckout, ensureRecipientConfiguration, isMissingDestination, publishableKey } from "@/lib/stripe";
 import { snapshotTier } from "@/lib/plan-tier";
-import { appUrl } from "@/lib/app-url";
+import { signupUrl } from "@/lib/public-url";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 const Body = z.object({
@@ -66,7 +66,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   });
 
   const brand = brandName(plan.engineer);
-  const base = `${appUrl()}/p/${plan.engineer.slug}/signup/${token}`;
+  const base = signupUrl(plan.engineer.slug, token);
 
   try {
     const sub = await createSignupCheckout({

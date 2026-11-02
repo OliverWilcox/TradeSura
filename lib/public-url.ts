@@ -1,8 +1,10 @@
 import { appUrl } from "@/lib/app-url";
 
-// The engineer's public address: tradesura.com/{slug} — profile page and
-// plan list in one (2026 Build Guide "Your plan link"). /p/{slug} still
-// works and redirects here, so old QR stickers and texts keep landing.
+// Review 4 (Matt's decision) — one address everywhere: tradesura.com/{slug}.
+// It is the profile, the plan list, the QR codes, the Stripe website and
+// what the engineer shares; each plan hangs off it
+// (tradesura.com/{slug}/{plan}). The old /p/{slug} and
+// /gas-engineers/{town}/{slug} addresses redirect here.
 export function profileUrl(slug: string): string {
   return `${appUrl()}/${slug}`;
 }
@@ -12,15 +14,24 @@ export function profileDisplay(slug: string): string {
   return profileUrl(slug).replace(/^https?:\/\/(www\.)?/, "");
 }
 
-// Review 3 — the plan link the engineer shares reads tradesura.com/p/{slug}
-// (the plans page); tradesura.com/{slug} is their profile. Both render the
-// same engineer page.
-export function planLinkUrl(slug: string): string {
-  return `${appUrl()}/p/${slug}`;
+// The plan link: the business address, or one plan's own link when a plan
+// slug is given (lib/plan-slugs.ts).
+export function planLinkUrl(slug: string, planSlug?: string | null): string {
+  return planSlug ? `${profileUrl(slug)}/${planSlug}` : profileUrl(slug);
 }
 
-export function planLinkDisplay(slug: string): string {
-  return planLinkUrl(slug).replace(/^https?:\/\/(www\.)?/, "");
+export function planLinkDisplay(slug: string, planSlug?: string | null): string {
+  return planLinkUrl(slug, planSlug).replace(/^https?:\/\/(www\.)?/, "");
+}
+
+// A customer's own sign-up link (offer texts, Join): the Direct Debit steps
+// for one pending plan, under the same address.
+export function signupPath(slug: string, token: string): string {
+  return `/${slug}/signup/${token}`;
+}
+
+export function signupUrl(slug: string, token: string): string {
+  return `${appUrl()}${signupPath(slug, token)}`;
 }
 
 // What the engineer (or whoever runs their website) pastes to show their
@@ -29,9 +40,8 @@ export function embedSnippet(slug: string): string {
   return `<div data-tradesura="${slug}"></div>\n<script src="${appUrl()}/embed.js" async></script>`;
 }
 
-// Section 6 — the profile built for Google:
-// tradesura.com/gas-engineers/{town}/{slug}. tradesura.com/{slug} redirects
-// here once the engineer has a town; /p/{slug} stays the plan link.
+// Section 6's town profile address, kept only so old links redirect to the
+// one address.
 export function gasEngineerPath(townSlug: string, slug: string): string {
   return `/gas-engineers/${townSlug}/${slug}`;
 }
@@ -40,12 +50,12 @@ export function townPageUrl(townSlug: string): string {
   return `${appUrl()}/gas-engineers/${townSlug}`;
 }
 
-// The engineer's canonical public address: the town profile when they have
-// a town, otherwise tradesura.com/{slug}.
-export function canonicalProfileUrl(e: { slug: string; townSlug: string | null }): string {
-  return e.townSlug ? `${appUrl()}${gasEngineerPath(e.townSlug, e.slug)}` : profileUrl(e.slug);
+// The engineer's canonical public address. Since Review 4 it is always
+// tradesura.com/{slug}; the town shows on the page and in its heading.
+export function canonicalProfileUrl(e: { slug: string }): string {
+  return profileUrl(e.slug);
 }
 
-export function canonicalProfileDisplay(e: { slug: string; townSlug: string | null }): string {
-  return canonicalProfileUrl(e).replace(/^https?:\/\/(www\.)?/, "");
+export function canonicalProfileDisplay(e: { slug: string }): string {
+  return profileDisplay(e.slug);
 }

@@ -32,6 +32,8 @@ async function view(engineerId: string) {
     // and it works before the profile is published.
     previewUrl: `${canonicalProfileUrl(e)}?preview=${await profilePreviewToken(e.slug)}`,
     display: canonicalProfileDisplay(e),
+    slug: e.slug,
+    slugChosen: Boolean(e.slugChosenAt),
     town: e.town ?? "",
     photos: e.profilePhotos,
     showCallButton: e.showCallButton,
@@ -41,8 +43,8 @@ async function view(engineerId: string) {
   };
 }
 
-// "Get found on Google" — the engineer's public profile at
-// tradesura.com/gas-engineers/{town}/{slug} (Section 6).
+// "Get found on Google" — the engineer's public profile at their one
+// address, tradesura.com/{slug} (Section 6, Review 4).
 export async function GET() {
   const engineerId = await getEngineerId();
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });

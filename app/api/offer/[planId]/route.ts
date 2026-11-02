@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import QRCode from "qrcode";
 import { prisma } from "@/lib/db";
 import { getActor } from "@/lib/auth";
-import { appUrl } from "@/lib/app-url";
+import { signupUrl } from "@/lib/public-url";
 
 // Mobile counterpart to app/offer/[planId]/page.tsx — the signup link and its
 // QR code, generated the same way (qrcode package, server-side) so the app
@@ -19,7 +19,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ planId: string
   if (!plan) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
   const engineer = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
-  const link = `${appUrl()}/p/${engineer.slug}/signup/${plan.signupToken}`;
+  const link = signupUrl(engineer.slug, plan.signupToken);
   const qrDataUrl = await QRCode.toDataURL(link, { width: 280, margin: 1 });
 
   return NextResponse.json({ link, qrDataUrl });

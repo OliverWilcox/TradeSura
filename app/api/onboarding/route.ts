@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { verifyGasSafe } from "@/lib/gas-safe";
-import { uniqueSlug } from "@/lib/slug";
+import { moveSlug, uniqueSlug } from "@/lib/slug";
 
 const Body = z.object({
   regNo: z.string().min(1).max(20),
@@ -29,7 +29,14 @@ export async function POST(req: Request) {
     );
   }
 
-  const slug = await uniqueSlug(parsed.data.tradingName, engineerId);
+  const current = await prisma.engineer.findUniqueOrThrow({
+    where: { id: engineerId },
+    select: { slug: true, previousSlugs: true, slugChosenAt: true },
+  });
+  const address = current.slugChosenAt
+    ? { slug: current.slug }
+    : moveSlug(current, await uniqueSlug(parsed.data.tradingName, engineerId));
+  const slug = address.slug;
   await prisma.engineer.update({
     where: { id: engineerId },
     data: {
@@ -43,7 +50,7 @@ export async function POST(req: Request) {
       gasSafeRejectedAt: null,
       tradingName: parsed.data.tradingName,
       logoUrl: parsed.data.logoUrl || null,
-      slug,
+      ...address,
     },
   });
   return NextResponse.json({ ok: true, slug });

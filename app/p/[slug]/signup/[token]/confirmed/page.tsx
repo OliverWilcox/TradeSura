@@ -15,7 +15,9 @@ export default async function ConfirmedPage({
     where: { signupToken: token },
     include: { engineer: true, customer: true, tier: true },
   });
-  if (!plan || plan.engineer.slug !== slug) notFound();
+  // The business's address may have moved since the link was sent (Review 4:
+  // old addresses keep working), so an old one still opens the same plan.
+  if (!plan || (plan.engineer.slug !== slug && !plan.engineer.previousSlugs.includes(slug))) notFound();
 
   // Build Review 2, section 10 — the customer finished the Direct Debit form
   // (the plan only goes ACTIVE later, on invoice.paid). Once per plan, so a

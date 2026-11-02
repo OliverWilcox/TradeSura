@@ -6,6 +6,7 @@ import { CustomerShell } from "@/components/shells";
 import { SignupTiers } from "@/components/signup-tiers";
 import { clauseLine } from "@/lib/clauses";
 import { TrustLine } from "@/components/verified-badge";
+import { signupPath } from "@/lib/public-url";
 
 export default async function SignupPage({
   params,
@@ -20,8 +21,10 @@ export default async function SignupPage({
       customer: true,
     },
   });
-  if (!plan || plan.engineer.slug !== slug) notFound();
-  if (plan.status === "ACTIVE") redirect(`/p/${slug}/signup/${token}/confirmed`);
+  // The business's address may have moved since the link was sent (Review 4:
+  // old addresses keep working), so an old one still opens the same plan.
+  if (!plan || (plan.engineer.slug !== slug && !plan.engineer.previousSlugs.includes(slug))) notFound();
+  if (plan.status === "ACTIVE") redirect(`${signupPath(plan.engineer.slug, token)}/confirmed`);
 
   if (!plan.linkOpenedAt) {
     await prisma.plan.update({

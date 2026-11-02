@@ -97,7 +97,7 @@ export default async function FindPassportPage({
             </form>
           )}
           {engineer && (
-            <Link href={`/p/${engineer.slug}`} className="block text-center text-xs underline mt-3">
+            <Link href={`/${engineer.slug}`} className="block text-center text-xs underline mt-3">
               See {brand}&apos;s care plans
             </Link>
           )}

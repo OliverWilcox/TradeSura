@@ -61,7 +61,7 @@ function NextRow({
 export default function PlanLive() {
   const { me } = useAuth();
   const { inSetup: setup } = useSetupExit();
-  const { name, pricePence } = useLocalSearchParams<{ name: string; pricePence: string }>();
+  const { name, pricePence, tierId } = useLocalSearchParams<{ name: string; pricePence: string; tierId?: string }>();
   const { width } = useWindowDimensions();
   const [link, setLink] = useState<Link | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
@@ -73,14 +73,17 @@ export default function PlanLive() {
 
   useFocusEffect(
     useCallback(() => {
-      api<Link>("/api/me/plan-link").then(setLink).catch(() => {});
-    }, []),
+      // Review 4 — this plan's own link (tradesura.com/{slug}/{plan}).
+      api<Link>(`/api/me/plan-link${tierId ? `?tierId=${encodeURIComponent(tierId)}` : ""}`)
+        .then(setLink)
+        .catch(() => {});
+    }, [tierId]),
   );
 
   const price = Number(pricePence) || 0;
   const yearly = Math.round(((price - Math.floor(price * FEE_RATE)) * 12) / 100);
   const brand = me?.tradingName?.trim() || "you";
-  const display = link?.display ?? (me?.slug ? `tradesura.com/p/${me.slug}` : "your plan link");
+  const display = link?.display ?? (me?.slug ? `tradesura.com/${me.slug}` : "your plan link");
   // Review 3 — offers (and sharing the plan link) wait for the Gas Safe check
   // and payments; until then the money strip becomes an amber bar.
   const lock = offerLock(me ? { ...me, hasPlan: true } : me);

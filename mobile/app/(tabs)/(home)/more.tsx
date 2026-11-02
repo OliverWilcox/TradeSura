@@ -11,6 +11,7 @@ import { AppHeader, Avatar, Card, Pill, RowLine, Button, Chevron, OpeningStripe 
 import { Skeleton, TextBone, RowBone, LoadingImage } from "@/components/skeleton";
 import { StaffAccount } from "@/components/staff-account";
 import { Toggle } from "@/components/toggle";
+import { AddressPicker } from "@/components/address-picker";
 import { WHATSAPP_SUPPORT_URL } from "@/lib/support";
 
 type MoreData = {
@@ -34,6 +35,7 @@ type Settings = {
   companyNumber: string | null;
   legalName?: string | null;
   vatRegistered?: boolean;
+  slugChosen?: boolean;
   whatsappAvailable?: boolean;
   whatsappUpdates?: boolean;
   postcode: string | null;
@@ -588,15 +590,15 @@ function OwnerAccount() {
           {logoError && <Text className="mt-1.5 font-sans text-xs text-danger">{logoError}</Text>}
           {settings && (
             <View className="mt-3 border-t border-line-soft pt-2.5">
-              <RowLine
-                left="Your page"
-                right={
-                  <Text className="tabular-nums text-xs text-flame-deep">tradesura.com/p/{settings.slug}</Text>
-                }
+              <Text className="mb-1.5 font-sans text-xs text-muted">Your page</Text>
+              <AddressPicker
+                slug={settings.slug}
+                chosen={Boolean(settings.slugChosen)}
+                onChosen={(slug) => {
+                  setSettings((s) => (s ? { ...s, slug, slugChosen: true } : s));
+                  refreshMe();
+                }}
               />
-              <Text className="mt-1 font-sans text-[11px] text-faint">
-                The address updates if you rename your trading name.
-              </Text>
             </View>
           )}
           {settingsError && (

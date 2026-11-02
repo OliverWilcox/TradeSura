@@ -9,11 +9,12 @@ import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Button, Tick } from "@/components/ui";
 import { Icon } from "@/components/icon";
 import { Toggle } from "@/components/toggle";
+import { AddressPicker } from "@/components/address-picker";
 import { CenteredSpinner, LoadingImage } from "@/components/skeleton";
 
 // Getting started · "Get found on Google" (Section 8, step 3 of the wizard) —
-// the engineer's free public profile at
-// tradesura.com/gas-engineers/{town}/{slug}: short bio, a couple of photos,
+// the engineer's free public profile at their one address,
+// tradesura.com/{slug} (Review 4, chosen here once): short bio, a couple of photos,
 // areas covered, the Call and Message switches and the number shown, and a
 // preview. Publishing lets search engines index it.
 
@@ -25,6 +26,9 @@ type Profile = {
   /** Review 4 — the engineer's own preview link (PREVIEW banner, Join off). */
   previewUrl?: string;
   display: string;
+  /** Review 4 — the address (tradesura.com/{slug}), chosen once. */
+  slug: string;
+  slugChosen: boolean;
   town: string;
   photos: string[];
   showCallButton: boolean;
@@ -180,9 +184,16 @@ export default function ProfileScreen() {
 
             <Card>
               <Text className="text-[13px] font-bold uppercase tracking-[0.1em] text-flame">Your address</Text>
-              <Text selectable className="mt-1.5 text-[16px] font-bold text-ink">
-                {data.display}
-              </Text>
+              <View className="mt-1.5">
+                <AddressPicker
+                  slug={data.slug}
+                  chosen={data.slugChosen}
+                  onChosen={(slug) => {
+                    setData((d) => (d ? { ...d, slug, slugChosen: true, display: `tradesura.com/${slug}` } : d));
+                    refreshMe();
+                  }}
+                />
+              </View>
               <View className="mt-2 flex-row items-center gap-2">
                 {data.published ? (
                   <>

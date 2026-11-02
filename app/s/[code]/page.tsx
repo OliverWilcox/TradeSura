@@ -60,7 +60,7 @@ export default async function StickerPage({ params }: { params: Promise<{ code: 
           </p>
         </Card>
         {engineer && (
-          <Link href={`/p/${engineer.slug}`} className={btnClass()}>
+          <Link href={`/${engineer.slug}`} className={btnClass()}>
             See {brand}&apos;s care plans
           </Link>
         )}
@@ -82,7 +82,7 @@ export default async function StickerPage({ params }: { params: Promise<{ code: 
         </p>
       </Card>
       {engineer && (
-        <Link href={`/p/${engineer.slug}`} className={btnClass()}>
+        <Link href={`/${engineer.slug}`} className={btnClass()}>
           Join {brand}&apos;s care plan
         </Link>
       )}

@@ -582,7 +582,7 @@ export default function PlanWizard() {
       refreshMe(); // first live plan wakes the dashboard ring and the offer gate
       router.replace({
         pathname: "/plan-live",
-        params: { name, pricePence: String(price) },
+        params: { name, pricePence: String(price), tierId: id },
       });
     } catch (e) {
       if (!showBlocked(e)) setError(e instanceof ApiError ? e.message : "Couldn't make this plan live.");
