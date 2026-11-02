@@ -2,11 +2,22 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, ScrollView, RefreshControl, Pressable, Share } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as WebBrowser from "expo-web-browser";
 import { api, apiText, ApiError, getHasSeenFirstPayout, setHasSeenFirstPayout } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, RowLine, Button } from "@/components/ui";
 import { RingProgress, payoutWeekProgress } from "@/components/ring-progress";
 import { PayoutTimeline } from "@/components/payout-timeline";
 import { Skeleton, Bone, TextBone, RowBone } from "@/components/skeleton";
+
+// This month and the ones before it, as YYYY-MM (UK time) for the statements.
+function lastMonths(n: number) {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/London" }));
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 15);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return { key, label: d.toLocaleDateString("en-GB", { month: "long", year: "numeric" }) };
+  });
+}
 
 type FailedPlan = { id: string; customerName: string; priceMonthlyPence: number };
 type StripeSummary = {
@@ -127,6 +138,22 @@ export default function Payouts() {
     setRefreshing(true);
     await load();
     setRefreshing(false);
+  }
+
+  // Matt, 30 Oct §9.5 — the monthly statement of our 20% fee, for their
+  // accountant: a printable page they save as a PDF from the browser.
+  const [statementBusy, setStatementBusy] = useState<string | null>(null);
+  async function openStatement(month: string) {
+    setStatementBusy(month);
+    setExportError(null);
+    try {
+      const { url } = await api<{ url: string }>(`/api/payouts/statement-link?month=${month}`);
+      await WebBrowser.openBrowserAsync(url);
+    } catch (e) {
+      setExportError(e instanceof ApiError ? e.message : "Couldn't open the statement.");
+    } finally {
+      setStatementBusy(null);
+    }
   }
 
   async function exportCsv() {
@@ -335,6 +362,28 @@ export default function Payouts() {
               {exportError && (
                 <Text className="mb-2 font-sans text-xs text-danger">{exportError}</Text>
               )}
+              <Micro className="mb-1.5">Monthly fee statements</Micro>
+              {lastMonths(3).map(({ key, label }, i) => (
+                <Pressable
+                  key={key}
+                  onPress={() => openStatement(key)}
+                  disabled={statementBusy !== null}
+                  accessibilityRole="button"
+                >
+                  <RowLine
+                    left={i === 0 ? `${label} (so far)` : label}
+                    right={
+                      <Text className="text-sm font-semibold text-flame">
+                        {statementBusy === key ? "Opening…" : "View"}
+                      </Text>
+                    }
+                  />
+                </Pressable>
+              ))}
+              <Text className="mb-3 mt-1.5 font-sans text-xs text-muted">
+                Our 20% fee on each collection, for your accountant. No VAT is charged. Save it as a PDF from the
+                page.
+              </Text>
               <Button variant="ghost" onPress={exportCsv} disabled={exporting}>
                 {exporting ? "Preparing…" : "Tax-year export (CSV)"}
               </Button>
