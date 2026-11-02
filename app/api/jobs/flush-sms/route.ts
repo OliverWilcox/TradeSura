@@ -7,6 +7,7 @@ import { applyDuePriceReviews } from "@/lib/price-review";
 import { endUnpaidPlans, resumeDuePausedPlans } from "@/lib/plan-billing";
 import { moveFollowUps } from "@/lib/move-followups";
 import { sendSetupNudges } from "@/lib/account-emails";
+import { sendYearlyRenewalNotices } from "@/lib/yearly-renewals";
 
 // Queue due service reminders (Part 11's 30/14/3 engine), apply due price
 // reviews, then flush the SMS
@@ -24,8 +25,10 @@ async function run() {
   const moves = await moveFollowUps();
   // Build Review 3 §8 — day 1 "payments not set up", day 3 "no plan yet".
   const setupNudges = await sendSetupNudges();
+  // Review 4 — yearly payers hear 30 days before they renew.
+  const renewalNotices = await sendYearlyRenewalNotices();
   const sent = await flushSmsQueue();
-  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves, setupNudges });
+  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves, setupNudges, renewalNotices });
 }
 
 // Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
