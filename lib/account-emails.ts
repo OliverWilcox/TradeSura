@@ -13,6 +13,7 @@ import { engineerYearlyPence } from "@/lib/engineer-welcome-email";
 import { poundsFromPence } from "@/lib/plan-doc";
 import { poundsLabel } from "@/lib/billing-interval";
 import { track } from "@/lib/track";
+import { REFERRAL_FIRST_YEAR_PERCENT, REFERRAL_LIFETIME_PERCENT } from "@/lib/referral";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Nudges only go to new sign-ups: an older account that never set up
@@ -74,7 +75,7 @@ export function happyMomentAsks(referralCode: string | null): string {
       `<b>Who else have you worked for this year?</b> Every one of them is a customer you could offer a plan to. ${link("customers", "Offer them a plan")}`,
     ),
     item(
-      `<b>Know another installer?</b> ${referralCode ? `Share your code <b>${escapeHtml(referralCode)}</b>. ` : ""}You earn 25% of our fee on every plan they sell for 12 months, then 10% for life. ${link("referral", "Invite them")}`,
+      `<b>Know another installer?</b> ${referralCode ? `Share your code <b>${escapeHtml(referralCode)}</b>. ` : ""}You earn ${REFERRAL_FIRST_YEAR_PERCENT}% of our fee on every plan they sell for 12 months, then ${REFERRAL_LIFETIME_PERCENT}% for life. ${link("referral", "Invite them")}`,
     ),
     trustpilot
       ? item(
@@ -105,7 +106,7 @@ export function noPlanNudgeEmail(firstName: string | null) {
     title: "Build your first plan in about 2 minutes",
     preheader: "Start from Boiler Care and set your own price.",
     paragraphs: [
-      `Start from Boiler Care at ${poundsLabel(EXAMPLE_PLAN_PENCE)} a month, change anything you like and set your own price. Each customer on it is worth ${money(`${wholePounds(engineerYearlyPence(EXAMPLE_PLAN_PENCE))} a year`)} to you.`,
+      `Start from Service, Care or Complete, change anything you like and set your own price. Each customer on a ${poundsLabel(EXAMPLE_PLAN_PENCE)} plan is worth ${money(`${wholePounds(engineerYearlyPence(EXAMPLE_PLAN_PENCE))} a year`)} to you.`,
       "Your plan is saved as you go, so you can finish it later.",
     ],
     button: { to: "plan-wizard", label: "Build my plan" },
