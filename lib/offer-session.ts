@@ -102,11 +102,15 @@ export async function sessionForBusiness(token: string, businessId: string) {
 export async function sessionStatus(token: string, businessId: string) {
   const s = await sessionForBusiness(token, businessId);
   if (!s) return null;
-  const [plan, review] = await Promise.all([
+  const [plan, review, engineer] = await Promise.all([
     s.planId ? prisma.plan.findUnique({ where: { id: s.planId }, include: { customer: true } }) : null,
     prisma.rating.findUnique({ where: { offerSessionId: s.id }, select: { id: true } }),
+    prisma.engineer.findUnique({ where: { id: s.engineerId }, select: { town: true, tradingName: true, legalName: true, slug: true } }),
   ]);
   return {
+    // "Every review moves you up the [Town] page." and the consent line's [Business].
+    town: engineer?.town?.trim() || null,
+    business: engineer ? brandName(engineer) : null,
     reason: s.reason,
     channel: s.channel,
     joined: Boolean(plan),

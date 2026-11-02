@@ -15,6 +15,21 @@ import { AppHeader, Card, Micro, Button } from "@/components/ui";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 import { checkEmail, checkRequired, checkUkMobile, checkUkPostcode } from "@/lib/validate";
 import { formatPounds } from "@/lib/earnings";
+import { isOffline, queueOffer } from "@/lib/offer-queue";
+
+// 30 Oct update §6 — "the app does the selling". The installer taps why they
+// were there (required), then hands over the phone ("Show them now", the main
+// way) or sends the link to the customer's own phone. Everything the
+// customer sees is tailored to the reason. The list comes from Matt's admin
+// (GET /api/visit-reasons); this is the fallback when there's no signal.
+const FALLBACK_REASONS = [
+  { reason: "new_boiler", label: "New boiler fitted" },
+  { reason: "breakdown", label: "Breakdown / repair" },
+  { reason: "yearly_service", label: "Yearly service" },
+  { reason: "landlord", label: "Landlord safety check" },
+  { reason: "other", label: "Other work" },
+];
+type Reason = { reason: string; label: string };
 
 // The script card, then the send card: plan pills, book/new toggle and a
 // few customer rows.
@@ -50,7 +65,8 @@ type Tier = { id: string; name: string; priceMonthlyPence: number; lines: string
 function offerScript(tier: Tier | null): string {
   const price = tier ? `£${(tier.priceMonthlyPence / 100).toFixed(2).replace(/\.00$/, "")} a month` : "a small monthly fee";
   const service = !tier || tier.lines.some((l) => /annual boiler service/i.test(l));
-  return `“I put all my customers on a care plan now — ${price} and you’re first in my diary.${service ? " Your annual service comes with it once your third payment’s gone through." : ""} I’ll text you the link, have a look tonight.”`;
+  // 30 Oct §6 — the app does the selling: one line, then hand the phone over.
+  return `“I put all my customers on a care plan now — ${price} and you’re first in my diary.${service ? " Your annual service comes with it once your third payment’s gone through." : ""} Have a quick look, it’s all on here.”`;
 }
 
 // Thumb-sized, size-only text class (see components/address-lookup.tsx).
@@ -87,6 +103,12 @@ export default function OfferStart() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [reasons, setReasons] = useState<Reason[]>(FALLBACK_REASONS);
+  const [reason, setReason] = useState<string | null>(null);
+  const [reasonError, setReasonError] = useState<string | null>(null);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [showBusy, setShowBusy] = useState(false);
+  const [queuedFor, setQueuedFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -108,6 +130,9 @@ export default function OfferStart() {
       setMode(preselect ? "existing" : data.customers.length ? "existing" : "new");
       setCustomerId(preselect);
       setLoadError(null);
+      api<{ reasons: Reason[] }>("/api/visit-reasons")
+        .then((r) => r.reasons.length && setReasons(r.reasons))
+        .catch(() => {});
     } catch (e) {
       setLoadError(e instanceof ApiError ? e.message : "Couldn't load your book.");
     }
@@ -124,8 +149,39 @@ export default function OfferStart() {
     setErrors((e) => ({ ...e, [key]: null }));
   }
 
+  function needReason(): boolean {
+    if (reason) return false;
+    setReasonError("Tap why you were there first.");
+    return true;
+  }
+
+  // "Show them now" — the customer joins on this phone, on a page tailored
+  // to the reason; the review follows.
+  async function showNow() {
+    if (needReason()) return;
+    setShowBusy(true);
+    setError(null);
+    try {
+      const s = await api<{ token: string; path: string }>("/api/offer/session", {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+      router.push({ pathname: "/offer/show", params: { token: s.token, path: s.path } });
+    } catch (e) {
+      setError(
+        isOffline(e)
+          ? "No signal to open your plan page here. Use Send to their phone: we'll text the link once you're back online."
+          : e instanceof ApiError
+            ? e.message
+            : "Couldn't open your plan page.",
+      );
+    } finally {
+      setShowBusy(false);
+    }
+  }
+
   async function send(channel: "sms" | "whatsapp") {
-    if (!tierId) return;
+    if (!tierId || needReason()) return;
     // Never a silent grey button — say what's missing (29 Sept review).
     const found: FormErrors =
       mode === "existing"
@@ -144,18 +200,35 @@ export default function OfferStart() {
     try {
       const base =
         mode === "existing" ? { customerId } : { ...form, email: form.email || undefined };
-      const data = await api<{ planId: string; link: string; message: string; customerFirstName: string }>(
-        "/api/offer",
-        { method: "POST", body: JSON.stringify({ ...base, tierId, channel }) },
-      );
+      const data = await api<{
+        planId: string;
+        link: string;
+        message: string;
+        customerFirstName: string;
+        sessionToken: string | null;
+      }>("/api/offer", { method: "POST", body: JSON.stringify({ ...base, tierId, channel, reason }) });
       if (channel === "whatsapp") {
+        // Opens WhatsApp with the message ready; nothing is sent by us.
         const wa = `whatsapp://send?text=${encodeURIComponent(data.message)}`;
         const ok = await Linking.canOpenURL(wa);
         await Linking.openURL(ok ? wa : `https://wa.me/?text=${encodeURIComponent(data.message)}`);
       }
-      router.push(`/offer/${data.planId}`);
+      // Plans first, then the review — every customer, joined or not.
+      router.push(
+        data.sessionToken
+          ? { pathname: "/offer/review", params: { token: data.sessionToken, planId: data.planId } }
+          : `/offer/${data.planId}`,
+      );
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not send the link.");
+      if (isOffline(e) && reason) {
+        // §6.7 — no signal: keep the details and text the link later. No error screen.
+        await queueOffer({
+          reason,
+          tierId,
+          ...(mode === "existing" ? { customerId } : { ...form }),
+        });
+        setQueuedFor(previewName);
+      } else setError(e instanceof ApiError ? e.message : "Could not send the link.");
     } finally {
       setBusy(false);
     }
@@ -261,9 +334,72 @@ export default function OfferStart() {
                 </>
               )}
             </Card>
-          ) : (
+          ) : queuedFor ? (
+            // §6.7 — no signal: saved, sent automatically later. Not an error.
             <Card>
-              <Text className="mb-2 font-semibold text-sm text-ink">Send signup link</Text>
+              <Micro>Saved</Micro>
+              <Text className="mt-1.5 text-[19px] font-bold text-ink">We&apos;ll text {queuedFor} the link</Text>
+              <Text className="mt-1 text-[14px] leading-5 text-muted">
+                No signal here. Their details are saved on your phone, and the link goes out by text as soon
+                as you&apos;re back online.
+              </Text>
+              <Button className="mt-4" onPress={() => router.replace("/")}>
+                Done
+              </Button>
+            </Card>
+          ) : (
+            <>
+            <Card>
+              <Text className="font-semibold text-[15px] text-ink">Why were you there today?</Text>
+              <Text className="mt-0.5 text-[12.5px] text-muted">
+                Your plan page is written for it, so you just hand the phone over.
+              </Text>
+              <View className="mt-3 flex-row flex-wrap gap-2">
+                {reasons.map((r) => (
+                  <Pressable
+                    key={r.reason}
+                    testID={`reason-${r.reason}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: reason === r.reason }}
+                    onPress={() => {
+                      setReason(r.reason);
+                      setReasonError(null);
+                    }}
+                    className={`min-h-[44px] justify-center rounded-full px-4 ${reason === r.reason ? "bg-flame" : "border border-line bg-panel"}`}
+                  >
+                    <Text className={`font-semibold text-[14px] ${reason === r.reason ? "text-iron" : "text-ink"}`}>
+                      {r.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <FieldError>{reasonError}</FieldError>
+            </Card>
+
+            <Card>
+              <Button onPress={showNow} disabled={showBusy}>
+                {showBusy ? "Opening…" : "Show them now"}
+              </Button>
+              <Text className="mt-1.5 text-center text-[12px] text-muted">
+                They join on your phone, then you ask for a review.
+              </Text>
+              {!sendOpen && (
+                <Button
+                  variant="ghost"
+                  className="mt-3"
+                  onPress={() => {
+                    if (!needReason()) setSendOpen(true);
+                  }}
+                >
+                  Send to their phone
+                </Button>
+              )}
+              {error && !sendOpen && <Text className="mt-2 font-sans text-sm text-danger">{error}</Text>}
+            </Card>
+
+            {sendOpen && (
+            <Card>
+              <Text className="mb-2 font-semibold text-sm text-ink">Send to their phone</Text>
 
               {/* Build Guide v2 Part 9.2 — "Pick the customer, pick the
                   plan, see the exact text, send." */}
@@ -451,9 +587,11 @@ export default function OfferStart() {
                 </Button>
               </View>
               <Micro className="mt-2 text-center">
-                We&apos;ll nudge {previewName}{" "}if they haven&apos;t looked in 3 days.
+                We&apos;ll follow up with {previewName}{" "}after 2 and 7 days if they haven&apos;t joined.
               </Micro>
             </Card>
+            )}
+            </>
           )}
         </ScrollView>
       )}

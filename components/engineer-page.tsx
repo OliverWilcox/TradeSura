@@ -297,7 +297,7 @@ export async function EngineerPage({
         </div>
       )}
 
-      {visit && <VisitReasonIntro content={visit} engineerFirstName={engineer.firstName?.trim() || brand} />}
+      {visit && <VisitReasonIntro content={visit} />}
 
       {/* Build Guide v2 Part 15.1 — title + sub-line, verbatim. */}
       <div>

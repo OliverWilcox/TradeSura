@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, Pressable } from "react-native";
+import { View, Text, ScrollView, RefreshControl, Pressable, AppState } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError, getHasSeenFirstCustomer, getPushPrompted, setPushPrompted } from "@/lib/api";
@@ -15,6 +15,8 @@ import { goLiveSteps, growSteps } from "@/lib/setup-steps";
 import { offerLock } from "@/lib/offer-lock";
 import { StripeStatusCard } from "@/components/stripe-status-card";
 import { GrowthCard } from "@/components/growth-card";
+import { flushOfferQueue } from "@/lib/offer-queue";
+import { cancelOfferNudge, scheduleOfferNudge } from "@/lib/offer-nudge";
 
 type DueItem = {
   customerId: string;
@@ -192,6 +194,16 @@ function OwnerHome() {
     }, [load, refreshMe]),
   );
 
+  // 30 Oct §6.7 — offers saved with no signal go out once back online:
+  // on every visit here and whenever the app comes back to the front.
+  useEffect(() => {
+    flushOfferQueue().catch(() => {});
+    const sub = AppState.addEventListener("change", (s) => {
+      if (s === "active") flushOfferQueue().catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
+
   // Review 3 §3 — celebrate the first customer once, ever. The screen sets
   // the flag itself, so arriving there from the push counts too.
   useEffect(() => {
@@ -259,6 +271,12 @@ function OwnerHome() {
   // Review 4 — "Send your first offer" only once the engineer is live (offers
   // unlocked), so it never sits under "Finish setup" as a second Get started.
   const firstOffer = Boolean(data && isLive && !lock && data.count === 0);
+  // 30 Oct §6.1 — once offers are open, the big "Offer a plan" button is
+  // always on Home, and the 5pm weekday nudge is set on the phone.
+  const canOffer = Boolean(isLive && !lock);
+  useEffect(() => {
+    (canOffer ? scheduleOfferNudge() : cancelOfferNudge()).catch(() => {});
+  }, [canOffer]);
   // Review 4 — one Gas Safe strip, not two: "Photo needed" until the ID
   // photo is in, then "Check in progress".
   const photoNeeded = Boolean(me && me.hasGasSafeCard === false && !verified);
@@ -287,6 +305,10 @@ function OwnerHome() {
             ? "Offer a plan at the end of the job — most take under 90 seconds."
             : "Once you're set up, offering a plan takes under 90 seconds."}
         </Text>
+
+        {canOffer && !firstOffer && (
+          <Button onPress={() => router.push("/offer")}>Offer a plan</Button>
+        )}
 
         {standing && <StandingStrip standing={standing} />}
         {/* Signed up with "I'll add my ID photo later" (30 Sept build notes). */}

@@ -2,8 +2,9 @@ import type { ReasonContent } from "@/lib/visit-reasons";
 
 // 30 Oct update §6 — the top of the customer's page when the installer
 // hands over the phone: written for why they were there (Matt's admin
-// content, lib/visit-reasons.ts). The page's own sections follow it.
-export function VisitReasonIntro({ content, engineerFirstName }: { content: ReasonContent; engineerFirstName: string }) {
+// content, lib/visit-reasons.ts). The page's own header (engineer, badges,
+// "not a call centre") sits above it; its plans follow.
+export function VisitReasonIntro({ content }: { content: ReasonContent }) {
   return (
     <section className="bg-paper border border-line rounded-xl p-4" data-visit-reason={content.reason} data-variant={content.variant}>
       <h2 className="font-sans font-semibold text-lg leading-snug">{content.headline}</h2>
@@ -26,7 +27,6 @@ export function VisitReasonIntro({ content, engineerFirstName }: { content: Reas
           </li>
         ))}
       </ul>
-      <p className="mt-3 text-[12.5px] text-muted">The engineer you already know, {engineerFirstName}, not a call centre.</p>
     </section>
   );
 }
