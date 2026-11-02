@@ -116,9 +116,9 @@ export function beforeYouGo(opts: {
   return { paidPence: opts.paidPence, paidLine, serviceLine, loseLines };
 }
 
-// Servicing keeps warranties valid — not the plan itself (copy rule).
-export const WARRANTY_LINE =
-  "Most boiler manufacturers need a yearly service to keep your warranty valid, and a serviced boiler runs more efficiently.";
+// Servicing keeps warranties valid — not the plan itself (copy rule). 30 Oct
+// update §7.6: Matt's safe wording, short text version (lib/yearly-service.ts).
+export { SERVICE_SHORT_LINE as WARRANTY_LINE } from "@/lib/yearly-service";
 export const PASSPORT_FREEZE_LINE =
   "Your Home Passport will be frozen. No new service records will be added, and your home's history stops here when you sell.";
 

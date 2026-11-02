@@ -14,6 +14,8 @@ import { snapshotTier } from "@/lib/plan-tier";
 import { signupUrl } from "@/lib/public-url";
 import { offerBlockedReason } from "@/lib/verification-state";
 import { attachPlanToSession } from "@/lib/offer-session";
+import { neighbourReferrer } from "@/lib/neighbour-referral";
+import { markDetailsJoined } from "@/lib/details-request";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 const Body = z.object({
@@ -31,6 +33,8 @@ const Body = z.object({
   rejoin: z.string().max(64).optional(),
   // 30 Oct §6 — handed over at the job: links the plan to that offer.
   offer: z.string().max(80).optional(),
+  // 30 Oct §7.9 — a neighbour's referral link: the referrer's plan ref.
+  nref: z.string().max(40).optional(),
 });
 
 // Public plan page (C1) → embedded checkout. No pre-created plan and no
@@ -131,6 +135,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   });
 
   if (b.channel === "demo") await attachPlanToSession(b.offer, engineer.id, plan.id);
+  // §7.7 — joining stops any "Send me the details" follow-ups to this number.
+  await markDetailsJoined(engineer.id, phone);
+  // §7.9 — a neighbour's link: their first month free, and the referrer's
+  // free month once this plan goes live (lib/neighbour-referral.ts).
+  const referrer = await neighbourReferrer(engineer.id, b.nref);
+  if (referrer && referrer.customerId !== customer.id) {
+    await track("neighbour_referral_joined", { type: "CUSTOMER", id: customer.id }, { planId: plan.id, referrerPlanId: referrer.id });
+  }
 
   const brand = brandName(engineer);
   const base = signupUrl(engineer.slug, plan.signupToken);
@@ -157,7 +169,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       planId: plan.id,
       planRef: plan.ref,
       returnUrl: `${base}/confirmed?cs={CHECKOUT_SESSION_ID}`,
-      extraFreeMonths: (await rejoinFreeMonth(engineer.id, b.rejoin)) ? 1 : 0,
+      extraFreeMonths:
+        (await rejoinFreeMonth(engineer.id, b.rejoin)) || (referrer && referrer.customerId !== customer.id) ? 1 : 0,
     });
     await prisma.plan.update({
       where: { id: plan.id },
@@ -201,6 +214,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       publishableKey: publishableKey(),
       confirmedUrl: `${base}/confirmed`,
       signupToken: plan.signupToken,
+      // §7.8 — "First payment £X on [date], after your 14-day cooling-off".
+      firstPaymentAt: sub.trialEnd.toISOString(),
       // R9 — a Landlord plan asks the customer to confirm the property is let.
       landlord: isLandlordPlan(tier.clauses.map((tc) => tc.clause.code)),
       // Review 4 — a plan with a CP12 asks when their current record is due.

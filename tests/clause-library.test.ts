@@ -11,7 +11,6 @@ import {
   isLandlordPlan,
   missingRateError,
   serviceRuleError,
-  suggestedPricePence,
   withRequiredClauses,
 } from "@/lib/clauses";
 import { checkWording } from "@/lib/compliance/blocklist";
@@ -45,9 +44,8 @@ describe("plan service library", () => {
     }
   });
 
-  it("suggested price stacks uplifts on the base", () => {
-    expect(suggestedPricePence([])).toBe(700);
-    expect(suggestedPricePence([200, 150, null, 0])).toBe(1050);
+  it("presets carry no price (30 Oct: no suggested prices anywhere)", () => {
+    for (const p of TIER_PRESETS) expect("priceMonthlyPence" in p, p.name).toBe(false);
   });
 
   // Build Guide v2 Part 7.1 LAW — required options are pre-ticked and
@@ -138,10 +136,8 @@ describe("plan service library", () => {
   });
 });
 
-describe("quick-start presets (Review 4)", () => {
+describe("quick-start presets (Review 4, 30 Oct §5)", () => {
   const byCode = new Map(CLAUSE_TEMPLATES.map((c) => [c.code, c]));
-  const guide = (codes: readonly string[]) =>
-    suggestedPricePence(codes.map((c) => byCode.get(c)?.upliftPence ?? null));
 
   it("never has more than the recommended 6 options", () => {
     for (const p of TIER_PRESETS) expect(p.clauseCodes.length).toBeLessThanOrEqual(6);
@@ -149,11 +145,10 @@ describe("quick-start presets (Review 4)", () => {
   it("only uses options that exist and are offerable", () => {
     for (const p of TIER_PRESETS) for (const c of p.clauseCodes) expect(byCode.get(c)?.status).toBe("SAFE");
   });
-  it("guides Landlord Care clearly above Boiler Care (the CP12 is real work)", () => {
-    const landlord = TIER_PRESETS.find((p) => p.name === "Landlord Care")!;
-    const boiler = TIER_PRESETS.find((p) => p.name === "Boiler Care")!;
-    expect(guide(landlord.clauseCodes)).toBe(1600);
-    expect(guide(boiler.clauseCodes)).toBe(1300);
+  it("Service, Care and Complete step up: each includes the one before", () => {
+    const [service, care, complete] = ["Service", "Care", "Complete"].map((l) => TIER_PRESETS.find((p) => p.label === l)!);
+    expect(service.clauseCodes.filter((c) => c !== "ANNUAL_REMINDER" && c !== "SERVICE_HISTORY").every((c) => (care.clauseCodes as readonly string[]).includes(c))).toBe(true);
+    expect(care.clauseCodes.every((c) => (complete.clauseCodes as readonly string[]).includes(c))).toBe(true);
   });
 });
 

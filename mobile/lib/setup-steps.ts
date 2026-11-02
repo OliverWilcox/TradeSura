@@ -73,8 +73,8 @@ export function goLiveSteps(me: Me | null): SetupStep[] {
       : {
           key: "plan",
           title: "Build your first plan",
-          sub: "Start from Boiler Care at ",
-          money: "£12",
+          // 30 Oct §5 — no suggested prices: they set their own.
+          sub: "Pick what's included and set your own price",
           done: false,
           status: "Not started",
           tone: "grey",

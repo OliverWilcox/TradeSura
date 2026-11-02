@@ -32,7 +32,7 @@ export function BillingChoice({
     },
     {
       v: "year",
-      title: "Pay yearly",
+      title: "Pay yearly and save",
       sub: `${poundsLabel(yearlyPricePence(priceMonthlyPence))} a year${vat} · 12 months for the price of 11, save ${saving}`,
     },
   ];

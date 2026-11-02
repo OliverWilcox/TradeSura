@@ -104,6 +104,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       publishableKey: publishableKey(),
       confirmedUrl: `${base}/confirmed`,
       signupToken: token,
+      // 30 Oct §7.8 — "First payment £X around [date], after your 14-day cooling-off".
+      firstPaymentAt: sub.trialEnd.toISOString(),
       // R9 — a Landlord plan asks the customer to confirm the property is let.
       landlord: isLandlordPlan(tier.clauses.map((tc) => tc.clause.code)),
       // Review 4 — a plan with a CP12 asks when their current record is due.

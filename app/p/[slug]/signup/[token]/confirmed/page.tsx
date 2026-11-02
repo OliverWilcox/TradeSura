@@ -4,6 +4,22 @@ import { brandName, tradingNameOf } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { CustomerShell } from "@/components/shells";
 import { SignupConfirmed } from "@/components/signup-confirmed";
+import { getStripe } from "@/lib/stripe";
+import { profileUrl } from "@/lib/public-url";
+
+// The first collection: the subscription's trial end when Stripe has it (a
+// free month pushes it past cooling-off), otherwise the cooling-off end.
+async function firstPaymentAt(subscriptionId: string | null, coolingOffEndsAt: Date | null): Promise<Date | null> {
+  if (subscriptionId) {
+    try {
+      const sub = await getStripe().subscriptions.retrieve(subscriptionId);
+      if (sub.trial_end) return new Date(sub.trial_end * 1000);
+    } catch (err) {
+      console.error("[confirmed] subscription lookup failed:", err);
+    }
+  }
+  return coolingOffEndsAt;
+}
 
 export default async function ConfirmedPage({
   params,
@@ -13,7 +29,12 @@ export default async function ConfirmedPage({
   const { slug, token } = await params;
   const plan = await prisma.plan.findUnique({
     where: { signupToken: token },
-    include: { engineer: true, customer: true, tier: true },
+    include: {
+      engineer: true,
+      customer: true,
+      tier: { include: { clauses: { include: { clause: { select: { code: true } } } } } },
+      passport: { select: { viewToken: true } },
+    },
   });
   // The business's address may have moved since the link was sent (Review 4:
   // old addresses keep working), so an old one still opens the same plan.
@@ -43,6 +64,16 @@ export default async function ConfirmedPage({
         billingInterval={plan.billingInterval}
         initialStatus={plan.status}
         portalToken={plan.status === "ACTIVE" ? plan.portalToken : null}
+        extras={{
+          engineer: { brand, firstName: plan.engineer.firstName, photoUrl: plan.engineer.logoUrl },
+          coolingOffEndsAt: plan.coolingOffEndsAt?.toISOString() ?? null,
+          firstPaymentAt: (await firstPaymentAt(plan.stripeSubscriptionId, plan.coolingOffEndsAt))?.toISOString() ?? null,
+          yearly: plan.billingInterval === "year",
+          annualService: Boolean(plan.tier?.clauses.some((c) => c.clause.code === "ANNUAL_SERVICE")),
+          // §7.9 — a neighbour's link: the engineer's page with this plan's ref.
+          referUrl: `${profileUrl(plan.engineer.slug)}?nref=${encodeURIComponent(plan.ref)}`,
+          passportUrl: plan.status === "ACTIVE" && plan.passport ? `/passport/${plan.passport.viewToken}` : null,
+        }}
       />
     </CustomerShell>
   );

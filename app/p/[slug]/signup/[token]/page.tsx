@@ -4,7 +4,10 @@ import { brandName, tradingNameOf } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { CustomerShell } from "@/components/shells";
 import { SignupTiers } from "@/components/signup-tiers";
-import { clauseLine } from "@/lib/clauses";
+import { clauseLine, isLandlordPlan } from "@/lib/clauses";
+import { SignupHeader } from "@/components/signup-header";
+import { FoundingBadge } from "@/components/founding-badge";
+import { serviceOrderForVisit } from "@/lib/yearly-service";
 import { TrustLine } from "@/components/verified-badge";
 import { isFoundingMember } from "@/lib/founding";
 import { signupPath } from "@/lib/public-url";
@@ -54,13 +57,16 @@ export default async function SignupPage({
     <CustomerShell
       tradingName={brand}
       legalLine={tradingNameOf(plan.engineer)}
-      sub={
-        <TrustLine
-          verified={Boolean(plan.engineer.gasSafeVerifiedAt)}
-          founding={await isFoundingMember(plan.engineer.id)}
-        />
-      }
+      // The badges sit once, in the §7.1 header below.
+      sub={<TrustLine verified={false} />}
     >
+      <SignupHeader
+        brand={brand}
+        firstName={plan.engineer.firstName}
+        photoUrl={plan.engineer.logoUrl}
+        verified={Boolean(plan.engineer.gasSafeVerifiedAt)}
+        founding={(await isFoundingMember(plan.engineer.id)) ? <FoundingBadge /> : null}
+      />
       <p className="text-sm">
         Hi {plan.customer.firstName} — pick the plan that suits you. The monthly price you see is
         the full price: no joining fee, nothing added later.
@@ -70,6 +76,11 @@ export default async function SignupPage({
         engineerName={brand}
         vatRegistered={plan.engineer.vatRegistered}
         pinnedTierId={pinnedTier?.id}
+        normalPrices={{
+          normalServicePence: plan.engineer.normalServicePence,
+          normalCalloutPence: plan.engineer.normalCalloutPence,
+        }}
+        serviceOrder={serviceOrderForVisit(plan.visitReason)}
         pinnedGreeting={
           pinnedTier ? `${plan.engineer.firstName ?? brand} suggested ${pinnedTier.name}` : null
         }
@@ -78,6 +89,8 @@ export default async function SignupPage({
           name: t.name,
           priceMonthlyPence: t.priceMonthlyPence,
           isRecommended: t.isRecommended,
+          codes: t.clauses.map((tc) => tc.clause.code),
+          landlord: isLandlordPlan(t.clauses.map((tc) => tc.clause.code)),
           lines: [
             ...t.clauses
               .sort((a, b) => a.clause.sortOrder - b.clause.sortOrder)

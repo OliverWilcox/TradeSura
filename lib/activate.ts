@@ -14,6 +14,7 @@ import { firstCustomerPath, firstMemberYearlyPence } from "@/lib/first-member";
 import { sendFirstCustomerEmail } from "@/lib/account-emails";
 import { askToFinishSetup } from "@/lib/finish-setup";
 import { cp12Date } from "@/lib/cp12";
+import { rewardNeighbourReferrer } from "@/lib/neighbour-referral";
 
 // Idempotent: safe to call again if Stripe retries the webhook, or if the
 // confirmed-page poll and the webhook both land.
@@ -150,6 +151,8 @@ export async function activatePlan(
       url: `/customer/${plan.customerId}`,
     });
   }
+  // 30 Oct §7.9 — joined from a neighbour's link: the referrer's free month.
+  await rewardNeighbourReferrer(plan.id).catch((err) => console.error("[activate] neighbour reward failed:", err));
   // Section 8 — the staff engineer who signed them up hears too, with no £.
   if (plan.soldById) {
     await sendPushNotification(

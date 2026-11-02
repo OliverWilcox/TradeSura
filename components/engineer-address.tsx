@@ -15,6 +15,8 @@ export type PageSearch = {
   rejoin?: string;
   /** 30 Oct §6 — the at-the-job offer this page was opened from. */
   o?: string;
+  /** 30 Oct §7.9 — a neighbour's referral (their plan ref). */
+  nref?: string;
 };
 
 export function queryString(q: Record<string, string | undefined>): string {
@@ -51,6 +53,7 @@ export async function renderEngineerPage(slug: string, q: PageSearch, opts: { pl
       by={q.by}
       rejoin={q.rejoin}
       offer={q.o}
+      nref={q.nref}
       preview={preview}
       practice={q.practice === "1"}
       profile={showProfile && rating ? { rating, ratings, partner: isWebsitePartner(engineer) } : undefined}

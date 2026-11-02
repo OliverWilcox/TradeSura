@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { NotIncluded } from "@/components/ui";
 import { EmbeddedCheckout } from "@/components/embedded-checkout";
 import { JOIN_BTN, PlanTierCard } from "@/components/plan-tier-card";
 import { BillingChoice } from "@/components/billing-choice";
 import { chargePence, priceLine, type BillingInterval } from "@/lib/billing-interval";
 import type { PageMode } from "@/lib/public-page";
+import { defaultTierId, hasLandlordChoice, tiersFor } from "@/lib/signup-choice";
+import { valueSum, type NormalPrices } from "@/lib/value-sum";
+import { HomePassportBlock, LandlordToggle, ValueSumLine, WhyYearlyService } from "@/components/signup-extras";
 
 type Tier = {
   id: string;
@@ -14,6 +17,21 @@ type Tier = {
   priceMonthlyPence: number;
   isRecommended: boolean;
   lines: string[];
+  /** Clause codes: the value sum and the landlord toggle read them. */
+  codes: string[];
+  landlord: boolean;
+};
+
+/**
+ * 30 Oct update §7.2 — the visit reason's tailored top section, filled by the
+ * at-the-job work: its own content block, which plan it pre-selects, whether
+ * it starts on landlord plans, and the order of "Why a yearly service matters".
+ */
+export type ReasonSlot = {
+  node?: ReactNode;
+  preselectTierId?: string | null;
+  landlord?: boolean;
+  serviceOrder?: string[] | null;
 };
 
 function pounds(pence: number) {
@@ -27,6 +45,7 @@ type Started = {
   landlord?: boolean;
   cp12AvailableFrom?: string | null;
   signupToken: string;
+  firstPaymentAt?: string;
 };
 
 // C1 → embedded checkout. Collect the minimum (name, mobile, email), POST
@@ -44,6 +63,10 @@ export function PublicSignup({
   firstMonthFree,
   mode = "live",
   offerToken,
+  normalPrices,
+  reason,
+  localProof,
+  neighbourRef,
 }: {
   slug: string;
   tiers: Tier[];
@@ -61,11 +84,21 @@ export function PublicSignup({
   mode?: PageMode;
   /** 30 Oct §6 — the at-the-job offer this sign-up belongs to. */
   offerToken?: string;
+  /** §5/§7.3 — the installer's own prices, for "Worth over £X a year". */
+  normalPrices?: NormalPrices;
+  reason?: ReasonSlot;
+  /** §7.7 — "local proof once real": only passed when there's a real number. */
+  localProof?: string | null;
+  /** §7.9 — a neighbour's referral link (?nref=): their first month free. */
+  neighbourRef?: string;
 }) {
+  // §7.4 — "Are you a landlord?" only when there are both kinds of plan.
+  const landlordChoice = hasLandlordChoice(tiers);
+  const startsLandlord = Boolean(reason?.landlord ?? tiers.find((t) => t.id === initialTierId)?.landlord ?? false);
+  const [landlord, setLandlord] = useState(startsLandlord);
+  const shown = tiersFor(tiers, landlord);
   const [selectedId, setSelectedId] = useState(
-    tiers.find((t) => t.id === initialTierId)?.id ??
-      tiers.find((t) => t.isRecommended)?.id ??
-      tiers[0]?.id,
+    defaultTierId(tiersFor(tiers, startsLandlord), { initialTierId, reasonTierId: reason?.preselectTierId }),
   );
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -107,6 +140,7 @@ export function PublicSignup({
         billingInterval,
         rejoin,
         offer: offerToken,
+        nref: neighbourRef,
       }),
     });
     const data = await res.json();
@@ -143,8 +177,8 @@ export function PublicSignup({
       <>
       {firstMonthFree && (
         <p className="rounded-xl bg-flame-tint px-3 py-2 text-sm text-ink">
-          Welcome back. Your first month is free: your first payment is a month after your 14-day
-          cooling-off period.
+          {neighbourRef ? "Your neighbour's link: your" : "Welcome back. Your"} first month is free: your first
+          payment is a month after your 14-day cooling-off period.
         </p>
       )}
         <PlanTierCard
@@ -162,6 +196,7 @@ export function PublicSignup({
           landlord={started.landlord}
           cp12AvailableFrom={started.cp12AvailableFrom}
           signupToken={started.signupToken}
+          firstPaymentAt={started.firstPaymentAt}
           planName={selected.name}
           priceLabel={pounds(chargePence(selected.priceMonthlyPence, billingInterval))}
           billingInterval={billingInterval}
@@ -176,11 +211,24 @@ export function PublicSignup({
     <>
       {firstMonthFree && (
         <p className="rounded-xl bg-flame-tint px-3 py-2 text-sm text-ink">
-          Welcome back. Your first month is free: your first payment is a month after your 14-day
-          cooling-off period.
+          {neighbourRef ? "Your neighbour's link: your" : "Welcome back. Your"} first month is free: your first
+          payment is a month after your 14-day cooling-off period.
         </p>
       )}
-      {tiers.map((t) => (
+      {reason?.node}
+
+      {landlordChoice && (
+        <LandlordToggle
+          value={landlord}
+          onChange={(v) => {
+            setLandlord(v);
+            const list = tiersFor(tiers, v);
+            if (!list.some((t) => t.id === selectedId)) setSelectedId(defaultTierId(list));
+          }}
+        />
+      )}
+
+      {shown.map((t) => (
         <button
           key={t.id}
           onClick={() => setSelectedId(t.id)}
@@ -197,6 +245,12 @@ export function PublicSignup({
           />
         </button>
       ))}
+
+      {selected && normalPrices && (
+        <ValueSumLine sum={valueSum(selected.codes, normalPrices, selected.priceMonthlyPence, billingInterval)} />
+      )}
+
+      <WhyYearlyService order={reason?.serviceOrder} />
 
       <NotIncluded />
 
@@ -228,9 +282,17 @@ export function PublicSignup({
             ? "Join is switched off in preview"
             : busy
               ? "Setting up…"
-              : `${mode === "practice" ? "DEMO · " : ""}Join ${selected.name} — ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)} by Direct Debit`}
+              : `${mode === "practice" ? "DEMO · " : ""}Join now · ${selected.name}, ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)}`}
         </button>
       ) : null}
+
+      {/* §7.7 — Home Passport, then "Send me the details" for anyone not ready. */}
+      <HomePassportBlock
+        brand={engineerName}
+        localProof={localProof}
+        detailsUrl={mode === "live" ? `/api/p/${slug}/details` : undefined}
+        tierId={selected?.id}
+      />
     </>
   );
 }

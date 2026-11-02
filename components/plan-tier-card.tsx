@@ -46,9 +46,16 @@ export function PlanTierCard({
       <div className="text-[15px] mt-0.5">{perMonth(pounds(priceMonthlyPence), vatRegistered)}</div>
       {!compact && (
         <>
-          <span className="inline-block mt-2.5 rounded-full bg-[#E3EEFB] text-[#1F4E8C] text-[12.5px] px-3 py-0.5">
-            Cancel anytime
-          </span>
+          {/* 30 Oct update §7.5 — next to the price. "Pay yearly and save" is
+              the second option under the plans (components/billing-choice). */}
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            <span className="inline-block rounded-full bg-[#E3EEFB] text-[#1F4E8C] text-[12.5px] px-3 py-0.5">
+              Cancel any time. No contract.
+            </span>
+            <span className="inline-block rounded-full bg-[#E3EEFB] text-[#1F4E8C] text-[12.5px] px-3 py-0.5">
+              Your price is fixed for 12 months
+            </span>
+          </div>
           <ul className="mt-2.5 space-y-1.5">
             {lines.map((l) => {
               const [title, note] = l.split(" — ");

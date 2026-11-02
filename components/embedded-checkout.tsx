@@ -8,6 +8,18 @@ import { AddressLookup, type AddressValue } from "@/components/address-lookup";
 import { Card, btnClass } from "@/components/ui";
 import { perMonth } from "@/lib/engineer";
 import { FIRST_PAYMENT_LINE, type BillingInterval } from "@/lib/billing-interval";
+import { TextMeLink } from "@/components/signup-extras";
+
+// 30 Oct update §7.8 — start-date wording, not a trial: "First payment £X
+// around [date], after your 14-day cooling-off". The date is the earliest it
+// can be: the cooling-off restarts when the Direct Debit is confirmed (2–3
+// working days), so it can move a few days later, never earlier.
+function firstPaymentLine(priceLabel: string, firstPaymentAt?: string) {
+  const d = firstPaymentAt ? new Date(firstPaymentAt) : null;
+  if (!d || Number.isNaN(d.getTime())) return FIRST_PAYMENT_LINE;
+  const when = d.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "Europe/London" });
+  return `First payment ${priceLabel} around ${when}, after your 14-day cooling-off.`;
+}
 import { CP12_COPY, cp12Date } from "@/lib/cp12";
 
 // "£12 a month" / "£132 a year" — priceLabel is already the full amount of
@@ -34,6 +46,7 @@ function CheckoutForm({
   vatRegistered,
   landlord,
   cp12AvailableFrom,
+  firstPaymentAt,
 }: {
   clientSecret: string;
   publishableKey: string;
@@ -45,6 +58,7 @@ function CheckoutForm({
   vatRegistered?: boolean;
   landlord?: boolean;
   cp12AvailableFrom?: string | null;
+  firstPaymentAt?: string;
 }) {
   const stripePromise = useMemo(() => loadStripe(publishableKey), [publishableKey]);
   const [bankStep, setBankStep] = useState(false);
@@ -111,7 +125,7 @@ function CheckoutForm({
         <div>
           <h2 className="font-sans font-semibold text-lg">Your Direct Debit details</h2>
           <p className="text-sm text-muted">
-            {planName} · {priceFor(priceLabel, billingInterval, vatRegistered)} · with {engineerName}. {FIRST_PAYMENT_LINE}
+            {planName} · {priceFor(priceLabel, billingInterval, vatRegistered)} · with {engineerName}. {firstPaymentLine(priceLabel, firstPaymentAt)}
           </p>
         </div>
         {/* Stripe's form, in place (sort code, account number, mandate). */}
@@ -142,7 +156,7 @@ function CheckoutForm({
       <Card className="bg-flame-tint border-flame-tint text-[12.5px]">
         <b>Protected by the Direct Debit Guarantee.</b>{" "}
         {/* Part 18 pending line, verbatim. */}
-        Your Direct Debit takes 2–3 days to set up. {FIRST_PAYMENT_LINE}
+        Your Direct Debit takes 2–3 days to set up. {firstPaymentLine(priceLabel, firstPaymentAt)}
       </Card>
 
       <Card className="text-[12.5px]">
@@ -215,9 +229,10 @@ function CheckoutForm({
 
       {/* Part 15.2 — one white button; green on this page is prices only. */}
       <button type="submit" disabled={busy || !agreed || (landlord && !propertyLet) || Boolean(coverFrom && !recordDue)} className={btnClass()}>
-        {busy ? "One moment…" : "Continue to Direct Debit"}
+        {busy ? "One moment…" : `Join ${planName}`}
       </button>
-      <p className="text-center text-[11px] text-faint">Cancel anytime.</p>
+      <TextMeLink token={signupToken} />
+      <p className="text-center text-[11px] text-faint">Cancel any time. No contract.</p>
       {/* Build Review 3 §3 — the official "Powered by Stripe" badge, never
           typed text. White artwork: this page sits on dark navy (v2). */}
       <Image
@@ -245,6 +260,7 @@ export function EmbeddedCheckout(props: {
   landlord?: boolean;
   cp12AvailableFrom?: string | null;
   billingInterval?: BillingInterval;
+  firstPaymentAt?: string;
 }) {
   return <CheckoutForm {...props} />;
 }

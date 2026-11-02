@@ -148,14 +148,21 @@ export default function PlansHub() {
             <Card key={t.id}>
               <View className="flex-row items-baseline justify-between">
                 <Text className="font-bold text-[17px] text-ink">{t.name}</Text>
-                <Text className="tabular-nums font-extrabold text-ok">
-                  {formatPounds(t.priceMonthlyPence)}
-                  <Text className="text-xs font-bold text-muted">/month</Text>
-                </Text>
+                {t.priceMonthlyPence > 0 ? (
+                  <Text className="tabular-nums font-extrabold text-ok">
+                    {formatPounds(t.priceMonthlyPence)}
+                    <Text className="text-xs font-bold text-muted">/month</Text>
+                  </Text>
+                ) : (
+                  // 30 Oct §5 — a draft's price starts blank.
+                  <Text className="text-[13px] text-muted">No price yet</Text>
+                )}
               </View>
-              <Text className="mt-0.5 tabular-nums text-[13px] text-muted">
-                You keep £{((t.priceMonthlyPence - fee) / 100).toFixed(2)} a month per customer.
-              </Text>
+              {t.priceMonthlyPence > 0 && (
+                <Text className="mt-0.5 tabular-nums text-[13px] text-muted">
+                  You keep £{((t.priceMonthlyPence - fee) / 100).toFixed(2)} a month per customer.
+                </Text>
+              )}
               <View className="mt-2.5 gap-1">
                 {lines.map((line) => (
                   <View key={line.title} className="flex-row items-start gap-2">

@@ -7,6 +7,10 @@ export type PlanLine = string | { title: string; note?: string | null };
 function pounds(pence: number) {
   return `£${(pence / 100).toFixed(2).replace(/\.00$/, "")}`;
 }
+// 30 Oct update §5 — a draft's price starts blank (0).
+function priceText(pence: number) {
+  return pence > 0 ? `${pounds(pence)} a month` : "Price not set yet";
+}
 
 // The customer's view of a plan, as the 2026 Build Guide targets draw it on
 // the builder's steps 2–4: a white card, navy text, blue ticks, a green
@@ -83,11 +87,11 @@ export function CustomerPlanCard({
           {name}
         </Text>
         <Text className="mt-0.5 text-[16px]" style={{ color: NAVY }}>
-          {pounds(priceMonthlyPence)} a month
+          {priceText(priceMonthlyPence)}
         </Text>
         {cancelChip && (
           <Text className="mt-2.5 self-start overflow-hidden rounded-full bg-[#E3EEFB] px-3 py-1 text-[13px] text-[#1F4E8C]">
-            Cancel anytime
+            Cancel any time. No contract.
           </Text>
         )}
         <View className="mt-2.5 gap-2">
@@ -160,11 +164,11 @@ export function CustomerPlanPeek({
   return (
     <Pressable onPress={onPress} disabled={!onPress} className="rounded-xl bg-white p-3.5">
       <Text className="text-[14px]" style={{ color: NAVY }} numberOfLines={1}>
-        <Text className="font-bold">{tradingName}</Text> · {name} · {pounds(priceMonthlyPence)} a month
+        <Text className="font-bold">{tradingName}</Text> · {name} · {priceText(priceMonthlyPence)}
       </Text>
       {verified !== undefined && <View className="mt-2">{verified ? <VerifiedChip small /> : <BadgeHint />}</View>}
       <Text className="mt-2 self-start overflow-hidden rounded-full bg-[#E3EEFB] px-2.5 py-0.5 text-[12px] text-[#1F4E8C]">
-        Cancel anytime
+        Cancel any time. No contract.
       </Text>
       <View className="mt-2 gap-1">
         {shown.map((t) => (

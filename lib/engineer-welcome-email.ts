@@ -57,7 +57,7 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
   // three Go live steps that count, then the optional Grow steps. A tick
   // only for something actually done.
   const goLive: Item[] = [
-    { done: liveTiers > 0, title: "Build your first plan", hint: `start from Boiler Care at ${examplePounds}` },
+    { done: liveTiers > 0, title: "Build your first plan", hint: "pick what's included and set your own price" },
     { done: Boolean(e.gasSafeVerifiedAt), title: "Gas Safe check", hint: e.gasSafeCardUrl ? "your number and ID photo are in, we're checking them" : "add a photo of your Gas Safe ID card" },
     { done: e.stripeChargesEnabled && e.stripePayoutsEnabled, title: "Get paid", hint: "about 3 minutes with Stripe" },
   ];

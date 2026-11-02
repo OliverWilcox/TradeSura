@@ -5,6 +5,10 @@ import { verifyGasSafe } from "@/lib/gas-safe";
 import { clauseLine, isLandlordPlan } from "@/lib/clauses";
 import { orderBenefits, preselectedTierId, reasonContent, type ReasonContent } from "@/lib/visit-reasons";
 import { VisitReasonIntro } from "@/components/visit-reason-intro";
+import { SignupHeader, TRUST_LINE } from "@/components/signup-header";
+import { FoundingBadge } from "@/components/founding-badge";
+import { serviceOrderForVisit } from "@/lib/yearly-service";
+import { neighbourFreeMonth } from "@/lib/neighbour-referral";
 import { canonicalProfileUrl, profileUrl } from "@/lib/public-url";
 import { tradingNameOf } from "@/lib/engineer";
 import type { PublicRating } from "@/lib/ratings";
@@ -109,6 +113,14 @@ async function visitForOffer(token: string, engineerId: string): Promise<ReasonC
   return reasonContent(session.reason, session.token);
 }
 
+// 30 Oct update §7.7 — "local proof once real": only a real count, and only
+// once there are enough homes for it to mean something.
+const LOCAL_PROOF_MIN = 5;
+async function localProof(engineerId: string, brand: string): Promise<string | null> {
+  const homes = await prisma.plan.count({ where: { engineerId, status: { in: ["ACTIVE", "PAUSED"] } } });
+  return homes >= LOCAL_PROOF_MIN ? `${homes} local homes are on a plan with ${brand}.` : null;
+}
+
 export type ProfileExtras = {
   rating: RatingSummary;
   ratings: PublicRating[];
@@ -127,6 +139,7 @@ export async function EngineerPage({
   preview = false,
   practice = false,
   offer,
+  nref,
 }: {
   data: Loaded;
   slug: string;
@@ -144,6 +157,8 @@ export async function EngineerPage({
   practice?: boolean;
   /** 30 Oct §6 — an at-the-job offer's token: the page is tailored to its visit reason. */
   offer?: string;
+  /** 30 Oct §7.9 — a neighbour's referral link (their plan ref). */
+  nref?: string;
 }) {
   const { engineer, tiers } = data;
   const brand = engineer.tradingName!;
@@ -162,6 +177,8 @@ export async function EngineerPage({
       )
     : undefined;
   const banner = <ModeBanner mode={mode} />;
+  // 30 Oct §7.9 — only a live plan of this engineer's counts as a neighbour's link.
+  const neighbour = mode === "live" && !rejoin ? await neighbourFreeMonth(engineer.id, nref) : false;
 
   // The engineer's Stripe Connect business_profile.url points here from the
   // moment they connect payments — before they've published a plan. A hard
@@ -251,8 +268,8 @@ export async function EngineerPage({
       legalLine={legalLine}
       // Build Guide v2 Part 15.1 — the trust line. Never asserted for an
       // engineer who isn't actually verified.
-      // On the profile the badge sits in the profile header instead, once.
-      sub={<TrustLine verified={Boolean(gasSafe) && !profile} founding={founding && !profile} />}
+      // The badges sit once in the page's header card (profile or §7.1 sign-up header).
+      sub={<TrustLine verified={false} />}
     >
       {banner}
       {jsonLd && (
@@ -289,6 +306,19 @@ export async function EngineerPage({
         </>
       )}
 
+      {/* 30 Oct update §7.1 — the sign-up header (the profile has its own). */}
+      {profile ? (
+        <p className="text-[13px] text-ink px-0.5">{TRUST_LINE}</p>
+      ) : (
+        <SignupHeader
+          brand={brand}
+          firstName={engineer.firstName}
+          photoUrl={engineer.logoUrl}
+          verified={Boolean(gasSafe)}
+          founding={founding ? <FoundingBadge /> : null}
+        />
+      )}
+
       {!profile && (bio || area) && (
         <div className="bg-paper border border-line rounded-xl p-3.5">
           <h1 className="font-sans font-semibold text-sm mb-1">About {brand}</h1>
@@ -316,7 +346,11 @@ export async function EngineerPage({
         initialTierId={tier ?? visitTierId}
         offerToken={visit ? offer : undefined}
         rejoin={rejoin}
-        firstMonthFree={await rejoinFreeMonth(engineer.id, rejoin)}
+        firstMonthFree={(await rejoinFreeMonth(engineer.id, rejoin)) || neighbour}
+        neighbourRef={neighbour ? nref : undefined}
+        normalPrices={{ normalServicePence: engineer.normalServicePence, normalCalloutPence: engineer.normalCalloutPence }}
+        reason={visit ? { serviceOrder: serviceOrderForVisit(visit.reason) } : undefined}
+        localProof={await localProof(engineer.id, brand)}
         mode={mode}
         soldById={demo ? by : undefined}
         channel={
@@ -327,6 +361,8 @@ export async function EngineerPage({
           name: t.name,
           priceMonthlyPence: t.priceMonthlyPence,
           isRecommended: t.isRecommended,
+          codes: t.clauses.map((tc) => tc.clause.code),
+          landlord: isLandlordPlan(t.clauses.map((tc) => tc.clause.code)),
           lines: [
             ...orderBenefits(
               t.clauses

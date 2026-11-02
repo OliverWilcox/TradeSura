@@ -6,6 +6,9 @@ import { EmbeddedCheckout } from "@/components/embedded-checkout";
 import { JOIN_BTN, PlanTierCard } from "@/components/plan-tier-card";
 import { BillingChoice } from "@/components/billing-choice";
 import { chargePence, priceLine, type BillingInterval } from "@/lib/billing-interval";
+import { defaultTierId, hasLandlordChoice, tiersFor } from "@/lib/signup-choice";
+import { valueSum, type NormalPrices } from "@/lib/value-sum";
+import { HomePassportBlock, LandlordToggle, ValueSumLine, WhyYearlyService } from "@/components/signup-extras";
 
 type Tier = {
   id: string;
@@ -13,6 +16,8 @@ type Tier = {
   priceMonthlyPence: number;
   isRecommended: boolean;
   lines: string[];
+  codes: string[];
+  landlord: boolean;
 };
 
 function pounds(pence: number) {
@@ -26,6 +31,7 @@ type Started = {
   landlord?: boolean;
   cp12AvailableFrom?: string | null;
   signupToken: string;
+  firstPaymentAt?: string;
 };
 
 export function SignupTiers({
@@ -35,6 +41,8 @@ export function SignupTiers({
   vatRegistered = false,
   pinnedTierId,
   pinnedGreeting,
+  normalPrices,
+  serviceOrder,
 }: {
   token: string;
   tiers: Tier[];
@@ -45,13 +53,21 @@ export function SignupTiers({
    * first name} suggested {plan name}" pins that plan first. */
   pinnedTierId?: string | null;
   pinnedGreeting?: string | null;
+  /** 30 Oct §7.3 — the installer's own prices, for "Worth over £X a year". */
+  normalPrices?: NormalPrices;
+  /** §7.6 — "Why a yearly service matters", in the visit reason's order. */
+  serviceOrder?: string[] | null;
 }) {
   const tiers = pinnedTierId
     ? [...rawTiers].sort((a, b) => (a.id === pinnedTierId ? -1 : b.id === pinnedTierId ? 1 : 0))
     : rawTiers;
-  const [selectedId, setSelectedId] = useState(
-    pinnedTierId ?? tiers.find((t) => t.isRecommended)?.id ?? tiers[0]?.id,
-  );
+  // §7.4 — "Are you a landlord?" when there are both kinds of plan; the
+  // offered plan decides where it starts.
+  const landlordChoice = hasLandlordChoice(tiers);
+  const startsLandlord = Boolean(tiers.find((t) => t.id === pinnedTierId)?.landlord);
+  const [landlord, setLandlord] = useState(startsLandlord);
+  const shown = tiersFor(tiers, landlord);
+  const [selectedId, setSelectedId] = useState(defaultTierId(tiersFor(tiers, startsLandlord), { initialTierId: pinnedTierId }));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [started, setStarted] = useState<Started | null>(null);
@@ -94,6 +110,7 @@ export function SignupTiers({
           landlord={started.landlord}
           cp12AvailableFrom={started.cp12AvailableFrom}
           signupToken={started.signupToken}
+          firstPaymentAt={started.firstPaymentAt}
           planName={selected.name}
           priceLabel={pounds(chargePence(selected.priceMonthlyPence, billingInterval))}
           billingInterval={billingInterval}
@@ -109,7 +126,18 @@ export function SignupTiers({
       {pinnedGreeting && (
         <p className="text-sm font-semibold text-flame-deep">{pinnedGreeting}</p>
       )}
-      {tiers.map((t) => (
+      {landlordChoice && (
+        <LandlordToggle
+          value={landlord}
+          onChange={(v) => {
+            setLandlord(v);
+            const list = tiersFor(tiers, v);
+            if (!list.some((t) => t.id === selectedId)) setSelectedId(defaultTierId(list));
+          }}
+        />
+      )}
+
+      {shown.map((t) => (
         <button
           key={t.id}
           onClick={() => setSelectedId(t.id)}
@@ -126,6 +154,12 @@ export function SignupTiers({
           />
         </button>
       ))}
+
+      {selected && normalPrices && (
+        <ValueSumLine sum={valueSum(selected.codes, normalPrices, selected.priceMonthlyPence, billingInterval)} />
+      )}
+
+      <WhyYearlyService order={serviceOrder} />
 
       <NotIncluded />
 
@@ -146,9 +180,11 @@ export function SignupTiers({
         <button onClick={choose} disabled={busy} className={JOIN_BTN}>
           {busy
             ? "Opening secure Direct Debit setup…"
-            : `Choose ${selected.name} — ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)} by Direct Debit`}
+            : `Join now · ${selected.name}, ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)}`}
         </button>
       )}
+
+      <HomePassportBlock brand={engineerName} />
     </>
   );
 }

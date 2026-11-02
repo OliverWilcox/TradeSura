@@ -91,7 +91,7 @@ describe("Before you go figures", () => {
   });
 
   it("the warranty line credits the service, not the plan", () => {
-    expect(WARRANTY_LINE).toMatch(/yearly service to keep your warranty valid/);
+    expect(WARRANTY_LINE).toBe("A yearly service keeps your boiler safe, efficient and your warranty valid.");
     expect(WARRANTY_LINE).not.toMatch(/plan|guarantee|cover|protection|insurance/i);
   });
 });
