@@ -12,6 +12,7 @@ import { attachPlanToPassport } from "@/lib/passport";
 import { queueWelcomeTouches } from "@/lib/welcome-touches";
 import { firstCustomerPath, firstMemberYearlyPence } from "@/lib/first-member";
 import { sendFirstCustomerEmail } from "@/lib/account-emails";
+import { cp12Date } from "@/lib/cp12";
 
 // Idempotent: safe to call again if Stripe retries the webhook, or if the
 // confirmed-page poll and the webhook both land.
@@ -129,6 +130,19 @@ export async function activatePlan(
       plan.tier?.name ?? "your plan",
       firstMemberYearlyPence(plan.priceMonthlyPence ?? 0, plan.billingInterval),
     ).catch((err) => console.error("[activate] first customer email failed:", err));
+  }
+  // Review 4 — a landlord whose gas safety record runs out before the plan's
+  // CP12 is available asked for a one-off one; the engineer books it.
+  if (plan.oneOffCp12RequestedAt && plan.gasSafetyRecordDueAt) {
+    const who = `${plan.customer.firstName} ${plan.customer.lastName}`;
+    const due = cp12Date(plan.gasSafetyRecordDueAt);
+    await notifyEngineer(
+      plan.engineerId,
+      `TradeSura: ${who} asked for a one-off gas safety record before ${due}, at your normal price. Their plan's own record isn't available until after their third payment.`,
+    ).catch((err) => console.error("[activate] one-off CP12 text failed:", err));
+    await sendPushNotification(plan.engineerId, "One-off CP12 requested", `${who}'s gas safety record is due ${due}. Book it in at your normal price.`, {
+      url: `/customer/${plan.customerId}`,
+    });
   }
   // Section 8 — the staff engineer who signed them up hears too, with no £.
   if (plan.soldById) {

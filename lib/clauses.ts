@@ -394,8 +394,12 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     // month in the guide price (was £3, which put Landlord Care at £14 vs
     // Boiler Care's £13).
     upliftPence: 500,
+    // Review 4 (Matt's decision) — follows the 3rd-payment rule like the
+    // annual service; sign-up asks when the current record is due (lib/cp12.ts).
+    note: "available after your third payment",
+    engineerNote: "available after the customer's 3rd payment",
     bodyText:
-      "One landlord gas safety record (CP12) per property in each 12-month plan period.",
+      "One landlord gas safety record (CP12) per property in each 12-month plan period. Your first gas safety record under the plan is available once your third monthly payment has been collected.",
   },
   {
     code: "SMOKE_CO_CHECKS",

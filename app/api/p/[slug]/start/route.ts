@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { rejoinFreeMonth } from "@/lib/rejoin-offer";
 import { isLandlordPlan } from "@/lib/clauses";
+import { cp12AvailableFrom, tierHasCp12 } from "@/lib/cp12";
 import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { sendSms } from "@/lib/sms";
@@ -197,6 +198,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       signupToken: plan.signupToken,
       // R9 — a Landlord plan asks the customer to confirm the property is let.
       landlord: isLandlordPlan(tier.clauses.map((tc) => tc.clause.code)),
+      // Review 4 — a plan with a CP12 asks when their current record is due.
+      cp12AvailableFrom: tierHasCp12(tier.clauses.map((tc) => tc.clause.code))
+        ? cp12AvailableFrom(new Date()).toISOString()
+        : null,
     });
   } catch (err) {
     console.error("[p/start] embedded subscription failed:", err);

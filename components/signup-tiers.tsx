@@ -24,6 +24,7 @@ type Started = {
   publishableKey: string;
   confirmedUrl: string;
   landlord?: boolean;
+  cp12AvailableFrom?: string | null;
   signupToken: string;
 };
 
@@ -91,6 +92,7 @@ export function SignupTiers({
           publishableKey={started.publishableKey}
           confirmedUrl={started.confirmedUrl}
           landlord={started.landlord}
+          cp12AvailableFrom={started.cp12AvailableFrom}
           signupToken={started.signupToken}
           planName={selected.name}
           priceLabel={pounds(chargePence(selected.priceMonthlyPence, billingInterval))}

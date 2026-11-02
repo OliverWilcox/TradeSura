@@ -330,6 +330,11 @@ model Plan {
   serviceStartsAt         DateTime?
   paymentsCleared         Int             @default(0) // the annual service unlocks at 3
   // Section 2 — cancellation at the end of the paid month; pause = no
+  // Review 4 — landlord plans with a CP12: when the customer's current gas
+  // safety record is due, and whether they asked for a one-off CP12 because
+  // it falls before the plan's own record is available (lib/cp12.ts).
+  gasSafetyRecordDueAt    DateTime?
+  oneOffCp12RequestedAt   DateTime?
   // collections, no benefits, restarts automatically.
   cancelRequestedAt       DateTime?
   cancelEffectiveAt       DateTime?

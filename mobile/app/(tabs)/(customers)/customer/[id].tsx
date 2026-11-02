@@ -38,6 +38,8 @@ type Detail = {
     activatedAt: string | null;
     paymentFailedAt?: string | null;
     paymentEndsAt?: string | null;
+    gasSafetyRecordDueAt?: string | null;
+    oneOffCp12Requested?: boolean;
   } | null;
   canTextManageLink: boolean;
   viewerIsStaff?: boolean;
@@ -374,6 +376,18 @@ export default function CustomerDetail() {
                 </View>
               ))}
             </View>
+            {/* Review 4 — CP12 plans: when their current record is due. */}
+            {c.plan.gasSafetyRecordDueAt && (
+              <View className="mt-3 border-t border-line pt-2">
+                <RowLine left="Gas safety record due" right={d(c.plan.gasSafetyRecordDueAt)} />
+                {c.plan.oneOffCp12Requested && (
+                  <Text className="mt-1 font-sans text-xs text-warn">
+                    One-off CP12 requested before then, at your normal price. Their plan&apos;s record is available after
+                    their 3rd payment.
+                  </Text>
+                )}
+              </View>
+            )}
           </Card>
         ) : (
           <View className="gap-1.5">

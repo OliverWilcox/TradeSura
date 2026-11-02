@@ -140,6 +140,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           paymentEndsAt: active.paymentFailedAt
             ? new Date(active.paymentFailedAt.getTime() + RESCUE_GRACE_DAYS * 86_400_000).toISOString()
             : null,
+          // Review 4 — landlord CP12 plans: the current record's due date,
+          // and whether they asked for a one-off CP12 before the plan's own.
+          gasSafetyRecordDueAt: active.gasSafetyRecordDueAt?.toISOString() ?? null,
+          oneOffCp12Requested: Boolean(active.oneOffCp12RequestedAt),
         }
       : null,
     canTextManageLink: Boolean(mostRecentPlan),

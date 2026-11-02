@@ -8,6 +8,7 @@ import { AddressLookup, type AddressValue } from "@/components/address-lookup";
 import { Card, btnClass } from "@/components/ui";
 import { perMonth } from "@/lib/engineer";
 import { FIRST_PAYMENT_LINE, type BillingInterval } from "@/lib/billing-interval";
+import { CP12_COPY, cp12Date } from "@/lib/cp12";
 
 // "£12 a month" / "£132 a year" — priceLabel is already the full amount of
 // one collection for the chosen interval.
@@ -32,6 +33,7 @@ function CheckoutForm({
   engineerName,
   vatRegistered,
   landlord,
+  cp12AvailableFrom,
 }: {
   clientSecret: string;
   publishableKey: string;
@@ -42,12 +44,20 @@ function CheckoutForm({
   engineerName: string;
   vatRegistered?: boolean;
   landlord?: boolean;
+  cp12AvailableFrom?: string | null;
 }) {
   const stripePromise = useMemo(() => loadStripe(publishableKey), [publishableKey]);
   const [bankStep, setBankStep] = useState(false);
   const [address, setAddress] = useState<AddressValue>({ line1: "", town: "", postcode: "" });
   const [agreed, setAgreed] = useState(false);
   const [propertyLet, setPropertyLet] = useState(false);
+  // Review 4 — CP12 plans: when the current gas safety record is due, and a
+  // one-off CP12 if that's before the plan's own record is available.
+  const [recordDue, setRecordDue] = useState("");
+  const [oneOffCp12, setOneOffCp12] = useState(false);
+  const coverFrom = cp12AvailableFrom ? new Date(cp12AvailableFrom) : null;
+  const dueDate = recordDue ? new Date(`${recordDue}T12:00:00Z`) : null;
+  const dueBeforeCover = Boolean(coverFrom && dueDate && !Number.isNaN(dueDate.getTime()) && dueDate < coverFrom);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,7 +88,11 @@ function CheckoutForm({
     const agreeRes = await fetch(`/api/signup/${signupToken}/agree-terms`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ propertyLet: landlord ? propertyLet : undefined }),
+      body: JSON.stringify({
+        propertyLet: landlord ? propertyLet : undefined,
+        gasSafetyRecordDue: coverFrom ? recordDue : undefined,
+        oneOffCp12: dueBeforeCover ? oneOffCp12 : undefined,
+      }),
     });
     if (!agreeRes.ok) {
       const data = await agreeRes.json().catch(() => ({}));
@@ -157,6 +171,36 @@ function CheckoutForm({
         </label>
       )}
 
+      {coverFrom && (
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold" htmlFor="record-due">
+            {CP12_COPY.question}
+          </label>
+          <input
+            id="record-due"
+            type="date"
+            value={recordDue}
+            onChange={(e) => setRecordDue(e.target.value)}
+            className="min-h-[48px] rounded-[10px] border border-line bg-paper px-3.5 text-[16px] text-ink"
+          />
+          <p className="text-[11px] text-faint">{CP12_COPY.hint}</p>
+          {dueBeforeCover && dueDate && (
+            <Card className="border-warn bg-warn-tint text-[12.5px]">
+              <p className="text-warn">{CP12_COPY.warning(cp12Date(dueDate), cp12Date(coverFrom))}</p>
+              <label className="mt-2 flex gap-2 items-start text-ink">
+                <input
+                  type="checkbox"
+                  checked={oneOffCp12}
+                  onChange={(e) => setOneOffCp12(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-[#5FA3F0]"
+                />
+                {CP12_COPY.offer(engineerName, cp12Date(dueDate))}
+              </label>
+            </Card>
+          )}
+        </div>
+      )}
+
       <label className="flex gap-2 text-xs text-muted items-start">
         <input
           type="checkbox"
@@ -170,7 +214,7 @@ function CheckoutForm({
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {/* Part 15.2 — one white button; green on this page is prices only. */}
-      <button type="submit" disabled={busy || !agreed || (landlord && !propertyLet)} className={btnClass()}>
+      <button type="submit" disabled={busy || !agreed || (landlord && !propertyLet) || Boolean(coverFrom && !recordDue)} className={btnClass()}>
         {busy ? "One moment…" : "Continue to Direct Debit"}
       </button>
       <p className="text-center text-[11px] text-faint">Cancel anytime.</p>
@@ -199,6 +243,7 @@ export function EmbeddedCheckout(props: {
   signupToken: string;
   vatRegistered?: boolean;
   landlord?: boolean;
+  cp12AvailableFrom?: string | null;
   billingInterval?: BillingInterval;
 }) {
   return <CheckoutForm {...props} />;

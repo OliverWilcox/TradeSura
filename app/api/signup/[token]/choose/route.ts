@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { isLandlordPlan } from "@/lib/clauses";
+import { cp12AvailableFrom, tierHasCp12 } from "@/lib/cp12";
 import { brandName } from "@/lib/engineer";
 import { track } from "@/lib/track";
 import { createSignupCheckout, ensureRecipientConfiguration, isMissingDestination, publishableKey } from "@/lib/stripe";
@@ -105,6 +106,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       signupToken: token,
       // R9 — a Landlord plan asks the customer to confirm the property is let.
       landlord: isLandlordPlan(tier.clauses.map((tc) => tc.clause.code)),
+      // Review 4 — a plan with a CP12 asks when their current record is due.
+      cp12AvailableFrom: tierHasCp12(tier.clauses.map((tc) => tc.clause.code))
+        ? cp12AvailableFrom(new Date()).toISOString()
+        : null,
     });
   } catch (err) {
     console.error("[signup] embedded subscription failed:", err);
