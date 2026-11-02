@@ -331,8 +331,11 @@ const pillStyles = {
 
 export function Pill({ tone, children }: { tone: keyof typeof pillStyles; children: ReactNode }) {
   return (
+    // shrink-0 + one line: in a tight row the chip was squeezed until short
+    // labels broke mid-word ("AU / TO", "DON / E" on Reminders).
     <Text
-      className={`self-start overflow-hidden rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-[0.04em] ${pillStyles[tone]}`}
+      numberOfLines={1}
+      className={`shrink-0 self-start overflow-hidden rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-[0.04em] ${pillStyles[tone]}`}
     >
       {children}
     </Text>
