@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({ prisma: { signInCode: mocks, engineer: { findUnique: mocks.engineerFindUnique } } }));
 vi.mock("@/lib/email", () => ({ emailConfigured: mocks.emailConfigured, sendEmail: mocks.sendEmail }));
 vi.mock("@/lib/auth", () => ({ signToken: mocks.signToken, verifyToken: mocks.verifyToken }));
-import { hashCode, issueSignInCode, signInCodesEnabled } from "@/lib/sign-in-code";
+import { hashCode, issueSignInCode, reviewCodeFor, signInCodesEnabled } from "@/lib/sign-in-code";
 import { POST } from "@/app/api/auth/verify/route";
 
 function verify(code: string) {
@@ -117,5 +117,48 @@ describe("production authentication safeguards", () => {
     expect(attempts).toBe(5);
     expect(responses.some(r => r.status === 429)).toBe(true);
     expect(mocks.update.mock.calls.filter(([arg]) => arg.data.attempts).every(([arg]) => arg.data.attempts.increment === 1)).toBe(true);
+  });
+});
+
+// 30 Oct update 2.3 — Apple's reviewer signs in with a fixed code.
+describe("App Store review account", () => {
+  const review = { id: "review-engineer", email: "Review@TradeSura.test" };
+
+  it("stores the fixed code for the review email only, and sends no email", async () => {
+    vi.stubEnv("APP_REVIEW_EMAIL", "review@tradesura.test");
+    vi.stubEnv("APP_REVIEW_CODE", "4826");
+    const result = await issueSignInCode(review);
+    expect(result).toMatchObject({ ok: true });
+    expect(mocks.create.mock.calls[0][0].data.codeHash).toBe(hashCode("4826"));
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("4826");
+  });
+
+  it("gives every other account a random emailed code", async () => {
+    vi.stubEnv("APP_REVIEW_EMAIL", "review@tradesura.test");
+    vi.stubEnv("APP_REVIEW_CODE", "4826");
+    for (let i = 0; i < 5; i++) await issueSignInCode({ id: `e${i}`, email: "someone@example.com" });
+    expect(mocks.sendEmail).toHaveBeenCalledTimes(5);
+    expect(reviewCodeFor("someone@example.com")).toBeNull();
+  });
+
+  it("is off when either variable is unset or the code isn't 4 digits", () => {
+    vi.stubEnv("APP_REVIEW_EMAIL", "review@tradesura.test");
+    expect(reviewCodeFor(review.email)).toBeNull();
+    vi.stubEnv("APP_REVIEW_CODE", "48261234");
+    expect(reviewCodeFor(review.email)).toBeNull();
+    vi.stubEnv("APP_REVIEW_CODE", "4826");
+    expect(reviewCodeFor(review.email)).toBe("4826");
+    vi.stubEnv("APP_REVIEW_EMAIL", "");
+    expect(reviewCodeFor(review.email)).toBeNull();
+  });
+
+  it("still locks the review account after wrong tries", async () => {
+    vi.stubEnv("APP_REVIEW_EMAIL", "review@tradesura.test");
+    vi.stubEnv("APP_REVIEW_CODE", "4826");
+    mocks.findFirst.mockResolvedValueOnce({ id: "locked", lockedUntil: new Date(Date.now() + 60_000) });
+    const result = await issueSignInCode(review);
+    expect(result).toMatchObject({ ok: false, status: 429 });
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 });

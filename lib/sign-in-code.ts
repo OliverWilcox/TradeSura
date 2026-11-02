@@ -47,6 +47,19 @@ export async function isLocked(engineerId: string, now = new Date()): Promise<bo
   );
 }
 
+// App Store review (30 Oct update 2.3): Apple's reviewer can't receive our
+// emails, so one named account signs in with a fixed code instead. Both env
+// vars must be set, the code must be the app's 4 digits (the code box takes
+// 4 and the build under review can't change), and only that exact email gets
+// it. Everything else about the code is unchanged: same row, same expiry,
+// same wrong-try lockout. Unset either var to switch it off after approval.
+export function reviewCodeFor(email: string): string | null {
+  const reviewEmail = process.env.APP_REVIEW_EMAIL?.trim().toLowerCase();
+  const code = process.env.APP_REVIEW_CODE?.trim();
+  if (!reviewEmail || !code || !/^\d{4}$/.test(code)) return null;
+  return email.trim().toLowerCase() === reviewEmail ? code : null;
+}
+
 type Issued =
   | { ok: true; requestToken: string; devCode?: string }
   | { ok: false; status: number; error: string };
@@ -71,7 +84,8 @@ export async function issueSignInCode(engineer: {
     return { ok: false, status: 429, error: "We've just sent a code — you can ask for another after a minute." };
   }
 
-  const code = String(randomInt(1000, 10000));
+  const reviewCode = reviewCodeFor(engineer.email);
+  const code = reviewCode ?? String(randomInt(1000, 10000));
   // The email states the same expiry the row holds — one clock, no drift.
   const expiresAt = new Date(now.getTime() + CODE_TTL_MS);
   await prisma.signInCode.updateMany({
@@ -88,6 +102,9 @@ export async function issueSignInCode(engineer: {
       expiresAt,
     },
   });
+
+  // The review account's address isn't a real inbox: nothing to send.
+  if (reviewCode) return { ok: true, requestToken: await signToken({ signInCodeId: row.id }, "10m") };
 
   try {
     // 2026 Build Guide code-email mock-up.
