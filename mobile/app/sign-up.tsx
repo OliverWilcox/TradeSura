@@ -429,6 +429,15 @@ export default function SignUp() {
   const [error, setError] = useState<string | null>(null);
   const [duplicateGasSafe, setDuplicateGasSafe] = useState(false);
 
+  // 30 Oct update 3.9 — this firm is already on TradeSura (its letter code
+  // was claimed, or its company number is on an account): the second person
+  // joins its team as staff, not as a second account or Founding spot.
+  const [firm, setFirm] = useState<{ businessName: string; ownerFirstName: string | null } | null>(null);
+  const [firmDismissed, setFirmDismissed] = useState(false);
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [joinSent, setJoinSent] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+
   // Restore saved progress once, before anything is saved over it.
   useEffect(() => {
     let cancelled = false;
@@ -623,6 +632,53 @@ export default function SignUp() {
       clearTimeout(t);
     };
   }, [companyQuery, businessType, company, phoneToken]);
+
+  const firmCompanyNumber =
+    businessType === "ltd" ? normaliseCompanyNumber(company?.number ?? companyNumber) : "";
+  useEffect(() => {
+    if (step !== 3 || !phoneToken) return;
+    const number = /^[A-Z0-9]{8}$/.test(firmCompanyNumber) ? firmCompanyNumber : undefined;
+    if (!claimCodeParam && !number) return;
+    let cancelled = false;
+    api<{ firm: { businessName: string; ownerFirstName: string | null } | null }>("/api/onboarding/firm", {
+      method: "POST",
+      body: JSON.stringify({ phoneToken, claimCode: claimCodeParam || undefined, companyNumber: number }),
+    })
+      .then((r) => {
+        if (!cancelled) setFirm(r.firm);
+      })
+      .catch(() => {
+        // Not blocking — they can still create their account.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, phoneToken, claimCodeParam, firmCompanyNumber]);
+
+  async function askToJoin() {
+    setJoinBusy(true);
+    setJoinError(null);
+    try {
+      await api("/api/onboarding/join-team", {
+        method: "POST",
+        body: JSON.stringify({
+          phoneToken,
+          emailToken,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          gasSafeNo: gasSafeNo.replace(/\s/g, "") || undefined,
+          claimCode: claimCodeParam || undefined,
+          companyNumber: /^[A-Z0-9]{8}$/.test(firmCompanyNumber) ? firmCompanyNumber : undefined,
+        }),
+      });
+      await clearSignupDraft();
+      setJoinSent(true);
+    } catch (e) {
+      setJoinError(e instanceof ApiError ? e.message : "We couldn't send that — check your signal and try again.");
+    } finally {
+      setJoinBusy(false);
+    }
+  }
 
   function fieldRef(key: FieldKey) {
     return (v: View | null) => {
@@ -1533,7 +1589,18 @@ export default function SignUp() {
                 </>
               )}
 
-              {step === 3 && (
+              {step === 3 && joinSent && firm && (
+                <>
+                  <Text className="text-[26px] font-extrabold tracking-wide text-white">Request sent</Text>
+                  <Text className="mt-2 text-[15px] leading-[21px] text-white/85">
+                    We&apos;ve asked {firm.ownerFirstName ?? "the owner"} to add you to {firm.businessName}&apos;s team.
+                    You&apos;ll get an email with how to sign in once they do.
+                  </Text>
+                  <PrimaryButton label="Done" onPress={() => router.replace("/welcome")} />
+                </>
+              )}
+
+              {step === 3 && !joinSent && (
                 <>
                   <Text
                     className="text-[26px] font-extrabold uppercase tracking-wide text-white"
@@ -1546,6 +1613,27 @@ export default function SignUp() {
                   <Text className="mb-3 mt-1 text-[14px] text-white/85">
                     This is the name your customers see on their plan.
                   </Text>
+
+                  {firm && !firmDismissed && (
+                    <View className="mb-3 rounded-xl border border-brand-blue/50 bg-brand-blue/15 px-4 py-3.5">
+                      <Text className="text-[15px] font-semibold text-white">
+                        {firm.businessName} is already on TradeSura
+                      </Text>
+                      <Text className="mt-1 text-[13.5px] leading-[19px] text-white/85">
+                        Join their team instead: {firm.ownerFirstName ?? "the owner"} adds you as an engineer, and
+                        you offer plans under {firm.businessName}. Money and settings stay with them.
+                      </Text>
+                      <PrimaryButton
+                        label={`Ask ${firm.ownerFirstName ?? "them"} to add me`}
+                        onPress={askToJoin}
+                        busy={joinBusy}
+                      />
+                      {joinError && <Text className="mt-2 text-[13px] text-warn">{joinError}</Text>}
+                      <Pressable onPress={() => setFirmDismissed(true)} className="mt-2 items-center py-2">
+                        <Text className="text-[13.5px] text-white/70">It&apos;s a different business — carry on</Text>
+                      </Pressable>
+                    </View>
+                  )}
 
                   <View className="rounded-xl bg-white/[0.04] px-3 pb-3.5 pt-0.5">
                     <Text className={labelCls}>Business type</Text>

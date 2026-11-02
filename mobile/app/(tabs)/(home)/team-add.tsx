@@ -1,6 +1,6 @@
-import { useState, type ComponentProps } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
 import { View, Text, TextInput, ScrollView } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { AppHeader, Card, Micro, Button } from "@/components/ui";
@@ -29,6 +29,31 @@ export default function TeamAdd() {
   const [errors, setErrors] = useState<Partial<Record<Field, string | null>>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // 30 Oct update 3.9 — opened from a "wants to join your team" push: fill
+  // in what they gave at sign-up. The owner still adds their Gas Safe card.
+  const { request } = useLocalSearchParams<{ request?: string }>();
+  useEffect(() => {
+    if (!request) return;
+    let cancelled = false;
+    api<{ firstName: string; lastName: string; email: string; phone: string; gasSafeNo?: string }>(
+      `/api/team/requests/${encodeURIComponent(request)}`,
+    )
+      .then((r) => {
+        if (cancelled) return;
+        setFirstName((p) => p || r.firstName);
+        setLastName((p) => p || r.lastName);
+        setEmail((p) => p || r.email);
+        setPhone((p) => p || r.phone.replace(/^\+44/, "0"));
+        if (r.gasSafeNo) setGasSafeNo((p) => p || r.gasSafeNo!);
+      })
+      .catch(() => {
+        // An old or someone else's request just leaves the form blank.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [request]);
 
   async function save() {
     // The shared validators speak to the person signing up ("your");
