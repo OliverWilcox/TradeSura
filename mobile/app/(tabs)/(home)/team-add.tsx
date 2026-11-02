@@ -102,9 +102,10 @@ export default function TeamAdd() {
           {field("Email — they sign in with this", "email", email, setEmail, {
             keyboardType: "email-address",
             autoCapitalize: "none",
+            autoCorrect: false,
             autoComplete: "off",
           })}
-          {field("Mobile (optional)", "phone", phone, setPhone, { keyboardType: "phone-pad" })}
+          {field("Mobile (optional)", "phone", phone, setPhone, { keyboardType: "phone-pad", autoComplete: "off" })}
           {field("Their Gas Safe number", "gasSafeNo", gasSafeNo, setGasSafeNo, { keyboardType: "number-pad" })}
         </Card>
 
