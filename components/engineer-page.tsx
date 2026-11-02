@@ -20,7 +20,8 @@ import {
   type RatingSummary,
 } from "@/components/engineer-profile";
 
-// The engineer's public page — tradesura.com/{slug}. One page is both the
+// The engineer's public page — tradesura.com/{slug} (Review 4: the one
+// address; each plan also at /{slug}/{plan}). One page is both the
 // plan link (customers pick a plan and join) and, once published from the
 // app's "Get found on Google" step, an indexable profile: about, areas
 // covered, Gas Safe status, and LocalBusiness structured data.
@@ -30,7 +31,8 @@ export async function loadEngineerPage(slug: string) {
   if (!engineer || !engineer.tradingName) return null;
   const tiers = await prisma.planTier.findMany({
     where: { engineerId: engineer.id, status: "LIVE" },
-    orderBy: { sortOrder: "asc" },
+    // Same order as lib/plan-slugs.ts reads, so plan links are stable.
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
     include: { clauses: { include: { clause: true } } },
   });
   return { engineer, tiers };
@@ -93,8 +95,9 @@ const FAQS: { q: string; a: string }[] = [
   },
 ];
 
-// Section 6 — what the Google-facing profile at
-// /gas-engineers/{town}/{slug} adds on top of the plan page.
+// Section 6 — what the Google-facing profile adds on top of the plan page.
+// Since Review 4 it lives at the one address, tradesura.com/{slug}, once
+// the engineer publishes it.
 export type ProfileExtras = {
   rating: RatingSummary;
   ratings: PublicRating[];
@@ -223,7 +226,8 @@ export async function EngineerPage({
       legalLine={legalLine}
       // Build Guide v2 Part 15.1 — the trust line. Never asserted for an
       // engineer who isn't actually verified.
-      sub={<TrustLine verified={Boolean(gasSafe)} />}
+      // On the profile the badge sits in the profile header instead, once.
+      sub={<TrustLine verified={Boolean(gasSafe) && !profile} />}
     >
       {banner}
       {jsonLd && (

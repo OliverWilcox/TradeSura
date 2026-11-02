@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { PublicRating } from "@/lib/ratings";
+import { VerifiedMemberBadge } from "@/components/verified-badge";
 
 // Section 6 — the pieces the Google-facing profile adds on top of the plan
 // page (components/engineer-page.tsx), and that the town page reuses.
@@ -67,12 +68,15 @@ export function ProfileHeader({
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <h1 className="font-sans font-bold text-lg leading-tight">{brand}</h1>
-        <p className="text-[12.5px] text-muted mt-0.5">
-          Gas Engineer{town ? ` in ${town}` : ""}
-          {verified && <span className="font-semibold text-ink"> · GAS SAFE VERIFIED</span>}
-        </p>
+        {/* Review 4 — the heading Google reads: "Gas engineer in Holmfirth ·
+            302 MD LTD". The business name stays the big line. */}
+        <h1 className="font-sans font-bold text-lg leading-tight">
+          <span className="block text-[12.5px] font-medium text-muted">Gas engineer{town ? ` in ${town}` : ""}</span>
+          <span className="sr-only"> · </span>
+          {brand}
+        </h1>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          {verified && <VerifiedMemberBadge />}
           {partner && <PartnerBadge />}
           <RatingLine rating={rating} />
         </div>
