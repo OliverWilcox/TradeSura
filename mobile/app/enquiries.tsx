@@ -3,7 +3,7 @@ import { View, Text, ScrollView, RefreshControl, Pressable, Linking } from "reac
 import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
-import { AppHeader, Card, Pill, ScreenTitle } from "@/components/ui";
+import { AppHeader, Button, Card, Micro, Pill, ScreenTitle } from "@/components/ui";
 import { Icon } from "@/components/icon";
 import { Skeleton, ListRowBone } from "@/components/skeleton";
 
@@ -18,6 +18,9 @@ type Enquiry = {
   createdAt: string;
 };
 type Data = { thisMonth: { total: number; calls: number; messages: number }; items: Enquiry[] };
+// 30 Oct update §10 — homeowner requests on the town page, not addressed to
+// anyone. Founding Members see them first (foundingOnly), then everyone.
+type TownLead = { id: string; teaser: string; message: string; createdAt: string; foundingOnly: boolean; foundingUntil: string };
 
 const SOURCE: Record<string, string> = { profile: "Profile", town: "Town page", widget: "Website" };
 
@@ -31,6 +34,9 @@ export default function Enquiries() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [leads, setLeads] = useState<TownLead[]>([]);
+  const [claiming, setClaiming] = useState<string | null>(null);
+  const [leadError, setLeadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -39,7 +45,25 @@ export default function Enquiries() {
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't load enquiries.");
     }
+    // Separate so an older backend without the route doesn't blank the page.
+    api<{ leads: TownLead[] }>("/api/town-leads/mine")
+      .then((r) => setLeads(r.leads))
+      .catch(() => {});
   }, []);
+
+  async function claim(id: string) {
+    setClaiming(id);
+    setLeadError(null);
+    try {
+      await api(`/api/town-leads/${id}/claim`, { method: "POST" });
+      await load();
+    } catch (e) {
+      setLeadError(e instanceof ApiError ? e.message : "Couldn't claim that — try again.");
+      await load();
+    } finally {
+      setClaiming(null);
+    }
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -84,7 +108,37 @@ export default function Enquiries() {
           </Skeleton>
         )}
 
-        {data && messages.length === 0 && calls.length === 0 && (
+        {leads.length > 0 && (
+          <Card>
+            <Micro>Requests in your town</Micro>
+            <Text className="mt-1 text-[13px] text-muted">
+              Homeowners who asked for a local engineer. The first to take one gets their details.
+            </Text>
+            {leadError && <Text className="mt-2 text-xs text-danger">{leadError}</Text>}
+            {leads.map((l) => (
+              <View key={l.id} className="mt-3 border-t border-line-soft pt-3">
+                <View className="flex-row items-start justify-between gap-2">
+                  <View className="shrink">
+                    <Text className="text-[15px] font-bold text-ink">{l.teaser}</Text>
+                    <Text className="text-[12px] text-muted">{when(l.createdAt)}</Text>
+                  </View>
+                  {l.foundingOnly && <Pill tone="info">FOUNDING FIRST</Pill>}
+                </View>
+                <Text className="mt-2 text-[14px] leading-[20px] text-ink">{l.message}</Text>
+                {l.foundingOnly && (
+                  <Text className="mt-1 text-[12px] text-muted">
+                    Only Founding Members can see this until {when(l.foundingUntil)}.
+                  </Text>
+                )}
+                <Button className="mt-3" onPress={() => claim(l.id)} disabled={claiming !== null}>
+                  {claiming === l.id ? "Taking it…" : "Take this request"}
+                </Button>
+              </View>
+            ))}
+          </Card>
+        )}
+
+        {data && leads.length === 0 && messages.length === 0 && calls.length === 0 && (
           <Card>
             <Text className="text-[14px] text-muted">
               No enquiries yet. Publish your profile and switch on Call and Message to start getting them.
