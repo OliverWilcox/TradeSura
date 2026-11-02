@@ -41,8 +41,34 @@ import {
 } from "@/lib/validate";
 
 type ClaimResolved =
-  | { valid: true; personalised: boolean; firstName?: string; businessName?: string; letterBatch: string; variantCell: string }
+  | {
+      valid: true;
+      personalised: boolean;
+      firstName?: string;
+      businessName?: string;
+      letterBatch: string;
+      variantCell: string;
+      // What they confirmed on the claim page (tradesura.com/c/CODE).
+      claimed?: {
+        tradingAddress: string | null;
+        tradingTown: string | null;
+        correspondenceAddress: string | null;
+        mobile: string | null;
+      };
+    }
   | { valid: false };
+
+// "line1\ntown\npostcode" (how addresses are stored) → the address fields.
+function splitAddress(text: string | null | undefined): Office | null {
+  const [line1 = "", town = "", postcode = ""] = (text ?? "").split("\n").map((l) => l.trim());
+  return line1 && postcode ? { line1, town, postcode } : null;
+}
+
+// "+447700900123" → "07700 900123", how the mobile field shows it.
+function nationalMobile(e164: string | null | undefined): string {
+  const d = (e164 ?? "").replace(/^\+44/, "0").replace(/\D/g, "");
+  return d.length === 11 ? `${d.slice(0, 5)} ${d.slice(5)}` : d;
+}
 
 type BusinessType = "sole_trader" | "ltd" | "partnership";
 type HeardVia = "letter" | "email" | "engineer" | "online" | "other";
@@ -413,7 +439,8 @@ export default function SignUp() {
         setFirstName((p) => p || d.firstName);
         // Apple's pre-fill (from sign-in) wins over an older saved draft.
         setLastName((p) => p || d.lastName);
-        setPhone(d.phone);
+        // Never blank out what a claim link has just filled in.
+        setPhone((p) => d.phone || p);
         setEmail((p) => p || d.email);
         if (!linkSource) setHeardVia(d.heardVia);
         if (!refParam && d.referralCode) {
@@ -428,10 +455,10 @@ export default function SignUp() {
         setCompanyNumber(d.companyNumber);
         setCompany(d.company);
         setSoleOwner(d.soleOwner ?? null);
-        setPostcode(d.postcode);
-        setAddressLine1(d.addressLine1 ?? "");
-        setTown(d.town ?? "");
-        setPostElsewhere(Boolean(d.postElsewhere));
+        setPostcode((p) => d.postcode || p);
+        setAddressLine1((p) => d.addressLine1 || p);
+        setTown((p) => d.town || p);
+        if (d.postElsewhere) setPostElsewhere(true);
         if (d.postAddress) setPostAddress(d.postAddress);
         setMarketingConsent(d.marketingConsent);
         if (tokenFresh) {
@@ -524,9 +551,22 @@ export default function SignUp() {
         );
         if (cancelled) return;
         setClaim(r);
-        if (r.valid && r.personalised) {
-          if (r.firstName) setFirstName((prev) => prev || r.firstName!);
-          if (r.businessName) setTradingName((prev) => prev || r.businessName!);
+        // 30 Oct update 3.3 — only what they confirmed on the claim page is
+        // filled in, never our letter list (no name or business prefill).
+        const c = r.valid ? r.claimed : undefined;
+        if (c) {
+          if (c.mobile) setPhone((prev) => prev || nationalMobile(c.mobile));
+          const trading = splitAddress(c.tradingAddress);
+          if (trading) {
+            setAddressLine1((prev) => prev || trading.line1);
+            setTown((prev) => prev || trading.town);
+            setPostcode((prev) => prev || trading.postcode);
+          }
+          const post = splitAddress(c.correspondenceAddress);
+          if (post) {
+            setPostElsewhere(true);
+            setPostAddress((prev) => (prev.line1 ? prev : post));
+          }
         }
       } catch {
         /* not a dead end — fall through to the normal wizard */

@@ -7,6 +7,8 @@ import {
   AccessibilityInfo,
   AppState,
   ScrollView,
+  TextInput,
+  ActivityIndicator,
 } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -18,6 +20,7 @@ import { AuthBackdrop } from "@/components/auth-backdrop";
 import { Icon } from "@/components/icon";
 import { PoweredByStripe } from "@/components/stripe-badge";
 import { EXAMPLE_CUSTOMERS, formatPounds, yearlyPence } from "@/lib/earnings";
+import { findClaimCode, pasteClaimCode } from "@/lib/clipboard";
 
 type ClaimResolved =
   | { valid: true; personalised: boolean; firstName?: string; businessName?: string }
@@ -55,6 +58,11 @@ export default function Welcome() {
 
   const [claim, setClaim] = useState<ClaimResolved | null>(null);
   const [reduceMotion, setReduceMotion] = useState(false);
+  // 30 Oct update 3.2 — the iPhone backup when the store doesn't carry the
+  // code through: paste it from the text, or type it from the letter.
+  const [codeInput, setCodeInput] = useState("");
+  const [codeBusy, setCodeBusy] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
   const dismissedFired = useRef(false);
   const acted = useRef(false);
 
@@ -136,8 +144,7 @@ export default function Welcome() {
 
   // ---- content ---------------------------------------------------------
   const personalisedName =
-    claim?.valid && claim.personalised && claim.firstName ? claim.firstName : null;
-  const reservedFor = claim?.valid && claim.personalised ? claim.businessName : null;
+    claim?.valid && claim.personalised ? (claim.businessName ?? claim.firstName ?? null) : null;
   const referrerName = referrerNameParam || (refParam ? prettifySlug(refParam) : null);
 
   function startPrimary() {
@@ -154,6 +161,42 @@ export default function Welcome() {
         ...(src ? { src } : {}),
       },
     });
+  }
+
+  // A valid code reloads this screen with ?code=, so it greets them by
+  // business exactly as the letter's QR and the text's link do.
+  async function submitCode(raw: string) {
+    const found = findClaimCode(raw);
+    if (!found) {
+      setCodeError("That doesn't look like a code — it's on your letter, like TS-48217.");
+      return;
+    }
+    setCodeBusy(true);
+    setCodeError(null);
+    try {
+      const r = await api<ClaimResolved>(`/api/claim/resolve?code=${encodeURIComponent(found)}`);
+      if (!r.valid) {
+        setCodeError("We couldn't find that code — check it against your letter, or just tap Start now.");
+        return;
+      }
+      fire("welcome_code_entered", { via: raw === codeInput ? "typed" : "pasted" });
+      setCodeInput(found);
+      router.setParams({ code: found });
+    } catch {
+      setCodeError("We couldn't check that code — check your signal and try again.");
+    } finally {
+      setCodeBusy(false);
+    }
+  }
+
+  async function pasteCode() {
+    const found = await pasteClaimCode();
+    if (!found) {
+      setCodeError("No code found to paste — type the code from your letter or text instead.");
+      return;
+    }
+    setCodeInput(found);
+    submitCode(found);
   }
 
   function goSignIn() {
@@ -191,11 +234,13 @@ export default function Welcome() {
           <Animated.View style={fadeRise(heroAnim)}>
             {personalisedName ? (
               <>
+                {/* 30 Oct update 3.1 — "Welcome [Business], your account is
+                    waiting". Only the business name from the letter. */}
                 <Text className="text-[25px] font-extrabold leading-[30px] tracking-tight text-white">
-                  Welcome, {personalisedName} — your free account is reserved.
+                  Welcome {personalisedName}, your account is waiting.
                 </Text>
                 <Text className="mt-3 text-[15px] leading-[21px] text-white/85">
-                  {reservedFor ? `Reserved for ${reservedFor}. ` : ""}Claim it in about 2 minutes.
+                  Finish setting it up in about 2 minutes.
                 </Text>
               </>
             ) : (
@@ -240,6 +285,48 @@ export default function Welcome() {
           </Animated.View>
 
           </View>
+
+          {!personalisedName && (
+            <View className="mb-3 rounded-2xl border border-white/20 bg-white/[0.06] p-3">
+              <Text className="text-[13.5px] font-semibold text-white">Got a letter or a text from us?</Text>
+              <Pressable
+                onPress={pasteCode}
+                disabled={codeBusy}
+                className="mt-2 min-h-[50px] flex-row items-center justify-center gap-2 rounded-xl border-[1.5px] border-brand-blue bg-brand-blue/15"
+                accessibilityRole="button"
+              >
+                <Icon name="copy" size={16} color="#ffffff" weight="semibold" />
+                <Text className="text-[15px] font-bold text-white">Paste your code</Text>
+              </Pressable>
+              <View className="mt-2 flex-row gap-2">
+                <TextInput
+                  value={codeInput}
+                  onChangeText={(v) => {
+                    setCodeInput(v);
+                    setCodeError(null);
+                  }}
+                  onSubmitEditing={() => submitCode(codeInput)}
+                  placeholder="Or type it, e.g. TS-48217"
+                  placeholderTextColor="#6e86a3"
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  autoComplete="off"
+                  returnKeyType="go"
+                  accessibilityLabel="Your code"
+                  className={`h-12 flex-1 rounded-xl border bg-[#081321] px-3.5 text-[16px] text-white ${codeError ? "border-warn" : "border-white/30"}`}
+                />
+                <Pressable
+                  onPress={() => submitCode(codeInput)}
+                  disabled={codeBusy || !codeInput.trim()}
+                  className={`h-12 min-w-[64px] items-center justify-center rounded-xl bg-white px-3 ${!codeInput.trim() ? "opacity-50" : ""}`}
+                  accessibilityRole="button"
+                >
+                  {codeBusy ? <ActivityIndicator color="#0F2140" /> : <Text className="text-[14px] font-bold text-on-light">Go</Text>}
+                </Pressable>
+              </View>
+              {codeError && <Text className="mt-1.5 text-[12.5px] leading-[17px] text-warn">{codeError}</Text>}
+            </View>
+          )}
 
           {/* 4 Oct notes 3.7 — a real (ghost) button, above the proof chips. */}
           <Pressable

@@ -16,3 +16,22 @@ export async function copyText(text: string): Promise<"copied" | "shared"> {
     return "shared";
   }
 }
+
+// 30 Oct update 3.2 — "Paste your code" on the front screen. Null when the
+// clipboard is empty, unreadable (permission declined, older build without
+// expo-clipboard) or holds no claim code.
+export async function pasteClaimCode(): Promise<string | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Clipboard = require("expo-clipboard") as typeof import("expo-clipboard");
+    return findClaimCode(await Clipboard.getStringAsync());
+  } catch {
+    return null;
+  }
+}
+
+/** "TS-48217", "ts 48217" or a pasted text/link that contains one → "TS-48217". */
+export function findClaimCode(text: string | null | undefined): string | null {
+  const m = (text ?? "").toUpperCase().match(/\bTS[\s-]?(\d{4,8})\b/);
+  return m ? `TS-${m[1]}` : null;
+}
