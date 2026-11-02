@@ -139,6 +139,7 @@ export async function activatePlan(
     await notifyEngineer(
       plan.engineerId,
       `TradeSura: ${who} asked for a one-off gas safety record before ${due}, at your normal price. Their plan's own record isn't available until after their third payment.`,
+      { template: "one_off_cp12", vars: [who, due] },
     ).catch((err) => console.error("[activate] one-off CP12 text failed:", err));
     await sendPushNotification(plan.engineerId, "One-off CP12 requested", `${who}'s gas safety record is due ${due}. Book it in at your normal price.`, {
       url: `/customer/${plan.customerId}`,

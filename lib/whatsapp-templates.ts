@@ -64,6 +64,10 @@ export const WHATSAPP_TEMPLATES = {
     text: "TradeSura: {{1}} ({{2}}) asked for access to the Home Passport at {{3}}. Check with the homeowner before sharing anything.",
     example: ["Sam Lee", "07700 900456", "14 Elm Grove, HD9 2AB"],
   },
+  one_off_cp12: {
+    text: "TradeSura: {{1}} asked for a one-off gas safety record before {{2}}, at your normal price. Their plan's own record isn't available until after their third payment.",
+    example: ["Pat Hughes", "20 Dec 2026"],
+  },
   gas_safe_verified: {
     text: "You're Gas Safe verified on TradeSura. Your member pack is on its way.",
     example: [],
