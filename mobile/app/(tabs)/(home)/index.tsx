@@ -39,6 +39,8 @@ type Dashboard = {
   upcoming: DueItem[];
   nextPayoutPence: number | null;
   nextPayoutDate: string | null;
+  // Matt, 30 Oct §9.3 — until the first payout lands.
+  pending?: { monthlyPence: number; firstPayoutAt: string } | null;
   referral: { name: string; ratePercent: number } | null;
   emergencies: number;
   offersWaiting: { customerFirstName: string; planId: string } | null;
@@ -358,6 +360,28 @@ function OwnerHome() {
                 </View>
               </View>
             </Card>
+
+            {/* Matt, 30 Oct §9.3 — "£18.40 a month pending · first payout
+                Fri [date]", under the hero (Part 6.2 keeps the hero to one
+                number), until the first payout lands. */}
+            {data.pending && (
+              <Pressable onPress={() => router.push("/payouts")} accessibilityRole="button">
+                <Card>
+                  <Text className="text-[14.5px] text-ink">
+                    <Text className="font-bold text-copper">£{(data.pending.monthlyPence / 100).toFixed(2)} a month</Text>
+                    {" pending · first payout "}
+                    <Text className="font-semibold">
+                      {new Date(`${data.pending.firstPayoutAt}T12:00:00Z`).toLocaleDateString("en-GB", {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                        timeZone: "UTC",
+                      })}
+                    </Text>
+                  </Text>
+                </Card>
+              </Pressable>
+            )}
 
             {/* Part 6.6 — the action cards: Finish setup, then the first
                 offer once the plan and payments are done. */}

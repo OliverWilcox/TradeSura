@@ -9,6 +9,7 @@ import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
 import { AppHeader, Button, OpeningStripe } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icon";
 import { StripeBadge } from "@/components/stripe-badge";
+import { PayoutTimeline } from "@/components/payout-timeline";
 import { useSetupExit } from "@/lib/setup-exit";
 
 // 2026 Build Guide TARGET_pre_stripe — "Get paid every Friday". Sets
@@ -127,6 +128,9 @@ export default function GetPaid() {
             Paid into your bank every Friday
           </FlowRow>
         </Section>
+
+        {/* Matt, 30 Oct §9.3 — the same flow, with real dates. */}
+        <PayoutTimeline />
 
         <Section title="Why Stripe asks a few questions">
           <Text className="text-[15.5px] leading-[23px] text-ink">

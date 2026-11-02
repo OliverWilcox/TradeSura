@@ -9,6 +9,7 @@ import { referralRatePercent } from "@/lib/referral";
 import { recentEmergencyCount } from "@/lib/emergencies";
 import { standingCopy } from "@/lib/verification-state";
 import { track } from "@/lib/track";
+import { pendingFirstPayout } from "@/lib/pending-payout";
 import { firstMemberYearlyPence } from "@/lib/first-member";
 
 // Mobile counterpart to the dashboard queries in app/page.tsx (Screen 02) —
@@ -161,5 +162,8 @@ export async function GET() {
     referral,
     offersWaiting,
     standing,
+    // Matt, 30 Oct §9.3 — "£18.40 a month pending · first payout Fri [date]"
+    // until the first payout lands.
+    pending: await pendingFirstPayout(engineerId),
   });
 }

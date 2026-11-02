@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api, apiText, ApiError, getHasSeenFirstPayout, setHasSeenFirstPayout } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, RowLine, Button } from "@/components/ui";
 import { RingProgress, payoutWeekProgress } from "@/components/ring-progress";
+import { PayoutTimeline } from "@/components/payout-timeline";
 import { Skeleton, Bone, TextBone, RowBone } from "@/components/skeleton";
 
 type FailedPlan = { id: string; customerName: string; priceMonthlyPence: number };
@@ -231,6 +232,10 @@ export default function Payouts() {
                 </Text>
               )}
             </Card>
+
+            {/* Matt, 30 Oct §9.3 — joins › cooling-off › collection › Bacs ›
+                Friday, with real dates. */}
+            <PayoutTimeline refreshKey={data} />
 
             <Card>
               <Micro className="mb-1.5">This month, transparently</Micro>
