@@ -28,6 +28,8 @@ const scrubbedEngineer = (id: string) => ({
   gasSafeCompany: null,
   gasSafeCategories: null,
   gasSafeCardUrl: null,
+  gasSafeCardExpiresOn: null,
+  setupTextConsentAt: null,
   expoPushToken: null,
   packAddress: null,
   attribution: undefined,
@@ -43,6 +45,7 @@ export async function deleteStaffAccount(staffId: string): Promise<DeleteResult>
   const staff = await prisma.engineer.findUniqueOrThrow({ where: { id: staffId } });
   await removeBlob(staff.gasSafeCardUrl);
   // Their customers and sales stay with the business (section 8).
+  await prisma.engineerTradingAddress.deleteMany({ where: { engineerId: staffId } });
   await prisma.engineer.update({
     where: { id: staffId },
     data: { ...scrubbedEngineer(staffId), tradingName: null, staffRemovedAt: staff.staffRemovedAt ?? new Date() },
@@ -107,6 +110,8 @@ export async function deleteOwnerAccount(engineerId: string): Promise<DeleteResu
   await prisma.planTier.updateMany({ where: { engineerId, status: { not: "STOPPED" } }, data: { status: "STOPPED" } });
   await removeBlob(engineer.gasSafeCardUrl);
   await removeBlob(engineer.logoUrl);
+  // Their trading address goes with the pack address and postcode.
+  await prisma.engineerTradingAddress.deleteMany({ where: { engineerId } });
   await prisma.engineer.update({
     where: { id: engineerId },
     data: { ...scrubbedEngineer(engineerId), tradingName: "Deleted account" },

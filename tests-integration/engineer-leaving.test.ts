@@ -10,8 +10,8 @@ import { makeCustomer, makeEngineer, makePlan } from "./factories";
 // those customers have been told, and offered an engineer near them.
 
 const sent = vi.hoisted(() => ({ sms: vi.fn(async () => ({ sent: true })), email: vi.fn(async () => undefined) }));
-vi.mock("@/lib/sms", () => ({ sendSms: sent.sms, notifyEngineer: vi.fn() }));
-vi.mock("@/lib/email", () => ({ sendEmail: sent.email }));
+vi.mock("@/lib/sms", () => ({ sendSms: sent.sms, notifyEngineer: vi.fn(), smsConfigured: () => true }));
+vi.mock("@/lib/email", () => ({ sendEmail: sent.email, emailConfigured: () => true }));
 
 beforeEach(async () => {
   vi.clearAllMocks();

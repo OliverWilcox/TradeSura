@@ -8,13 +8,18 @@ import { adminEvent } from "@/lib/admin-api/audit";
 import { bounded, likeTerm } from "@/lib/admin-api/db";
 import { conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
-import { personName, verificationStatus } from "@/lib/admin/verifications";
+import { dateOnly, nextRegisterCheck, personName, qualificationsOf, verificationStatus } from "@/lib/admin/verifications";
 import { exactContactSearch, maskEmail, maskPhone } from "@/lib/admin/mask";
 import {
+  ACTIVE_WINDOW_DAYS,
   FUNNEL_STEPS,
   STEP_LABELS,
   activeEngineerIds,
+  cancelRateOf,
   customerStatus,
+  daysBetween,
+  ladderStep,
+  lastDeliveredOffers,
   milestones,
   offers,
   payments,
@@ -23,6 +28,8 @@ import {
   type Milestones,
   type TestMarks,
 } from "@/lib/admin/metrics";
+import { FOUNDING_CLOCK_DAYS, FOUNDING_SPOTS_PER_TOWN, foundingFor, type FoundingStatus } from "@/lib/admin/founding";
+import { formatAddress, postcodeOf, sameAddress, saveAddresses, tradingAddressOf, type PostalAddress } from "@/lib/addresses";
 
 /** No test marks: statuses for every row a record shows (test rows are labelled, not hidden). */
 const EVERYONE: TestMarks = { engineers: [], customers: [] };
@@ -351,9 +358,10 @@ export async function getEngineer(id: string) {
     },
   });
   if (!e) return null;
-  const weekAgo = new Date(Date.now() - 7 * 86_400_000);
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - ACTIVE_WINDOW_DAYS * 86_400_000);
   const marks = await testMarks();
-  const [planCounts, tiersLive, mrr, earnings, ratings, tiers, recentCustomers, payouts, invitees, steps, offersLast7Days, onPlans, test, company, cancelReasons] = await Promise.all([
+  const [planCounts, tiersLive, mrr, earnings, ratings, tiers, recentCustomers, payouts, invitees, steps, recentOffersSent, onPlans, test, company, cancelReasons] = await Promise.all([
     prisma.plan.groupBy({ by: ["status"], where: { engineerId: id }, _count: { _all: true } }),
     prisma.planTier.count({ where: { engineerId: id, status: "LIVE" } }),
     prisma.plan.aggregate({ where: { engineerId: id, status: "ACTIVE" }, _sum: { priceMonthlyPence: true } }),
@@ -380,13 +388,20 @@ export async function getEngineer(id: string) {
       select: { id: true, tradingName: true, legalName: true, slug: true, createdAt: true, bannedAt: true, pausedAt: true, leftAt: true },
     }),
     milestones(marks, { ids: [id] }),
-    prisma.plan.count({ where: { engineerId: id, createdAt: { gte: weekAgo } } }),
+    offers(marks, { engineerIds: [id], from: weekAgo, to: now }),
     customersOnPlans([id]),
     testMarkOf("engineer", id),
     e.companyNumber ? companyProfile(e.companyNumber) : Promise.resolve(null),
     cancelReasonCounts(id),
   ]);
   const recentPlanIds = recentCustomers.flatMap((c) => c.plans.map((p) => p.id));
+  const [tradingRow, claim, founding, lastOffer, cancelRate] = await Promise.all([
+    prisma.engineerTradingAddress.findUnique({ where: { engineerId: id } }),
+    prisma.claimCode.findUnique({ where: { redeemedByEngineerId: id }, select: { code: true, letterBatch: true, variantCell: true, redeemedAt: true } }),
+    foundingFor(marks, [id], now),
+    lastDeliveredOffers(marks, [id]),
+    cancelRateOf(marks, id, now),
+  ]);
   const [active, recentOffers, recentPaid] = await Promise.all([
     activeEngineerIds(marks, new Date(), [id, ...invitees.map((i) => i.id)]),
     recentPlanIds.length ? offers(EVERYONE, { planIds: recentPlanIds }) : [],
@@ -404,6 +419,12 @@ export async function getEngineer(id: string) {
   for (const p of planCounts) plans[p.status] = p._count._all;
   const monthly = mrr._sum.priceMonthlyPence ?? 0;
   const attribution = (e.attribution ?? {}) as { heardVia?: string; referralCode?: string; letterBatch?: string; variantCell?: string };
+  const trading = tradingAddressOf(tradingRow, e.packAddress);
+  const office = company?.registeredOffice ?? null;
+  // The call ladder counts from their last delivered offer, or from being verified.
+  const lastOfferAt = lastOffer.get(id) ?? null;
+  const chaseFrom = lastOfferAt ?? e.gasSafeVerifiedAt;
+  const chaseDays = chaseFrom && engineerStatus(e) === "active" && !e.ownerId ? daysBetween(chaseFrom, now) : null;
   return {
     id: e.id,
     name: personName(e),
@@ -429,13 +450,43 @@ export async function getEngineer(id: string) {
       areasCovered: (e.serviceArea ?? "").split(",").map((a) => a.trim()).filter(Boolean),
       signupPostcode: e.postcode,
       postal: e.packAddress,
-      registeredOffice: company?.registeredOffice ?? null,
+      registeredOffice: office,
+      /** Sets the town and town page. Null source: read from the pack address, not saved yet. */
+      trading: trading && {
+        lines: trading.lines,
+        town: trading.town,
+        postcode: trading.postcode,
+        source: trading.source,
+        updatedAt: trading.updatedAt?.toISOString() ?? null,
+        updatedBy: trading.updatedByName,
+      },
+      /** Where the member pack and all post go (the pack address). */
+      correspondence: { address: e.packAddress, sameAsTrading: !e.packAddress || (trading ? sameAddress(e.packAddress, formatAddress(trading)) : false) },
+      /** The trading address is at Companies House's registered office: usually not where they work. */
+      tradingIsRegisteredOffice: Boolean(office && trading && postcodeOf(office) === postcodeOf(trading.postcode)),
     },
     company: company ? { name: company.name, type: company.type, status: company.status } : null,
-    contact: { email: maskEmail(e.email), phone: e.phone ? maskPhone(e.phone) : null, revealed: false },
+    contact: {
+      email: maskEmail(e.email),
+      phone: e.phone ? maskPhone(e.phone) : null,
+      revealed: false,
+      phoneVerifiedAt: e.phoneVerifiedAt?.toISOString() ?? null,
+      /** "TradeSura can text me to help me finish setting up": when they agreed. */
+      setupTextConsentAt: e.setupTextConsentAt?.toISOString() ?? null,
+      /** "Send me tips and product updates", asked at sign-up. */
+      marketingConsent: e.marketingConsent,
+    },
     joinedAt: e.createdAt.toISOString(),
     channel: attribution.heardVia ?? null,
     letterBatch: attribution.letterBatch ?? null,
+    /** The referral code they typed at sign-up, if any (who referred them is referrals.referredBy). */
+    referralCodeGiven: attribution.referralCode ?? null,
+    /** The letter they came from: the claim code they redeemed, or the batch their link carried. */
+    letter: claim
+      ? { code: claim.code, batch: claim.letterBatch, variant: claim.variantCell, redeemedAt: claim.redeemedAt?.toISOString() ?? null }
+      : attribution.letterBatch
+        ? { code: null, batch: attribution.letterBatch, variant: attribution.variantCell ?? null, redeemedAt: null }
+        : null,
     status: displayStatus(e, active),
     standing: standingState(e),
     test,
@@ -449,6 +500,24 @@ export async function getEngineer(id: string) {
       rejectedAt: e.gasSafeRejectedAt?.toISOString() ?? null,
       rejectReason: e.gasSafeRejectReason,
     },
+    /** The Gas Safe ID card and register details (3.5, 3.6). */
+    gasSafe: {
+      number: e.gasSafeNo,
+      registerName: e.gasSafeName,
+      registerCompany: e.gasSafeCompany,
+      categories: e.gasSafeCategories,
+      cardOnFile: Boolean(e.gasSafeCardUrl),
+      cardExpiresOn: dateOnly(e.gasSafeCardExpiresOn),
+      qualifications: qualificationsOf(e.qualificationConfirmations),
+      nextRegisterCheck: dateOnly(nextRegisterCheck(e.gasSafeVerifiedAt, e.gasSafeCardExpiresOn)),
+    },
+    founding: foundingDto(founding.get(id)!),
+    /** Days since their last delivered offer and the call-ladder step; null unless verified and active. */
+    chase:
+      chaseDays === null
+        ? null
+        : { lastDeliveredOfferAt: lastOfferAt?.toISOString() ?? null, countingFrom: lastOfferAt ? "last_offer" : "verified", days: chaseDays, step: ladderStep(chaseDays) },
+    cancelRate,
     payments: {
       accountId: e.stripeAccountId,
       connected: Boolean(e.stripeAccountId),
@@ -518,7 +587,8 @@ export async function getEngineer(id: string) {
     lifetimePayoutsPence: payouts.totalPence,
     /** The activation steps, in the funnel's order, from the same source as the funnel. */
     steps: FUNNEL_STEPS.map((step) => ({ key: step, label: STEP_LABELS[step], reached: reached[step].reached, at: reached[step].at?.toISOString() ?? null })),
-    offersLast7Days,
+    /** Delivered offers in the last ACTIVE_WINDOW_DAYS: what makes them active. */
+    offersLast7Days: recentOffersSent.filter((o) => o.delivery === "delivered").length,
     ratings: { count: ratings._count._all, average: ratings._avg.stars === null ? null : Math.round(ratings._avg.stars * 10) / 10 },
     memberPack: { requestedAt: e.packRequestedAt?.toISOString() ?? null, shippedAt: e.packShippedAt?.toISOString() ?? null },
     website: { connectedAt: e.websiteConnectedAt?.toISOString() ?? null, host: e.websiteHost, widgetDisabledAt: e.widgetDisabledAt?.toISOString() ?? null },
@@ -527,6 +597,46 @@ export async function getEngineer(id: string) {
 }
 
 export type EngineerDetail = NonNullable<Awaited<ReturnType<typeof getEngineer>>>;
+
+/** A Founding status as the API sends it, with the rules it was worked out by. */
+function foundingDto(f: FoundingStatus) {
+  const rules = { spotsPerTown: FOUNDING_SPOTS_PER_TOWN, clockDays: FOUNDING_CLOCK_DAYS };
+  switch (f.state) {
+    case "top_spot":
+    case "badge":
+      return { ...rules, state: f.state, town: f.town, position: f.position, since: f.since.toISOString(), clockEndsAt: f.clockEndsAt.toISOString(), kept: f.kept };
+    case "released":
+      return { ...rules, state: f.state, town: f.town, since: f.since.toISOString(), releasedAt: f.releasedAt.toISOString() };
+    case "waiting":
+      return { ...rules, state: f.state, town: f.town, place: f.place };
+    case "no_town":
+      return { ...rules, state: f.state };
+    case "not_in_line":
+      return { ...rules, state: f.state, reason: f.reason };
+  }
+}
+
+/**
+ * An admin changes the trading address and where post goes (engineer record
+ * 1), for an engineer whose sign-up gave the registered office (302 MD LTD)
+ * or who's told TradeSura of a move. Town, town page and pack address follow
+ * (lib/addresses.ts); the change is recorded with the town before and after.
+ */
+export async function saveEngineerAddresses(admin: AdminPrincipal, id: string, input: { trading: PostalAddress; correspondence: PostalAddress | "same" }, reason: string | null) {
+  const e = await prisma.engineer.findFirst({ where: { id, ...live }, select: { ownerId: true } });
+  if (!e) throw notFound("There's no engineer with that ID.");
+  if (e.ownerId) throw conflict("Staff work from the business's addresses: change the owner's instead.");
+  return prisma.$transaction(async (tx) => {
+    const saved = await saveAddresses(tx, id, input, { source: "admin", id: admin.id, name: admin.name });
+    await adminEvent(
+      admin,
+      "engineer_addresses_changed",
+      { engineerId: id, townBefore: saved.townBefore, town: saved.town, postChanged: saved.packAddressChanged, sameAsTrading: saved.correspondenceSameAsTrading, reason },
+      tx,
+    );
+    return { town: saved.town, townBefore: saved.townBefore, correspondenceSameAsTrading: saved.correspondenceSameAsTrading };
+  });
+}
 
 /** Payouts to the engineer's bank, from the payout.paid events Stripe sends for their Connect account. */
 async function engineerPayouts(accountId: string | null) {

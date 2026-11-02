@@ -95,7 +95,7 @@ describe("one engineer", () => {
     await prisma.planTier.create({ data: { engineerId: e.id, name: "Boiler care", priceMonthlyPence: 2000, sortOrder: 0, status: "LIVE" } });
     const res = await call(detail, { params: { engineerId: e.id } });
     expect(res.status).toBe(200);
-    expect(res.body.contact).toEqual({ email: "d•••@hartley.example", phone: "•••• 123", revealed: false });
+    expect(res.body.contact).toEqual({ email: "d•••@hartley.example", phone: "•••• 123", revealed: false, phoneVerifiedAt: null, setupTextConsentAt: null, marketingConsent: false });
     expect(res.body.money).toEqual({ monthlyPlanValuePence: 2000, tradesuraFeePence: 400 });
     expect(res.body.activation).toMatchObject({ paymentsReady: true, planLive: true, firstCustomer: true });
     expect(res.body.counts.plans).toEqual({ ACTIVE: 1, PENDING: 0, PAUSED: 0, CANCELLED: 0 });
@@ -161,7 +161,16 @@ describe("one engineer", () => {
       await prisma.cancelRequest.create({ data: { planId: plan.id, engineerId: e.id, reason, outcome: "cancelled" } });
     }
     const res = await call(detail, { params: { engineerId: e.id } });
-    expect(res.body.addresses).toEqual({ areasCovered: ["Holmfirth", "Huddersfield", "HD9"], signupPostcode: "E16 1YL", postal: "Unit 2\nHolmfirth\nHD9 2TT", registeredOffice: null });
+    expect(res.body.addresses).toEqual({
+      areasCovered: ["Holmfirth", "Huddersfield", "HD9"],
+      signupPostcode: "E16 1YL",
+      postal: "Unit 2\nHolmfirth\nHD9 2TT",
+      registeredOffice: null,
+      // Read from the pack address until it's saved as the trading address.
+      trading: { lines: ["Unit 2"], town: "Holmfirth", postcode: "HD9 2TT", source: null, updatedAt: null, updatedBy: null },
+      correspondence: { address: "Unit 2\nHolmfirth\nHD9 2TT", sameAsTrading: true },
+      tradingIsRegisteredOffice: false,
+    });
     expect(res.body.cancelReasons).toEqual([{ reason: "moving", count: 2 }, { reason: "too_expensive", count: 1 }]);
   });
 

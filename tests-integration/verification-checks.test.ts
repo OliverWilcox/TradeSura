@@ -9,16 +9,19 @@ import { makeEngineer } from "./factories";
 
 // Section 3 of the client's feedback: what the check page shows and asks for.
 
-const sent = vi.hoisted(() => ({ push: vi.fn(), sms: vi.fn(), email: vi.fn() }));
+const sent = vi.hoisted(() => ({ push: vi.fn(), sms: vi.fn(async () => true), email: vi.fn(async () => {}) }));
+// Whether texts and email are set up on this server (QA-05).
+const configured = vi.hoisted(() => ({ sms: true, email: true }));
 vi.mock("@/lib/push", () => ({ sendPushNotification: sent.push }));
-vi.mock("@/lib/sms", () => ({ notifyEngineer: sent.sms }));
-vi.mock("@/lib/email", () => ({ sendEmail: sent.email }));
+vi.mock("@/lib/sms", () => ({ notifyEngineer: sent.sms, smsConfigured: () => configured.sms }));
+vi.mock("@/lib/email", () => ({ sendEmail: sent.email, emailConfigured: () => configured.email }));
 // Companies House: Matt Wood's company, as the client saw it.
 vi.mock("@/lib/companies-house", () => ({ companyOfficers: async () => [{ name: "WOOD, Matthew Dean", role: "director" }] }));
 
 beforeEach(async () => {
   await resetDb();
   vi.clearAllMocks();
+  Object.assign(configured, { sms: true, email: true });
 });
 
 /** An application with nothing left to check: on the register by the same name, with a card. */
@@ -80,18 +83,47 @@ describe("3.6: the check page", () => {
     const e = await cleanApplication({ gasSafeCategories: "Domestic gas, LPG", town: "Leeds" });
     const checker = (await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body;
     expect(checker.submitted).toEqual({ name: "Dave Smith", business: e.tradingName, categories: "Domestic gas, LPG", postcode: "LS1 4AB", town: "Leeds", cardExpiry: null });
-    expect(checker.gasSafe.onRegister).toEqual({ name: "D. Smith", company: "Smith Heating", categories: "Domestic gas" });
+    // Address and card expiry only when the imported register file had them (QA-07).
+    expect(checker.gasSafe.onRegister).toEqual({ name: "D. Smith", company: "Smith Heating", categories: "Domestic gas", address: null, postcode: null, cardExpiry: null });
+    await prisma.gasSafeRecord.update({ where: { regNo: e.gasSafeNo! }, data: { address: "4 Mill Lane, Holmfirth", postcode: "HD9 2TT", cardExpiresOn: new Date("2027-03-31") } });
+    expect((await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body.gasSafe.onRegister).toMatchObject({ address: "4 Mill Lane, Holmfirth", postcode: "HD9 2TT", cardExpiry: "2027-03-31" });
     expect(checker.contact).toBeNull();
     const admin = (await call(detail, { params: { engineerId: e.id } })).body;
     expect(admin.contact.email).toMatch(/•••/);
   });
 
   it("chases a missing card photo by text, and records it", async () => {
-    const e = await makeEngineer();
+    const e = await makeEngineer({ setupTextConsentAt: new Date() });
     const res = await call(chase, { as: CHECKER, params: { engineerId: e.id }, body: { what: "photo", channel: "sms" } });
     expect(res.status).toBe(200);
+    expect(res.body).toEqual({ chased: true, channel: "sms", notSent: null });
     expect(sent.sms).toHaveBeenCalledWith(e.id, expect.stringContaining("photo of your Gas Safe ID card"));
     expect(await prisma.event.findFirst({ where: { name: "verification_chased" } })).toMatchObject({ actorType: "ADMIN", meta: expect.objectContaining({ what: "photo", channel: "sms" }) });
+  });
+
+  it("won't text a chase to someone who hasn't agreed to setup texts, but will email", async () => {
+    const e = await makeEngineer();
+    const text = await call(chase, { as: CHECKER, params: { engineerId: e.id }, body: { what: "photo", channel: "sms" } });
+    expect(text.status).toBe(409);
+    expect(sent.sms).not.toHaveBeenCalled();
+    expect((await call(chase, { as: CHECKER, params: { engineerId: e.id }, body: { what: "photo", channel: "email" } })).status).toBe(200);
+    expect(sent.email).toHaveBeenCalledOnce();
+  });
+
+  it("says a chase didn't go, and why, and records the attempt instead of a chase (QA-05)", async () => {
+    const e = await makeEngineer({ setupTextConsentAt: new Date() });
+    configured.sms = false;
+    sent.sms.mockResolvedValueOnce(false);
+    const text = await call(chase, { as: CHECKER, params: { engineerId: e.id }, body: { what: "photo", channel: "sms" } });
+    expect(text.body).toEqual({ chased: false, channel: "sms", notSent: "not_configured" });
+    sent.email.mockRejectedValueOnce(new Error("Failed to send email: rate limited"));
+    const email = await call(chase, { as: CHECKER, params: { engineerId: e.id }, body: { what: "photo", channel: "email" } });
+    expect(email.body).toEqual({ chased: false, channel: "email", notSent: "refused" });
+    // Email not set up: the dev driver only printed it.
+    configured.email = false;
+    expect((await call(chase, { as: CHECKER, params: { engineerId: e.id }, body: { what: "details", channel: "email" } })).body).toMatchObject({ chased: false, notSent: "not_configured" });
+    expect(await prisma.event.count({ where: { name: "verification_chase_failed" } })).toBe(3);
+    expect(await prisma.event.count({ where: { name: "verification_chased" } })).toBe(0);
   });
 
   it("won't chase an application that's been decided", async () => {

@@ -20,16 +20,20 @@ import { clientFixture, OCTOBER } from "./client-fixture";
 // every card, funnel step and list must tell the same story.
 
 // Texts are recorded, never sent.
+// `twilio` says what the provider does with them (QA-05).
 const texts = vi.hoisted(() => [] as { to: string; body: string; messageClass: string }[]);
+const twilio = vi.hoisted(() => ({ configured: true, takes: true }));
 vi.mock("@/lib/sms", () => ({
   sendSms: async (o: { to: string; body: string; messageClass: string }) => {
     texts.push(o);
-    return { sent: true, id: "sms_1" };
+    return { sent: true, delivered: twilio.configured && twilio.takes, id: "sms_1" };
   },
+  smsConfigured: () => twilio.configured,
 }));
 
 beforeEach(async () => {
   texts.length = 0;
+  Object.assign(twilio, { configured: true, takes: true });
   await resetDb();
 });
 
@@ -158,8 +162,17 @@ describe("an offer's delivery and a customer's status", () => {
   it("call a WhatsApp offer unconfirmed until its link is opened", () => {
     expect(deliveryOf({ channel: "whatsapp", openedAt: null })).toBe("unconfirmed");
     expect(deliveryOf({ channel: "whatsapp", openedAt: new Date() })).toBe("delivered");
+    // Texts sent before receipts were kept: delivered, as agreed.
     expect(deliveryOf({ channel: "sms", openedAt: null })).toBe("delivered");
-    expect(deliveryOf({ channel: "sms", openedAt: null, failedAt: new Date() })).toBe("failed");
+  });
+
+  it("call a text delivered or failed by its receipt, and not confirmed while it's waiting (QA-02)", () => {
+    const at = new Date();
+    expect(deliveryOf({ channel: "sms", openedAt: null, text: { deliveredAt: at, failedAt: null } })).toBe("delivered");
+    expect(deliveryOf({ channel: "sms", openedAt: null, text: { deliveredAt: null, failedAt: at } })).toBe("failed");
+    expect(deliveryOf({ channel: "sms", openedAt: null, text: { deliveredAt: null, failedAt: null } })).toBe("unconfirmed");
+    // Opened beats anything the receipt said.
+    expect(deliveryOf({ channel: "sms", openedAt: at, text: { deliveredAt: null, failedAt: at } })).toBe("delivered");
   });
 
   it("follow a customer from the offer to the end", () => {
@@ -241,9 +254,38 @@ describe("a customer's record", () => {
     });
     await prisma.cancelRequest.create({ data: { planId: f.oliverPlan.id, engineerId: f.md.id, reason: "too_expensive", offer: "cheaper_plan", outcome: "cancelled", createdAt: new Date("2026-10-29T12:00:00Z") } });
     const items = (await call(customerActivityRoute, { params: { customerId: f.oliver.id } })).body.items;
-    expect(items.map((i: { name: string }) => i.name)).toEqual(["plan_cancelled", "cancel_requested", "payment_confirmed", "mandate_active", "signup_opened", "offer_sent"]);
+    // The payment is the invoice (the £0 trial left out); "plan started" comes from the plan.
+    expect(items.map((i: { name: string }) => i.name)).toEqual(["plan_cancelled", "cancel_requested", "payment_confirmed", "mandate_active", "plan_live", "signup_opened", "offer_sent"]);
     expect(items[1].detail).toMatchObject({ reason: "too_expensive", offer: "cheaper_plan", outcome: "cancelled" });
-    expect(items[5].detail.channel).toBe("sms");
+    expect(items[2]).toMatchObject({ id: "invoice:in_oliver_1", detail: { amountPence: 1200 } });
+    expect(items[6].detail.channel).toBe("sms");
+  });
+
+  // QA-04: the app records only the first payment as an event; the timeline lists what the payment history lists.
+  it("lists every payment the payment history does, and the plan's own dates where nothing was recorded", async () => {
+    const f = await clientFixture();
+    await prisma.event.create({ data: { name: "payment_confirmed", actorType: "SYSTEM", ts: new Date("2026-10-29T09:00:00Z"), meta: { planId: f.oliverPlan.id, amountPence: 1200 } } });
+    await prisma.stripeWebhookEvent.createMany({
+      data: [
+        { id: "evt_oliver_fail", type: "invoice.payment_failed", processedAt: new Date("2026-11-28T09:00:00Z"), payload: { data: { object: { id: "in_oliver_2", amount_due: 1200, subscription: "sub_oliver" } } } },
+        { id: "evt_oliver_2", type: "invoice.paid", processedAt: new Date("2026-12-01T09:00:00Z"), payload: { data: { object: { id: "in_oliver_2", amount_paid: 1200, subscription: "sub_oliver", status_transitions: { paid_at: Date.parse("2026-12-01T09:00:00Z") / 1000 } } } } },
+      ],
+    });
+    await prisma.plan.update({ where: { id: f.oliverPlan.id }, data: { paymentFailedAt: new Date("2026-11-28T09:00:00Z"), paymentRecoveredAt: new Date("2026-12-01T09:00:00Z"), status: "CANCELLED", cancelledAt: new Date("2026-12-20T09:00:00Z") } });
+
+    const [record, activity] = await Promise.all([
+      call(customerRoute, { params: { customerId: f.oliver.id } }),
+      call(customerActivityRoute, { params: { customerId: f.oliver.id } }),
+    ]);
+    const items: { name: string; at: string; detail: { amountPence: number | null } }[] = activity.body.items;
+    const shown = (name: string) => items.filter((i) => i.name === name).map((i) => [i.at, i.detail.amountPence]);
+    const history = (status: string) => record.body.payments.filter((p: { status: string }) => p.status === status).map((p: { at: string; amountPence: number }) => [p.at, p.amountPence]);
+    expect(shown("payment_confirmed")).toEqual(history("paid"));
+    expect(shown("payment_confirmed")).toHaveLength(2);
+    expect(shown("payment_failed")).toEqual(history("failed"));
+    expect(items.map((i) => i.name)).toEqual(expect.arrayContaining(["signup_opened", "plan_live", "payment_recovered", "plan_cancelled"]));
+    // Each once: from the plan only where no event says so.
+    expect(items.filter((i) => i.name === "plan_live")).toHaveLength(1);
   });
 });
 
@@ -253,12 +295,23 @@ describe("win back (5.7)", () => {
     await prisma.plan.update({ where: { id: f.oliverPlan.id }, data: { status: "CANCELLED", cancelledAt: new Date() } });
     const res = await call(winBackRoute, { params: { customerId: f.oliver.id } });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "sent" });
+    expect(res.body).toEqual({ status: "sent", notSent: null });
     expect(texts).toHaveLength(1);
     expect(texts[0]).toMatchObject({ to: f.oliver.phone, messageClass: "MARKETING" });
     const token = (await prisma.plan.findUniqueOrThrow({ where: { id: f.oliverPlan.id } })).rejoinToken;
     expect(texts[0].body).toContain(`/rejoin/${token}`);
     expect(await prisma.event.findFirst({ where: { name: "customer_win_back_sent" } })).toMatchObject({ actorType: "ADMIN" });
+  });
+
+  it("says a win-back text didn't go, and why, instead of calling it sent (QA-05)", async () => {
+    const f = await clientFixture();
+    await prisma.plan.update({ where: { id: f.oliverPlan.id }, data: { status: "CANCELLED", cancelledAt: new Date() } });
+    twilio.configured = false;
+    expect((await call(winBackRoute, { params: { customerId: f.oliver.id } })).body).toEqual({ status: "not_sent", notSent: "not_configured" });
+    Object.assign(twilio, { configured: true, takes: false });
+    expect((await call(winBackRoute, { params: { customerId: f.oliver.id } })).body).toEqual({ status: "not_sent", notSent: "refused" });
+    expect(await prisma.event.count({ where: { name: "customer_win_back_failed" } })).toBe(2);
+    expect(await prisma.event.count({ where: { name: "customer_win_back_sent" } })).toBe(0);
   });
 
   it("refuses anyone who opted out, or whose plan hasn't ended", async () => {

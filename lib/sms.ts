@@ -3,6 +3,7 @@
 // sender = engineer trading name; marketing SMS end "Reply STOP to opt out";
 // opt-outs honoured platform-wide; no sends 20:00–08:00 (queued instead).
 import { prisma } from "@/lib/db";
+import { appUrl } from "@/lib/app-url";
 import { brandName } from "@/lib/engineer";
 import type { MessageClass } from "@/lib/generated/prisma/enums";
 import { isSuppressed } from "@/lib/suppression";
@@ -40,21 +41,40 @@ function alphanumericSenderId(name: string): string {
   return /[a-zA-Z]/.test(cleaned) ? cleaned : "TradeSura";
 }
 
+/** Whether texts really go out (Twilio's keys are set); without them, sends only reach the dev driver. */
+export function smsConfigured(): boolean {
+  return Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_NUMBER);
+}
+
+/**
+ * Where Twilio reports what happened to each OutboundSms text
+ * (app/api/webhooks/sms-status): delivered, or failed. Twilio can only call a
+ * public https address, so there's none on a laptop.
+ */
+export function smsStatusCallbackUrl(): string | null {
+  const base = appUrl();
+  return base.startsWith("https://") ? `${base}/api/webhooks/sms-status` : null;
+}
+
+/** What happened when a text was handed over: Twilio's message ID, or why it didn't go. */
+type Delivery = { ok: true; sid: string | null } | { ok: false; reason: "not_configured" | "refused" };
+
 // `fromLongCode: true` sends from the shared Twilio number (TWILIO_SMS_NUMBER)
 // instead of an alphanumeric sender — used for anything that might need a
 // reply (currently just the platform-sent OTP code, which shares its number
 // with the inbound STOP webhook so the compliance line above points somewhere
 // real).
-// Returns whether the message actually went out via Twilio — false means it
-// only hit the console.log dev driver, which callers can use to decide
-// whether it's safe to hand the plaintext code/link back to the client (see
-// sendVerificationCode below).
+// `ok` says whether the message actually went out via Twilio — false means it
+// only hit the console.log dev driver (or Twilio refused it), which callers
+// can use to decide whether it's safe to hand the plaintext code/link back to
+// the client (see sendVerificationCode below), and to say truthfully whether
+// a text went (QA-05). `statusCallback` asks Twilio to report delivery.
 async function deliver(
   senderName: string,
   to: string,
   body: string,
-  opts: { fromLongCode?: boolean } = {},
-): Promise<boolean> {
+  opts: { fromLongCode?: boolean; statusCallback?: string | null } = {},
+): Promise<Delivery> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const fromNumber = process.env.TWILIO_SMS_NUMBER;
@@ -64,23 +84,34 @@ async function deliver(
     if (process.env.NODE_ENV === "development") {
       console.log(`[SMS] from="${senderName}" to=${to}\n      ${body}`);
     }
-    return false;
+    return { ok: false, reason: "not_configured" };
   }
 
   const from = opts.fromLongCode ? fromNumber : alphanumericSenderId(senderName);
+  const params = new URLSearchParams({ To: to, From: from, Body: body });
+  if (opts.statusCallback) params.set("StatusCallback", opts.statusCallback);
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
     method: "POST",
     headers: {
       Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: new URLSearchParams({ To: to, From: from, Body: body }),
+    body: params,
   });
   if (!res.ok) {
     console.error(`[SMS] Twilio send to ${to} failed (${res.status}): ${await res.text()}`);
-    return false;
+    return { ok: false, reason: "refused" };
   }
-  return true;
+  const sid = ((await res.json().catch(() => null)) as { sid?: unknown } | null)?.sid;
+  return { ok: true, sid: typeof sid === "string" ? sid : null };
+}
+
+/** Records on the OutboundSms row what happened when it was handed over; Twilio's receipt fills in the rest. */
+function recordDelivery(id: string, d: Delivery) {
+  return prisma.outboundSms.update({
+    where: { id },
+    data: d.ok ? { providerSid: d.sid } : { failedAt: new Date(), failureReason: d.reason },
+  });
 }
 
 // Signup-time phone verification code. Sent from the platform itself, not an
@@ -92,7 +123,7 @@ async function deliver(
 // so callers can surface it in dev the same way /api/auth/request's devLink
 // stands in for real email delivery — never once Twilio is really sending.
 export async function sendVerificationCode(to: string, code: string): Promise<{ devCode?: string }> {
-  const delivered = await deliver(
+  const { ok: delivered } = await deliver(
     "TradeSura",
     to,
     `Your TradeSura verification code is ${code}. It expires in 10 minutes.`,
@@ -109,13 +140,21 @@ export async function sendVerificationCode(to: string, code: string): Promise<{ 
 // row, no STOP suffix, no quiet hours; it goes to the account holder about
 // their own account. Sent from the shared long code so it comes from a real
 // number. No-op if the engineer has no verified phone or Twilio is unset.
-export async function notifyEngineer(engineerId: string, body: string) {
+// Returns whether it went (QA-05); callers that don't care can ignore it.
+export async function notifyEngineer(engineerId: string, body: string): Promise<boolean> {
   const engineer = await prisma.engineer.findUnique({
     where: { id: engineerId },
     select: { phone: true },
   });
-  if (!engineer?.phone) return;
-  await deliver("TradeSura", engineer.phone, body, { fromLongCode: true });
+  if (!engineer?.phone) return false;
+  return (await deliver("TradeSura", engineer.phone, body, { fromLongCode: true })).ok;
+}
+
+// A text to TradeSura's own team (the card-upload alert, lib/card-alert.ts),
+// from the shared long code: not an engineer or customer, so no OutboundSms
+// row, STOP line or quiet hours. Returns whether it went.
+export async function textStaff(to: string, body: string): Promise<boolean> {
+  return (await deliver("TradeSura", to, body, { fromLongCode: true })).ok;
 }
 
 export async function sendSms(opts: {
@@ -168,8 +207,12 @@ export async function sendSms(opts: {
       ...(sendAfter <= now ? { status: "SENT" as const, sentAt: now } : {}),
     },
   });
-  if (row.status === "SENT") await deliver(senderName, opts.to, body);
-  return { sent: row.status === "SENT", id: row.id };
+  // `sent`: not held for later. `delivered`: whether it went out now (null while
+  // queued). A refusal is kept on the row, as is Twilio's ID for its receipt.
+  if (row.status !== "SENT") return { sent: false, delivered: null, id: row.id };
+  const delivery = await deliver(senderName, opts.to, body, { statusCallback: smsStatusCallbackUrl() });
+  await recordDelivery(row.id, delivery);
+  return { sent: true, delivered: delivery.ok, id: row.id };
 }
 
 // Flush due queued messages (dev: called from /api/jobs/flush-sms).
@@ -179,11 +222,12 @@ export async function flushSmsQueue() {
     where: { status: "QUEUED", sendAfter: { lte: new Date() } },
   });
   for (const sms of due) {
-    await deliver(sms.senderName, sms.toPhone, sms.body);
+    const delivery = await deliver(sms.senderName, sms.toPhone, sms.body, { statusCallback: smsStatusCallbackUrl() });
     await prisma.outboundSms.update({
       where: { id: sms.id },
       data: { status: "SENT", sentAt: new Date() },
     });
+    await recordDelivery(sms.id, delivery);
     // Part 11 — "services come due": the engineer hears once per plan, when
     // the first (30-day) reminder goes out, not on every follow-up.
     const svc = sms.cancelKey?.match(/^svc:(.+):30$/);

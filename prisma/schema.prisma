@@ -79,6 +79,11 @@ model Engineer {
   companyStatus              String?
   postcode                   String? // business postcode, not shown to customers
   marketingConsent           Boolean           @default(false)
+  // "TradeSura can text me to help me finish setting up" (client feedback,
+  // engineer record 2): when they agreed, null if they haven't. Setup texts
+  // (the admin's verification chase) need it; sign-in codes and texts about
+  // their customers don't.
+  setupTextConsentAt         DateTime?
   gasSafeNo                  String?           @unique // review #13 — one licence, one account
   gasSafeName                String?
   gasSafeCompany             String?
@@ -93,6 +98,9 @@ model Engineer {
   // queue (app/admin/verifications), which sets gasSafeVerifiedAt or
   // gasSafeRejectedAt. Card photo lives in Blob under an unguessable path.
   gasSafeCardUrl             String?
+  // The ID card's expiry date, given with the photo (client feedback 3.5,
+  // engineer record 4). The next register re-check is due by then.
+  gasSafeCardExpiresOn       DateTime?         @db.Date
   gasSafeRejectedAt          DateTime?
   gasSafeRejectReason        String?
   // Build Guide v2 Part 11 — push notifications. Set once the app has asked
@@ -391,6 +399,12 @@ model GasSafeRecord {
   name       String
   company    String
   categories String
+  // QA-07: only when the register file has them (scripts/import-gas-safe.ts):
+  // the business address, and the licence card's expiry, set beside what the
+  // engineer gave on the admin's check page.
+  address       String?
+  postcode      String?
+  cardExpiresOn DateTime? @db.Date
 }
 
 // Analytics + audit, append-only.
@@ -419,6 +433,14 @@ model OutboundSms {
   // plan-member-transactional | engineer-initiated | marketing
   consentBasis String?
   sentAt       DateTime?
+  // What happened to it (QA-02): Twilio's message ID once it took the text,
+  // then its delivery receipt (app/api/webhooks/sms-status). failedAt is set
+  // when Twilio refused it, texts weren't set up, or the network couldn't
+  // deliver it; failureReason says which (or Twilio's error code).
+  providerSid   String?   @unique
+  deliveredAt   DateTime?
+  failedAt      DateTime?
+  failureReason String?
 
   @@index([status, sendAfter])
 }
@@ -677,4 +699,23 @@ model AppSetting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+// An engineer's trading address: where they work from. It sets their town and
+// town page (Engineer.town, townSlug and postcode follow it). Correspondence
+// stays Engineer.packAddress, where the member pack and all post go; it's
+// "the same as trading" while the two match. The registered office comes
+// from Companies House and is for legal details only. Written by the admin
+// API (and copied from sign-up by scripts/admin-copy-addresses.ts) until
+// sign-up writes it.
+model EngineerTradingAddress {
+  engineerId    String   @id
+  lines         String[] // street lines, without the town and postcode
+  town          String
+  postcode      String // normalised, as lib/validate.ts normalisePostcode
+  source        String // signup | admin
+  updatedById   String?
+  updatedByName String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

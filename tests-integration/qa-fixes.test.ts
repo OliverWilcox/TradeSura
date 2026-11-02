@@ -31,8 +31,8 @@ const CHECKED = "Checked the card and register by phone";
 
 const sent = vi.hoisted(() => ({ push: vi.fn(), sms: vi.fn(), email: vi.fn() }));
 vi.mock("@/lib/push", () => ({ sendPushNotification: sent.push }));
-vi.mock("@/lib/sms", () => ({ notifyEngineer: sent.sms }));
-vi.mock("@/lib/email", () => ({ sendEmail: sent.email }));
+vi.mock("@/lib/sms", () => ({ notifyEngineer: sent.sms, smsConfigured: () => true }));
+vi.mock("@/lib/email", () => ({ sendEmail: sent.email, emailConfigured: () => true }));
 
 beforeEach(async () => {
   await resetDb();

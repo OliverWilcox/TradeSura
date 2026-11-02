@@ -3,7 +3,8 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { brandName, displayName } from "@/lib/engineer";
 import { appUrl } from "@/lib/app-url";
-import { sendSms } from "@/lib/sms";
+import { sendSms, smsConfigured } from "@/lib/sms";
+import type { NotSent } from "@/lib/admin/verifications";
 import { parseWinbackOffer, winbackBody, winbackSettingKey } from "@/lib/retention";
 import { adminEvent } from "@/lib/admin-api/audit";
 import { bounded, likeTerm } from "@/lib/admin-api/db";
@@ -394,16 +395,31 @@ async function customerPayments(subscriptionIds: string[]) {
   }));
 }
 
+/** Shown from the invoices instead, so the timeline and the payment history list the same payments (QA-04). */
+const INVOICE_EVENTS = new Set(["payment_confirmed", "payment_failed"]);
+
 /**
  * What's happened with the customer, newest first: anything recorded about
- * them or any of their plans (the offer, opening the link, picking a plan,
- * the Direct Debit, payments, pauses, cancelling and why, and admin
- * actions), with each cancellation request's retention offer and choice.
+ * them or any of their plans (the offer, picking a plan, the Direct Debit,
+ * pauses, cancelling and why, and admin actions), with each cancellation
+ * request's retention offer and choice. Payments are the invoices the payment
+ * history shows, from the same source with the same £0 rule (the app records
+ * only the first as an event). Opening the link, the plan starting, a failed
+ * payment recovered and the plan ending come from the plan itself where no
+ * event says so (QA-04).
  */
 export async function customerActivity(id: string, q: { page: number; size: number }) {
   const plans = await prisma.plan.findMany({
     where: { customerId: id },
-    select: { id: true, cancellations: { select: { id: true, reason: true, offer: true, outcome: true, source: true, createdAt: true, resolvedAt: true } } },
+    select: {
+      id: true,
+      stripeSubscriptionId: true,
+      linkOpenedAt: true,
+      activatedAt: true,
+      paymentRecoveredAt: true,
+      cancelledAt: true,
+      cancellations: { select: { id: true, reason: true, offer: true, outcome: true, source: true, createdAt: true, resolvedAt: true } },
+    },
   });
   const where = {
     OR: [
@@ -413,19 +429,53 @@ export async function customerActivity(id: string, q: { page: number; size: numb
       ...plans.map((p) => ({ meta: { path: ["planId"], equals: p.id } })),
     ],
   } satisfies Prisma.EventWhereInput;
-  const events = await prisma.event.findMany({ where, orderBy: { ts: "desc" }, take: 500 });
+  const [events, invoices] = await Promise.all([
+    prisma.event.findMany({ where, orderBy: { ts: "desc" }, take: 500 }),
+    customerPayments(plans.map((p) => p.stripeSubscriptionId).filter((s): s is string => !!s)),
+  ]);
+  const detail = (d: Partial<{ channel: string | null; reason: string | null; amountPence: number | null; offer: string | null; outcome: string | null }> = {}) => ({
+    channel: null,
+    reason: null,
+    amountPence: null,
+    offer: null,
+    outcome: null,
+    ...d,
+  });
+  const recorded = new Set(events.map((ev) => `${ev.name}:${(ev.meta as { planId?: unknown } | null)?.planId ?? ""}`));
   const items = [
-    ...events.map((ev) => {
-      const meta = (ev.meta ?? {}) as Record<string, unknown>;
-      const str = (k: string) => (typeof meta[k] === "string" ? (meta[k] as string) : null);
-      return {
-        id: ev.id,
-        name: ev.name,
-        at: ev.ts,
-        actor: { type: ev.actorType, id: ev.actorId, name: str("adminName") },
-        detail: { channel: str("channel"), reason: str("reason"), amountPence: typeof meta.amountPence === "number" ? meta.amountPence : null, offer: null as string | null, outcome: null as string | null },
-      };
-    }),
+    ...events
+      .filter((ev) => !INVOICE_EVENTS.has(ev.name))
+      .map((ev) => {
+        const meta = (ev.meta ?? {}) as Record<string, unknown>;
+        const str = (k: string) => (typeof meta[k] === "string" ? (meta[k] as string) : null);
+        return {
+          id: ev.id,
+          name: ev.name,
+          at: ev.ts,
+          actor: { type: ev.actorType, id: ev.actorId, name: str("adminName") },
+          detail: detail({ channel: str("channel"), reason: str("reason"), amountPence: typeof meta.amountPence === "number" ? meta.amountPence : null }),
+        };
+      }),
+    ...(HIDE_ZERO_INVOICES ? invoices.filter((i) => i.amountPence > 0) : invoices).map((i) => ({
+      id: `invoice:${i.id}`,
+      name: i.status === "paid" ? "payment_confirmed" : "payment_failed",
+      at: new Date(i.at),
+      actor: { type: "SYSTEM" as const, id: null, name: null },
+      detail: detail({ amountPence: i.amountPence }),
+    })),
+    // What the plan's own dates show, where the app didn't record an event for it.
+    ...plans.flatMap((p) =>
+      (
+        [
+          ["signup_opened", p.linkOpenedAt, "CUSTOMER"],
+          ["plan_live", p.activatedAt, "SYSTEM"],
+          ["payment_recovered", p.paymentRecoveredAt, "SYSTEM"],
+          ["plan_cancelled", p.cancelledAt, "SYSTEM"],
+        ] as const
+      )
+        .filter(([name, at]) => at && !recorded.has(`${name}:${p.id}`))
+        .map(([name, at, type]) => ({ id: `plan:${p.id}:${name}`, name, at: at!, actor: { type, id: null, name: null }, detail: detail() })),
+    ),
     // The retention screen: what they were offered and what they chose.
     ...plans.flatMap((p) =>
       p.cancellations.map((x) => ({
@@ -433,7 +483,7 @@ export async function customerActivity(id: string, q: { page: number; size: numb
         name: "cancel_requested",
         at: x.createdAt,
         actor: { type: x.source === "engineer_logged" ? ("ENGINEER" as const) : ("CUSTOMER" as const), id: null, name: null },
-        detail: { channel: null, reason: x.reason, amountPence: null, offer: x.offer, outcome: x.outcome },
+        detail: detail({ reason: x.reason, offer: x.offer, outcome: x.outcome }),
       })),
     ),
   ].sort((a, b) => b.at.getTime() - a.at.getTime());
@@ -461,7 +511,8 @@ export async function customerExists(id: string) {
  * Texts a customer whose plan has ended a link to rejoin it: the app's own
  * win-back message, with the engineer's win-back offer, from the engineer's
  * name. lib/sms.ts adds the STOP line, honours opt-outs and holds it until
- * 08:00 if it's late. Recorded either way.
+ * 08:00 if it's late. Says what happened: sent, queued for the morning, or
+ * not sent and why (QA-05). Recorded either way.
  */
 export async function sendWinBack(admin: AdminPrincipal, id: string) {
   const c = await prisma.customer.findFirst({
@@ -482,7 +533,14 @@ export async function sendWinBack(admin: AdminPrincipal, id: string) {
   const body = winbackBody({ firstName: c.firstName, brand: brandName(c.engineer), offer: parseWinbackOffer(setting?.value), link: `${appUrl()}/rejoin/${token}`, winter: false });
   const result = await sendSms({ engineerId: c.engineerId, to: c.phone, body, messageClass: "MARKETING", consentBasis: "marketing", cancelKey: `winback:admin:${plan.id}` });
   if ("reason" in result && result.reason === "opted-out") throw conflict("They've opted out of texts.");
-  const status = result.sent ? ("sent" as const) : ("queued" as const);
-  await adminEvent(admin, "customer_win_back_sent", { customerId: id, planId: plan.id, engineerId: c.engineerId, status });
-  return { status };
+  const status = !result.sent ? ("queued" as const) : result.delivered ? ("sent" as const) : ("not_sent" as const);
+  const notSent: NotSent | null = status === "not_sent" ? (smsConfigured() ? "refused" : "not_configured") : null;
+  await adminEvent(admin, status === "not_sent" ? "customer_win_back_failed" : "customer_win_back_sent", {
+    customerId: id,
+    planId: plan.id,
+    engineerId: c.engineerId,
+    status,
+    ...(notSent ? { notSent } : {}),
+  });
+  return { status, notSent };
 }

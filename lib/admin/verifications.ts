@@ -9,8 +9,8 @@ import { matchPersonName, type NameMatch } from "@/lib/admin/names";
 import { businessTypeMismatch, companyProfile, searchCompanies } from "@/lib/admin/companies";
 import { maskEmail, maskPhone } from "@/lib/admin/mask";
 import { displayName } from "@/lib/engineer";
-import { notifyEngineer } from "@/lib/sms";
-import { sendEmail } from "@/lib/email";
+import { notifyEngineer, smsConfigured } from "@/lib/sms";
+import { emailConfigured, sendEmail } from "@/lib/email";
 import { escapeHtml } from "@/lib/email-layout";
 import { sendPushNotification } from "@/lib/push";
 import { standingState } from "@/lib/verification-state";
@@ -18,6 +18,7 @@ import { adminEvent } from "@/lib/admin-api/audit";
 import { likeTerm } from "@/lib/admin-api/db";
 import { AdminApiError, conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
+import { formatUkDate, ukDay } from "@/lib/admin/time";
 
 // The Gas Safe verification queue for the admin API: the same queue, rules
 // and messages as app/admin/verifications (29 Sept review — verification is
@@ -33,6 +34,33 @@ import type { AdminPrincipal } from "@/lib/admin-api/token";
 export type VerificationTab = "new" | "duplicates" | "pending" | "verified" | "rejected" | "decided";
 
 const live = { deletedAt: null } satisfies Prisma.EngineerWhereInput;
+
+/** A date-only column (the card's expiry) as YYYY-MM-DD. */
+export const dateOnly = (d: Date | null) => d?.toISOString().slice(0, 10) ?? null;
+
+/** The qualifications an engineer confirmed holding (to sell plan options that need them), with each option's name. */
+export function qualificationsOf(raw: unknown) {
+  return Object.entries(confirmedQualifications(raw)).map(([code, at]) => ({
+    code,
+    title: CLAUSE_TEMPLATES.find((c) => c.code === code)?.title ?? code,
+    confirmedAt: at,
+  }));
+}
+
+/** A verified engineer is checked against the Gas Safe register again within this many months. */
+export const REGISTER_RECHECK_MONTHS = 12;
+
+/**
+ * When an engineer is next due a register check: REGISTER_RECHECK_MONTHS
+ * after they were verified, or when their ID card expires if that's sooner.
+ * A default until the client says otherwise.
+ */
+export function nextRegisterCheck(verifiedAt: Date | null, cardExpiresOn: Date | null): Date | null {
+  if (!verifiedAt) return null;
+  const due = new Date(verifiedAt);
+  due.setUTCMonth(due.getUTCMonth() + REGISTER_RECHECK_MONTHS);
+  return cardExpiresOn && cardExpiresOn < due ? cardExpiresOn : due;
+}
 
 const TAB_WHERE: Record<"pending" | "verified" | "rejected" | "decided", Prisma.EngineerWhereInput> = {
   pending: { ...live, gasSafeNo: { not: null }, gasSafeVerifiedAt: null, gasSafeRejectedAt: null },
@@ -69,11 +97,13 @@ const ROW_SELECT = {
   gasSafeNo: true,
   gasSafeCategories: true,
   gasSafeCardUrl: true,
+  gasSafeCardExpiresOn: true,
   gasSafeReviewRequestedAt: true,
   gasSafeVerifiedAt: true,
   gasSafeRejectedAt: true,
   gasSafeRejectReason: true,
   qualificationConfirmations: true,
+  setupTextConsentAt: true,
   ownerId: true,
   createdAt: true,
 } satisfies Prisma.EngineerSelect;
@@ -168,12 +198,22 @@ async function registerRecords(rows: Row[]) {
 
 const REGISTER_RESULT: Record<NameMatch, "match" | "likely_match" | "name_mismatch"> = { match: "match", likely: "likely_match", none: "name_mismatch" };
 
-function registerCheck(row: Row, records: Map<string, { name: string; company: string; categories: string }>) {
+type RegisterRecord = { name: string; company: string; categories: string; address: string | null; postcode: string | null; cardExpiresOn: Date | null };
+
+/** The register's record for the applicant's number, with the address and card expiry when the imported file had them (QA-07). */
+function registerCheck(row: Row, records: Map<string, RegisterRecord>) {
   const record = row.gasSafeNo ? records.get(row.gasSafeNo) : undefined;
   if (!record) return { result: "not_found" as const, record: null };
   return {
     result: REGISTER_RESULT[matchPersonName(record.name, row.firstName, row.lastName)],
-    record: { name: record.name, company: record.company, categories: record.categories },
+    record: {
+      name: record.name,
+      company: record.company,
+      categories: record.categories,
+      address: record.address,
+      postcode: record.postcode,
+      cardExpiry: dateOnly(record.cardExpiresOn),
+    },
   };
 }
 
@@ -312,6 +352,7 @@ export async function listVerifications(q: {
     businessType: r.businessType,
     gasSafeNo: r.gasSafeNo,
     town: r.town,
+    cardExpiry: dateOnly(r.gasSafeCardExpiresOn),
     submittedAt: r.createdAt.toISOString(),
     waitingSince: since.get(r.id)!.toISOString(),
     status: verificationStatus(r),
@@ -417,10 +458,12 @@ export async function getVerification(engineerId: string, opts: { withContact?: 
       registerUrl: "https://www.gassaferegister.co.uk/",
       copy,
     },
-    /** What the engineer gave, to set beside the register. The card's expiry isn't asked for at sign-up. */
-    submitted: { name: personName(row), business: displayName(row), categories: row.gasSafeCategories, postcode: row.postcode, town: row.town, cardExpiry: null },
+    /** What the engineer gave, to set beside the register. The card's expiry is null until they give it with the photo. */
+    submitted: { name: personName(row), business: displayName(row), categories: row.gasSafeCategories, postcode: row.postcode, town: row.town, cardExpiry: dateOnly(row.gasSafeCardExpiresOn) },
     /** Masked, for admins who may see contact details (the full value comes from the audited reveal). */
     contact: opts.withContact ? { email: maskEmail(row.email), phone: row.phone ? maskPhone(row.phone) : null } : null,
+    /** A chase can go by text: they have a mobile and agreed to texts about finishing setting up. */
+    canTextChase: Boolean(row.phone && row.setupTextConsentAt),
     card: { available: Boolean(row.gasSafeCardUrl) },
     company:
       row.businessType === "ltd" || row.companyNumber
@@ -438,11 +481,7 @@ export async function getVerification(engineerId: string, opts: { withContact?: 
         : null,
     /** 3.4: the business's name and type disagree, and what Companies House has under that name. */
     typeMismatch: typeMismatch ? { kind: typeMismatch, search } : null,
-    qualifications: Object.entries(confirmedQualifications(row.qualificationConfirmations)).map(([code, at]) => ({
-      code,
-      title: CLAUSE_TEMPLATES.find((c) => c.code === code)?.title ?? code,
-      confirmedAt: at,
-    })),
+    qualifications: qualificationsOf(row.qualificationConfirmations),
     duplicates: duplicates.get(row.id)!,
     decision: decision ?? (status === "verified" || status === "rejected" ? { outcome: status, at: (row.gasSafeVerifiedAt ?? row.gasSafeRejectedAt)!.toISOString(), byName: null, reason: row.gasSafeRejectReason } : null),
     queue,
@@ -459,6 +498,7 @@ export function caseWarnings(d: {
   duplicates: unknown[];
   gasSafe: { register: "match" | "likely_match" | "name_mismatch" | "not_found"; mismatchAtSignup: boolean };
   card: { available: boolean };
+  submitted: { cardExpiry: string | null };
   company: { status: string | null; officers: { match: NameMatch }[] | null } | null;
   typeMismatch: { kind: "name_says_company" | "type_says_company" } | null;
 }): CaseWarning[] {
@@ -469,6 +509,9 @@ export function caseWarnings(d: {
   if (d.gasSafe.register === "likely_match") w.push({ code: "register_name_likely", message: "The name on the Gas Safe register is only a likely match." });
   if (d.gasSafe.mismatchAtSignup) w.push({ code: "mismatch_at_signup", message: "Their number didn't match the register when they signed up." });
   if (!d.card.available) w.push({ code: "no_card", message: "There's no photo of their Gas Safe ID card." });
+  if (d.submitted.cardExpiry && d.submitted.cardExpiry < ukDay(new Date())) {
+    w.push({ code: "card_expired", message: `Their Gas Safe ID card expired on ${formatUkDate(new Date(`${d.submitted.cardExpiry}T12:00:00Z`))}.` });
+  }
   if (d.company?.status && d.company.status !== "active") w.push({ code: "company_not_active", message: `The company is ${d.company.status} at Companies House.` });
   const officers = d.company?.officers;
   if (officers?.length && !officers.some((o) => o.match === "match")) {
@@ -485,10 +528,12 @@ export function caseWarnings(d: {
 
 // --- Deciding ---------------------------------------------------------------
 
-async function emailEngineer(engineerId: string, subject: string, html: string) {
+/** Whether it went: false with no email on the account, or when email isn't set up here (the dev driver only prints it). Throws if the provider refused it. */
+async function emailEngineer(engineerId: string, subject: string, html: string): Promise<boolean> {
   const engineer = await prisma.engineer.findUnique({ where: { id: engineerId }, select: { email: true, firstName: true } });
-  if (!engineer?.email) return;
+  if (!engineer?.email) return false;
   await sendEmail({ to: engineer.email, subject, html: `<p>Hi ${escapeHtml(engineer.firstName ?? "there")},</p>${html}` });
+  return emailConfigured();
 }
 
 /** Push, text and email, as app/admin/verifications sends them. A failed send never undoes the decision. */
@@ -516,7 +561,7 @@ async function tellEngineer(engineerId: string, approved: boolean, reason: strin
       ];
   for (const send of sends) {
     try {
-      await withTimeout(send(), NOTICE_TIMEOUT_MS);
+      await withTimeout<unknown>(send(), NOTICE_TIMEOUT_MS);
     } catch (err) {
       console.error("[admin-api] verification notice failed:", err);
     }
@@ -652,20 +697,34 @@ const CHASE_TEXT: Record<ChaseWhat, { sms: string; subject: string; html: string
   },
 };
 
+/** Why a chase didn't go: text or email isn't set up on this server, or the provider refused it. */
+export type NotSent = "not_configured" | "refused";
+
 /**
  * Asks a waiting applicant for what's missing, by text (from TradeSura's own
- * number) or email. Only while the application is waiting; recorded.
+ * number) or email. Only while the application is waiting. Says whether it
+ * actually went (QA-05), and records it either way: verification_chased when
+ * it went, verification_chase_failed when it didn't.
  */
 export async function chaseApplicant(admin: AdminPrincipal, engineerId: string, input: { what: ChaseWhat; channel: "sms" | "email" }) {
-  const row = await prisma.engineer.findFirst({ where: { id: engineerId, ...live }, select: { gasSafeNo: true, gasSafeVerifiedAt: true, gasSafeRejectedAt: true, phone: true, email: true } });
+  const row = await prisma.engineer.findFirst({ where: { id: engineerId, ...live }, select: { gasSafeNo: true, gasSafeVerifiedAt: true, gasSafeRejectedAt: true, phone: true, email: true, setupTextConsentAt: true } });
   if (!row) throw notFound("There's no engineer with that ID.");
   if (verificationStatus(row) !== "pending") throw conflict("This application isn't waiting for a check.");
   if (input.channel === "sms" && !row.phone) throw conflict("There's no mobile number on this account.");
+  // A chase is a setup text, which they have to have agreed to; email needs no opt-in.
+  if (input.channel === "sms" && !row.setupTextConsentAt) throw conflict("They haven't agreed to texts about finishing setting up. Email them instead.");
   const text = CHASE_TEXT[input.what];
-  if (input.channel === "sms") await notifyEngineer(engineerId, text.sms);
-  else await emailEngineer(engineerId, text.subject, text.html);
-  await adminEvent(admin, "verification_chased", { engineerId, what: input.what, channel: input.channel });
-  return { chased: true, channel: input.channel };
+  let sent: boolean;
+  try {
+    sent = input.channel === "sms" ? await notifyEngineer(engineerId, text.sms) : await emailEngineer(engineerId, text.subject, text.html);
+  } catch (err) {
+    console.error("[admin-api] chase failed:", err);
+    sent = false;
+  }
+  const configured = input.channel === "sms" ? smsConfigured() : emailConfigured();
+  const notSent: NotSent | null = sent ? null : configured ? "refused" : "not_configured";
+  await adminEvent(admin, sent ? "verification_chased" : "verification_chase_failed", { engineerId, what: input.what, channel: input.channel, ...(notSent ? { notSent } : {}) });
+  return { chased: sent, channel: input.channel, notSent };
 }
 
 // --- The ID card photo ------------------------------------------------------

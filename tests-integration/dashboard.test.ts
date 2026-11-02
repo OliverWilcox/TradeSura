@@ -7,6 +7,7 @@ import { GET as moneyRoute } from "@/app/api/admin/v1/dashboard/money/route";
 import { GET as healthRoute } from "@/app/api/admin/v1/dashboard/health/route";
 import { GET as coreRoute } from "@/app/api/admin/v1/dashboard/core/route";
 import { GET as waitingRoute } from "@/app/api/admin/v1/dashboard/waiting/route";
+import { GET as engineersRoute } from "@/app/api/admin/v1/engineers/route";
 import { call, CHECKER, resetDb } from "./helpers";
 import { makeCustomer, makeEngineer, makePlan } from "./factories";
 
@@ -68,6 +69,30 @@ describe("dashboard headline numbers", () => {
     });
   });
 
+  it("count active engineers over the same 7 × 24 hours as the Engineers list when the range runs to today (QA-03)", async () => {
+    const now = Date.now();
+    const day = 86_400_000;
+    const offer = async (data: Parameters<typeof makeEngineer>[0], ago: number) => {
+      const e = await makeEngineer({ gasSafeVerifiedAt: new Date(now - 60 * day), ...data });
+      const p = await makePlan(e.id, (await makeCustomer(e.id)).id, { createdAt: new Date(now - ago) });
+      await prisma.event.create({ data: { name: "offer_sent", actorType: "ENGINEER", actorId: e.id, ts: new Date(now - ago), meta: { planId: p.id, channel: "sms" } } });
+      return e;
+    };
+    // Inside the last 7 × 24 hours, though before the range's end less 7 days (the end is still to come).
+    const recent = await offer({}, 6.5 * day);
+    await offer({}, 7.5 * day); // too long ago
+    await offer({ pausedAt: new Date(now - 2 * day) }, day); // paused: not in good standing
+    await offer({ bannedAt: new Date(now - 2 * day) }, day);
+
+    // "Last 30 days" ends at midnight tonight, UK time: later than now.
+    const range = { from: new Date(now - 30 * day).toISOString(), to: new Date(now + 12 * 3_600_000).toISOString() };
+    const card = (await call(statsRoute, { query: range })).body.active;
+    const list = (await call(engineersRoute, { query: { status: "active" } })).body;
+    expect(card).toBe(1);
+    expect(list.total).toBe(card);
+    expect(list.items[0].id).toBe(recent.id);
+  });
+
   it("count a customer only once their mandate is set up, as the Prisma query did", async () => {
     const e = await makeEngineer({ gasSafeVerifiedAt: new Date("2026-06-01") });
     const [c1, c2, c3] = [await makeCustomer(e.id), await makeCustomer(e.id), await makeCustomer(e.id)];
@@ -116,6 +141,29 @@ describe("the activation funnel", () => {
     expect(steps[1]).toMatchObject({ ofStart: 0.5, fromPrevious: 0.5, medianDaysFromPrevious: 1 });
     expect(steps[2].medianDaysFromPrevious).toBe(2);
     expect(steps[4].medianDaysFromPrevious).toBe(10);
+    expect(steps.map((s: { medianOf: number }) => s.medianOf)).toEqual([0, 1, 1, 1, 1]);
+  });
+
+  it("counts a step done early as reached with the step before, 0 days later (QA-09)", async () => {
+    // Payments set up on 3 July, before their first plan went live on 6 July.
+    const early = await makeEngineer({ createdAt: new Date("2026-07-01T09:00:00Z"), gasSafeVerifiedAt: new Date("2026-07-02T09:00:00Z"), stripeChargesEnabled: true });
+    const inOrder = await makeEngineer({ createdAt: new Date("2026-07-01T10:00:00Z"), gasSafeVerifiedAt: new Date("2026-07-02T10:00:00Z"), stripeChargesEnabled: true });
+    // Payments set up, but Stripe's date wasn't recorded.
+    const undated = await makeEngineer({ createdAt: new Date("2026-07-01T11:00:00Z"), gasSafeVerifiedAt: new Date("2026-07-02T11:00:00Z"), stripeChargesEnabled: true });
+    await prisma.event.createMany({
+      data: [
+        { name: "stripe_onboarded", actorType: "ENGINEER", actorId: early.id, ts: new Date("2026-07-03T09:00:00Z") },
+        { name: "plan_live", actorType: "ENGINEER", actorId: early.id, ts: new Date("2026-07-06T09:00:00Z"), meta: {} },
+        { name: "plan_live", actorType: "ENGINEER", actorId: inOrder.id, ts: new Date("2026-07-04T10:00:00Z"), meta: {} },
+        { name: "stripe_onboarded", actorType: "ENGINEER", actorId: inOrder.id, ts: new Date("2026-07-08T10:00:00Z") },
+        { name: "plan_live", actorType: "ENGINEER", actorId: undated.id, ts: new Date("2026-07-04T11:00:00Z"), meta: {} },
+      ],
+    });
+
+    const steps = (await call(funnelRoute, { query: JULY })).body;
+    const payments = steps.find((s: { key: string }) => s.key === "payments_set_up");
+    // 0 days (early) and 4 days (in order): median 2, from 2 of the 3.
+    expect(payments).toMatchObject({ count: 3, medianDaysFromPrevious: 2, medianOf: 2 });
   });
 });
 

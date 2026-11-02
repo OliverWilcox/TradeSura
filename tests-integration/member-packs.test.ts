@@ -8,7 +8,7 @@ import { makeEngineer } from "./factories";
 // Posting a pack tells the engineer; nothing is really sent here.
 const sent = vi.hoisted(() => ({ push: vi.fn(), email: vi.fn() }));
 vi.mock("@/lib/push", () => ({ sendPushNotification: sent.push }));
-vi.mock("@/lib/email", () => ({ sendEmail: sent.email }));
+vi.mock("@/lib/email", () => ({ sendEmail: sent.email, emailConfigured: () => true }));
 
 beforeEach(async () => {
   vi.clearAllMocks();
