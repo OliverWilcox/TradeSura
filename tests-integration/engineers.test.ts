@@ -30,7 +30,8 @@ describe("the engineer list", () => {
     const res = await call(list);
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
-    expect(res.body.items[0]).toMatchObject({ id: e.id, plansLive: 1, customers: 2, status: "active", verification: "pending" });
+    // No offer sent, so not active, though the account is in good standing.
+    expect(res.body.items[0]).toMatchObject({ id: e.id, plansLive: 1, customers: 2, status: "inactive", isTest: false, verification: "pending" });
     expect(res.body.items[0].lastOfferAt).not.toBeNull();
   });
 
@@ -57,17 +58,19 @@ describe("the engineer list", () => {
   });
 
   it("filters by how far through getting started they are, and by town", async () => {
-    const justJoined = await makeEngineer({ town: "Leeds" });
-    const paymentsReady = await makeEngineer({ stripeChargesEnabled: true, town: "Huddersfield" });
-    const planLive = await makeEngineer({ stripeChargesEnabled: true });
+    const verifiedAt = new Date("2026-10-01");
+    const justJoined = await makeEngineer({ town: "Leeds", stripeChargesEnabled: true }); // payments set up, but not verified: still at the first step
+    const verified = await makeEngineer({ gasSafeVerifiedAt: verifiedAt, town: "Huddersfield" });
+    const planLive = await makeEngineer({ gasSafeVerifiedAt: verifiedAt });
     await prisma.planTier.create({ data: { engineerId: planLive.id, name: "Care", priceMonthlyPence: 1500, sortOrder: 0, status: "LIVE" } });
-    const paid = await makeEngineer({ stripeChargesEnabled: true });
+    const paid = await makeEngineer({ gasSafeVerifiedAt: verifiedAt, stripeChargesEnabled: true });
     await prisma.planTier.create({ data: { engineerId: paid.id, name: "Care", priceMonthlyPence: 1500, sortOrder: 0, status: "LIVE" } });
-    await makePlan(paid.id, (await makeCustomer(paid.id)).id, { paymentsCleared: 2 });
+    await makePlan(paid.id, (await makeCustomer(paid.id)).id, { stripeSubscriptionId: "sub_paid" });
+    await prisma.stripeWebhookEvent.create({ data: { id: "evt_paid", type: "invoice.paid", payload: { data: { object: { id: "in_paid", amount_paid: 1500, subscription: "sub_paid" } } } } });
     expect(ids(await call(list, { query: { step: "signed_up" } }))).toEqual([justJoined.id]);
-    expect(ids(await call(list, { query: { step: "payments" } }))).toEqual([paymentsReady.id]);
-    expect(ids(await call(list, { query: { step: "plan" } }))).toEqual([planLive.id]);
-    expect(ids(await call(list, { query: { step: "payout" } }))).toEqual([paid.id]);
+    expect(ids(await call(list, { query: { step: "verified" } }))).toEqual([verified.id]);
+    expect(ids(await call(list, { query: { step: "plan_live" } }))).toEqual([planLive.id]);
+    expect(ids(await call(list, { query: { step: "first_payment" } }))).toEqual([paid.id]);
     expect(ids(await call(list, { query: { town: "leeds" } }))).toEqual([justJoined.id]);
     const options = await call(filterOptions);
     expect(options.body.towns).toEqual(["Huddersfield", "Leeds"]);
@@ -92,7 +95,7 @@ describe("one engineer", () => {
     await prisma.planTier.create({ data: { engineerId: e.id, name: "Boiler care", priceMonthlyPence: 2000, sortOrder: 0, status: "LIVE" } });
     const res = await call(detail, { params: { engineerId: e.id } });
     expect(res.status).toBe(200);
-    expect(res.body.contact).toEqual({ email: "d•••@hartley.example", phone: "•••• 123", revealed: false });
+    expect(res.body.contact).toEqual({ email: "d•••@hartley.example", phone: "•••• 123", revealed: false, phoneVerifiedAt: null, setupTextConsentAt: null, marketingConsent: false });
     expect(res.body.money).toEqual({ monthlyPlanValuePence: 2000, tradesuraFeePence: 400 });
     expect(res.body.activation).toMatchObject({ paymentsReady: true, planLive: true, firstCustomer: true });
     expect(res.body.counts.plans).toEqual({ ACTIVE: 1, PENDING: 0, PAUSED: 0, CANCELLED: 0 });
@@ -120,7 +123,55 @@ describe("one engineer", () => {
     expect(res.body.referrals).toMatchObject({ code: e.slug, earnedPence: 150, paidPence: 75, owedPence: 75, people: [{ id: invitee.id, business: "Invited Heating", earnedPence: 150, currentRatePercent: 25 }] });
     expect(res.body.payouts).toEqual([{ id: "po_1", paidOn: "2026-10-24", amountPence: 4321, status: "paid" }]);
     expect(res.body.lifetimePayoutsPence).toBe(4321);
-    expect(res.body.milestones).toMatchObject({ firstPlanLiveAt: "2026-10-03T09:00:00.000Z", firstPayoutAt: expect.any(String) });
+    expect(res.body.steps.find((s: { key: string }) => s.key === "plan_live")).toEqual({ key: "plan_live", label: "First plan live", reached: true, at: "2026-10-03T09:00:00.000Z" });
+  });
+
+  // 4.2: Activation and the Payments panel both read the Stripe account.
+  it("says payments are set up when Stripe says the account can take them, event or not", async () => {
+    const e = await makeEngineer({ stripeAccountId: "acct_1", stripeChargesEnabled: true, stripePayoutsEnabled: true });
+    const res = await call(detail, { params: { engineerId: e.id } });
+    expect(res.body.payments).toMatchObject({ chargesEnabled: true, payoutsEnabled: true });
+    expect(res.body.steps.find((s: { key: string }) => s.key === "payments_set_up")).toMatchObject({ reached: true });
+    expect(res.body.activation.paymentsReady).toBe(true);
+  });
+
+  // 2.2: one definition of active, in the list, on the record and on the dashboard.
+  it("is active only with a delivered offer in the last 7 days", async () => {
+    const recent = await makeEngineer();
+    const whatsappOnly = await makeEngineer();
+    const old = await makeEngineer();
+    const offer = async (engineerId: string, channel: string, daysAgo: number) => {
+      const c = await makeCustomer(engineerId);
+      const plan = await makePlan(engineerId, c.id, { status: "PENDING", activatedAt: null });
+      await prisma.event.create({ data: { name: "offer_sent", actorType: "ENGINEER", actorId: engineerId, ts: new Date(Date.now() - daysAgo * 86_400_000), meta: { planId: plan.id, channel } } });
+    };
+    await offer(recent.id, "sms", 2);
+    await offer(whatsappOnly.id, "whatsapp", 1); // never opened: not confirmed
+    await offer(old.id, "sms", 9);
+    const status = Object.fromEntries((await call(list)).body.items.map((i: { id: string; status: string }) => [i.id, i.status]));
+    expect(status).toEqual({ [recent.id]: "active", [whatsappOnly.id]: "inactive", [old.id]: "inactive" });
+    expect(ids(await call(list, { query: { status: "active" } }))).toEqual([recent.id]);
+    expect((await call(detail, { params: { engineerId: old.id } })).body.status).toBe("inactive");
+  });
+
+  it("shows each address on its own, and why customers cancelled", async () => {
+    const e = await makeEngineer({ serviceArea: "Holmfirth, Huddersfield, HD9", postcode: "E16 1YL", packAddress: "Unit 2\nHolmfirth\nHD9 2TT", town: "Huddersfield" });
+    for (const reason of ["moving", "moving", "too_expensive"]) {
+      const plan = await makePlan(e.id, (await makeCustomer(e.id)).id, { status: "CANCELLED", cancelledAt: new Date() });
+      await prisma.cancelRequest.create({ data: { planId: plan.id, engineerId: e.id, reason, outcome: "cancelled" } });
+    }
+    const res = await call(detail, { params: { engineerId: e.id } });
+    expect(res.body.addresses).toEqual({
+      areasCovered: ["Holmfirth", "Huddersfield", "HD9"],
+      signupPostcode: "E16 1YL",
+      postal: "Unit 2\nHolmfirth\nHD9 2TT",
+      registeredOffice: null,
+      // Read from the pack address until it's saved as the trading address.
+      trading: { lines: ["Unit 2"], town: "Holmfirth", postcode: "HD9 2TT", source: null, updatedAt: null, updatedBy: null },
+      correspondence: { address: "Unit 2\nHolmfirth\nHD9 2TT", sameAsTrading: true },
+      tradingIsRegisteredOffice: false,
+    });
+    expect(res.body.cancelReasons).toEqual([{ reason: "moving", count: 2 }, { reason: "too_expensive", count: 1 }]);
   });
 
   it("reveals contact details only with permission, and records it", async () => {
@@ -147,7 +198,7 @@ describe("an engineer's standing", () => {
     expect((await call(pause, { params: { engineerId: e.id }, body: { reason: "Again" } })).status).toBe(409);
 
     const resumed = await call(resume, { params: { engineerId: e.id }, body: {} });
-    expect(resumed.body).toMatchObject({ status: "active", standing: "ACTIVE", pause: null });
+    expect(resumed.body).toMatchObject({ status: "inactive", standing: "ACTIVE", pause: null });
     const names = (await prisma.event.findMany({ where: { actorType: "ADMIN" }, orderBy: { ts: "asc" } })).map((ev) => ev.name);
     expect(names).toEqual(["engineer_paused", "engineer_resumed"]);
   });
@@ -165,7 +216,7 @@ describe("an engineer's standing", () => {
     const banned = await call(ban, { params: { engineerId: e.id }, body: { reason: "Fraudulent sign-ups" } });
     expect(banned.body).toMatchObject({ status: "banned", standing: "BANNED", ban: { reason: "Fraudulent sign-ups" } });
     const unbanned = await call(unban, { params: { engineerId: e.id }, body: { reason: "Appeal upheld" } });
-    expect(unbanned.body.status).toBe("active");
+    expect(unbanned.body.status).toBe("inactive"); // back in good standing; no offers sent
   });
 
   it("can have the website widget switched off and on", async () => {

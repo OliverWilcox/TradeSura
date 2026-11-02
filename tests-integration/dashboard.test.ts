@@ -7,6 +7,7 @@ import { GET as moneyRoute } from "@/app/api/admin/v1/dashboard/money/route";
 import { GET as healthRoute } from "@/app/api/admin/v1/dashboard/health/route";
 import { GET as coreRoute } from "@/app/api/admin/v1/dashboard/core/route";
 import { GET as waitingRoute } from "@/app/api/admin/v1/dashboard/waiting/route";
+import { GET as engineersRoute } from "@/app/api/admin/v1/engineers/route";
 import { call, CHECKER, resetDb } from "./helpers";
 import { makeCustomer, makeEngineer, makePlan } from "./factories";
 
@@ -36,7 +37,8 @@ describe("dashboard sign-ups", () => {
       { date: "2026-07-04", count: 0 },
       { date: "2026-07-05", count: 1 },
     ]);
-    expect(res.body.channels[0]).toEqual({ channel: "letter", count: 2, share: 0.5 });
+    // "Letter" without a claim code is their own answer, kept apart from letters we can trace.
+    expect(res.body.channels[0]).toEqual({ channel: "letter_unverified", count: 2, share: 0.5 });
     expect((await call(statsRoute, { query: JULY })).body.signups).toBe(4);
   });
 });
@@ -45,20 +47,50 @@ describe("dashboard headline numbers", () => {
   it("count offers, sign-ups from them, live plans, customers and active engineers", async () => {
     const e = await makeEngineer({ gasSafeVerifiedAt: new Date("2026-06-01") });
     const [c1, c2, c3] = [await makeCustomer(e.id), await makeCustomer(e.id), await makeCustomer(e.id)];
-    await makePlan(e.id, c1.id, { createdAt: new Date("2026-07-10"), activatedAt: new Date("2026-07-12"), mandateStatus: "active" });
-    await makePlan(e.id, c2.id, { createdAt: new Date("2026-07-20"), status: "PENDING", activatedAt: null });
+    const p1 = await makePlan(e.id, c1.id, { createdAt: new Date("2026-07-10"), activatedAt: new Date("2026-07-12"), mandateStatus: "active" });
+    const p2 = await makePlan(e.id, c2.id, { createdAt: new Date("2026-07-28"), status: "PENDING", activatedAt: null });
     await makePlan(e.id, c3.id, { createdAt: new Date("2026-05-01"), activatedAt: new Date("2026-05-02"), cancelledAt: new Date("2026-07-15"), status: "CANCELLED" });
     await makeEngineer({ gasSafeVerifiedAt: new Date("2026-06-01") }); // verified, sent nothing
+    await prisma.event.createMany({
+      data: [
+        { name: "offer_sent", actorType: "ENGINEER", actorId: e.id, ts: new Date("2026-07-10"), meta: { planId: p1.id, channel: "sms" } },
+        { name: "offer_sent", actorType: "ENGINEER", actorId: e.id, ts: new Date("2026-07-28"), meta: { planId: p2.id, channel: "sms" } },
+      ],
+    });
 
     const s = (await call(statsRoute, { query: JULY })).body;
     expect(s).toMatchObject({
-      offers: 2,
+      offers: { delivered: 2, failed: 0, unconfirmed: 0 },
       conversion: { sent: 2, converted: 1, rate: 0.5 },
       plansLive: 1, // c3's ended mid-July
       customers: 1,
-      active: 1,
-      verified: { inPeriod: 0, allTime: 2 },
+      active: 1, // the offer on 28 July is within 7 days of the end
+      verified: { ofSignups: 0, total: 2 },
     });
+  });
+
+  it("count active engineers over the same 7 × 24 hours as the Engineers list when the range runs to today (QA-03)", async () => {
+    const now = Date.now();
+    const day = 86_400_000;
+    const offer = async (data: Parameters<typeof makeEngineer>[0], ago: number) => {
+      const e = await makeEngineer({ gasSafeVerifiedAt: new Date(now - 60 * day), ...data });
+      const p = await makePlan(e.id, (await makeCustomer(e.id)).id, { createdAt: new Date(now - ago) });
+      await prisma.event.create({ data: { name: "offer_sent", actorType: "ENGINEER", actorId: e.id, ts: new Date(now - ago), meta: { planId: p.id, channel: "sms" } } });
+      return e;
+    };
+    // Inside the last 7 × 24 hours, though before the range's end less 7 days (the end is still to come).
+    const recent = await offer({}, 6.5 * day);
+    await offer({}, 7.5 * day); // too long ago
+    await offer({ pausedAt: new Date(now - 2 * day) }, day); // paused: not in good standing
+    await offer({ bannedAt: new Date(now - 2 * day) }, day);
+
+    // "Last 30 days" ends at midnight tonight, UK time: later than now.
+    const range = { from: new Date(now - 30 * day).toISOString(), to: new Date(now + 12 * 3_600_000).toISOString() };
+    const card = (await call(statsRoute, { query: range })).body.active;
+    const list = (await call(engineersRoute, { query: { status: "active" } })).body;
+    expect(card).toBe(1);
+    expect(list.total).toBe(card);
+    expect(list.items[0].id).toBe(recent.id);
   });
 
   it("count a customer only once their mandate is set up, as the Prisma query did", async () => {
@@ -84,36 +116,66 @@ describe("dashboard headline numbers", () => {
 
 describe("the activation funnel", () => {
   it("follows each new engineer through the steps", async () => {
-    const a = await makeEngineer({ createdAt: new Date("2026-07-01T09:00:00Z"), stripeChargesEnabled: true });
+    const a = await makeEngineer({ createdAt: new Date("2026-07-01T09:00:00Z"), gasSafeVerifiedAt: new Date("2026-07-02T09:00:00Z"), stripeChargesEnabled: true });
     await makeEngineer({ createdAt: new Date("2026-07-02T09:00:00Z") });
     await prisma.event.createMany({
       data: [
-        { name: "stripe_onboarded", actorType: "ENGINEER", actorId: a.id, ts: new Date("2026-07-03T09:00:00Z") },
         { name: "plan_live", actorType: "ENGINEER", actorId: a.id, ts: new Date("2026-07-04T09:00:00Z"), meta: { tierId: "t1" } },
+        { name: "stripe_onboarded", actorType: "ENGINEER", actorId: a.id, ts: new Date("2026-07-05T09:00:00Z") },
       ],
     });
     const c = await makeCustomer(a.id);
-    await makePlan(a.id, c.id, { createdAt: new Date("2026-07-05"), activatedAt: new Date("2026-07-08T09:00:00Z") });
+    await makePlan(a.id, c.id, { createdAt: new Date("2026-07-05"), activatedAt: new Date("2026-07-08T09:00:00Z"), stripeSubscriptionId: "sub_a" });
+    await prisma.stripeWebhookEvent.create({
+      data: { id: "evt_a", type: "invoice.paid", payload: { data: { object: { id: "in_a", amount_paid: 1500, subscription: "sub_a", status_transitions: { paid_at: Date.parse("2026-07-15T09:00:00Z") / 1000 } } } } },
+    });
 
     const steps = (await call(funnelRoute, { query: JULY })).body;
     expect(steps.map((s: { label: string; count: number }) => [s.label, s.count])).toEqual([
       ["Signed up", 2],
-      ["Payments set up", 1],
+      ["Verified", 1],
       ["First plan live", 1],
-      ["First customer", 1],
-      ["First payment", 0],
+      ["Payments set up", 1],
+      ["First payment", 1],
     ]);
-    expect(steps[1]).toMatchObject({ ofStart: 0.5, fromPrevious: 0.5, medianDaysFromPrevious: 2 });
-    expect(steps[3].medianDaysFromPrevious).toBe(4);
+    expect(steps[1]).toMatchObject({ ofStart: 0.5, fromPrevious: 0.5, medianDaysFromPrevious: 1 });
+    expect(steps[2].medianDaysFromPrevious).toBe(2);
+    expect(steps[4].medianDaysFromPrevious).toBe(10);
+    expect(steps.map((s: { medianOf: number }) => s.medianOf)).toEqual([0, 1, 1, 1, 1]);
+  });
+
+  it("counts a step done early as reached with the step before, 0 days later (QA-09)", async () => {
+    // Payments set up on 3 July, before their first plan went live on 6 July.
+    const early = await makeEngineer({ createdAt: new Date("2026-07-01T09:00:00Z"), gasSafeVerifiedAt: new Date("2026-07-02T09:00:00Z"), stripeChargesEnabled: true });
+    const inOrder = await makeEngineer({ createdAt: new Date("2026-07-01T10:00:00Z"), gasSafeVerifiedAt: new Date("2026-07-02T10:00:00Z"), stripeChargesEnabled: true });
+    // Payments set up, but Stripe's date wasn't recorded.
+    const undated = await makeEngineer({ createdAt: new Date("2026-07-01T11:00:00Z"), gasSafeVerifiedAt: new Date("2026-07-02T11:00:00Z"), stripeChargesEnabled: true });
+    await prisma.event.createMany({
+      data: [
+        { name: "stripe_onboarded", actorType: "ENGINEER", actorId: early.id, ts: new Date("2026-07-03T09:00:00Z") },
+        { name: "plan_live", actorType: "ENGINEER", actorId: early.id, ts: new Date("2026-07-06T09:00:00Z"), meta: {} },
+        { name: "plan_live", actorType: "ENGINEER", actorId: inOrder.id, ts: new Date("2026-07-04T10:00:00Z"), meta: {} },
+        { name: "stripe_onboarded", actorType: "ENGINEER", actorId: inOrder.id, ts: new Date("2026-07-08T10:00:00Z") },
+        { name: "plan_live", actorType: "ENGINEER", actorId: undated.id, ts: new Date("2026-07-04T11:00:00Z"), meta: {} },
+      ],
+    });
+
+    const steps = (await call(funnelRoute, { query: JULY })).body;
+    const payments = steps.find((s: { key: string }) => s.key === "payments_set_up");
+    // 0 days (early) and 4 days (in order): median 2, from 2 of the 3.
+    expect(payments).toMatchObject({ count: 3, medianDaysFromPrevious: 2, medianOf: 2 });
   });
 });
 
 describe("dashboard money", () => {
   it("adds up paid invoices from the Stripe events, by UK month", async () => {
+    const e = await makeEngineer();
+    const c = await makeCustomer(e.id);
+    await makePlan(e.id, c.id, { stripeSubscriptionId: "sub_1" });
     const paid = (id: string, at: string, amount: number, fee: number | null) => ({
       id,
       type: "invoice.paid",
-      payload: { data: { object: { amount_paid: amount, application_fee_amount: fee, status_transitions: { paid_at: Math.floor(new Date(at).getTime() / 1000) } } } },
+      payload: { data: { object: { amount_paid: amount, application_fee_amount: fee, subscription: "sub_1", status_transitions: { paid_at: Math.floor(new Date(at).getTime() / 1000) } } } },
     });
     await prisma.stripeWebhookEvent.createMany({
       data: [

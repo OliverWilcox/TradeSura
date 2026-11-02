@@ -1,34 +1,36 @@
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
-import { TRADESURA_FEE_RATE } from "@/lib/clauses";
 import { addDays, daysBetween, ukDay, ukMidnight, weekStart } from "@/lib/admin/time";
 import { bounded, shared } from "@/lib/admin-api/db";
+import {
+  ACTIVE_WINDOW_DAYS,
+  FUNNEL_STEPS,
+  activeEngineerIds,
+  funnelOf,
+  milestones,
+  offerCounts,
+  offers,
+  paymentTotals,
+  payments,
+  realPlanWhere,
+  testMarks,
+  verifiedEngineerCount,
+  type FunnelStep,
+  type Range,
+  type TestMarks,
+} from "@/lib/admin/metrics";
 
 // The admin dashboard's sections, from the live database, one function per
-// section so the admin app can stream them. Each follows the definition the
-// admin app shows beside it (its features/dashboard/definitions.ts), and
-// returns the same shape as the admin app's metric functions. Ranges are
-// instants: [from, to).
+// section so the admin app can stream them. Every count comes from
+// lib/admin/metrics.ts, so a card, the funnel and the lists say the same
+// thing for the same range: the admin app shows the definition beside each
+// (its features/dashboard/definitions.ts). Ranges are instants: [from, to).
 //
-// Collections come from the Stripe events the webhook stores
-// (StripeWebhookEvent, invoice.paid). Refunds and Direct Debit claims aren't
-// among the events it receives yet, so they count as nothing for now.
-//
-// The heavy sections (sign-ups by day, the funnel, money) run with a
-// statement timeout, and callers asking for the same range at the same time
-// share one run (lib/admin-api/db.ts).
+// The heavy sections (the funnel, money) run with a statement timeout, and
+// callers asking for the same range at the same time share one run
+// (lib/admin-api/db.ts).
 
-export type Range = { from: Date; to: Date };
-
-export const ACTIVE_WINDOW_DAYS = 30;
-const DAY_MS = 86_400_000;
-
-const median = (xs: number[]) => {
-  if (!xs.length) return null;
-  const s = [...xs].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-};
+export type { Range };
 
 /** Plans live at an instant: started before it and not ended by it. */
 function liveAt(at: Date) {
@@ -37,14 +39,15 @@ function liveAt(at: Date) {
 
 /**
  * Customers with a live plan at an instant (mandate not still pending), counted
- * in the database rather than loaded. Like the Prisma query this replaced, a
- * plan with no mandate status isn't counted (`<>` is never true for NULL).
+ * in the database rather than loaded. A plan with no mandate status isn't
+ * counted (`<>` is never true for NULL), as before.
  */
-async function customersOnPlans(at: Date): Promise<number> {
+async function customersOnPlans(at: Date, marks: TestMarks): Promise<number> {
   const [row] = await prisma.$queryRaw<{ n: bigint }[]>`
-    SELECT COUNT(DISTINCT "customerId") AS n FROM "Plan"
-    WHERE "activatedAt" < ${at} AND ("cancelledAt" IS NULL OR "cancelledAt" >= ${at})
-      AND "mandateStatus" <> 'pending'`;
+    SELECT COUNT(DISTINCT p."customerId") AS n FROM "Plan" p JOIN "Engineer" e ON e.id = p."engineerId"
+    WHERE p."activatedAt" < ${at} AND (p."cancelledAt" IS NULL OR p."cancelledAt" >= ${at})
+      AND p."mandateStatus" <> 'pending'
+      AND e."deletedAt" IS NULL AND NOT (p."engineerId" = ANY(${marks.engineers}::text[])) AND NOT (p."customerId" = ANY(${marks.customers}::text[]))`;
   return Number(row.n);
 }
 
@@ -52,189 +55,109 @@ async function customersOnPlans(at: Date): Promise<number> {
 
 export type WeekValue = { weekStart: string; offers: number; activeEngineers: number; value: number };
 
-/** Offers sent in a UK week ÷ verified engineers whose account was open at any point in it. */
-async function week(weekFrom: string, until?: Date): Promise<WeekValue> {
-  const start = ukMidnight(weekFrom);
-  const end = until ?? ukMidnight(addDays(weekFrom, 7));
-  const [offers, engineers] = await Promise.all([
-    prisma.plan.count({ where: { createdAt: { gte: start, lt: end } } }),
-    prisma.engineer.count({
-      where: {
-        ownerId: null,
-        gasSafeVerifiedAt: { lt: end },
-        AND: [{ OR: [{ deletedAt: null }, { deletedAt: { gte: start } }] }, { OR: [{ bannedAt: null }, { bannedAt: { gte: start } }] }],
-      },
-    }),
-  ]);
-  return { weekStart: weekFrom, offers, activeEngineers: engineers, value: engineers ? offers / engineers : 0 };
-}
-
+/** Delivered offers in each UK week ÷ verified engineers at the end of it (this week: so far, and now). */
 export async function core(now: Date, weeks = 12) {
+  const marks = await testMarks();
   const thisWeek = weekStart(ukDay(now));
-  const starts = Array.from({ length: weeks }, (_, i) => addDays(thisWeek, -7 * (weeks - i)));
-  const [trend, weekToDate] = await Promise.all([Promise.all(starts.map((w) => week(w))), week(thisWeek, now)]);
+  const starts = [...Array.from({ length: weeks }, (_, i) => addDays(thisWeek, -7 * (weeks - i))), thisWeek];
+  const ends = starts.map((w, i) => (i === weeks ? now : ukMidnight(addDays(w, 7))));
+  const [sent, engineers] = await Promise.all([
+    offers(marks, { from: ukMidnight(starts[0]), to: now }),
+    Promise.all(ends.map((end) => verifiedEngineerCount(marks, end))),
+  ]);
+  const delivered = sent.filter((o) => o.delivery === "delivered");
+  const values: WeekValue[] = starts.map((w, i) => {
+    const from = ukMidnight(w);
+    const n = delivered.filter((o) => o.sentAt >= from && o.sentAt < ends[i]).length;
+    return { weekStart: w, offers: n, activeEngineers: engineers[i], value: engineers[i] ? n / engineers[i] : 0 };
+  });
+  const trend = values.slice(0, weeks);
   const lastWeek = trend[trend.length - 1];
   const previousWeek = trend[trend.length - 2];
-  return { lastWeek, previousWeek, weekToDate, change: lastWeek.value - previousWeek.value, trend };
+  return { lastWeek, previousWeek, weekToDate: values[weeks], change: lastWeek.value - previousWeek.value, trend };
 }
 
 // --- Headline numbers ---------------------------------------------------------
 
-export async function stats({ from, to }: Range) {
-  const activeSince = new Date(to.getTime() - ACTIVE_WINDOW_DAYS * DAY_MS);
-  const [signups, verifiedInPeriod, verifiedAllTime, active, plansLive, customers, sent, converted] = await Promise.all([
-    prisma.engineer.count({ where: { ownerId: null, createdAt: { gte: from, lt: to } } }),
-    prisma.engineer.count({ where: { gasSafeVerifiedAt: { gte: from, lt: to } } }),
-    prisma.engineer.count({ where: { gasSafeVerifiedAt: { lt: to }, OR: [{ deletedAt: null }, { deletedAt: { gte: to } }] } }),
-    prisma.engineer.count({
-      where: {
-        ownerId: null,
-        deletedAt: null,
-        bannedAt: null,
-        pausedAt: null,
-        leftAt: null,
-        gasSafeVerifiedAt: { lt: to },
-        plans: { some: { createdAt: { gte: activeSince, lt: to } } },
-      },
-    }),
-    prisma.plan.count({ where: liveAt(to) }),
-    customersOnPlans(to),
-    prisma.plan.count({ where: { createdAt: { gte: from, lt: to } } }),
-    prisma.plan.count({ where: { createdAt: { gte: from, lt: to }, activatedAt: { not: null } } }),
+/**
+ * Sign-ups and verified are the funnel's first steps for the same engineers,
+ * so the cards and the funnel can't disagree; "verified in total" is the
+ * core number's divisor at the end of the range.
+ */
+export async function stats(range: Range) {
+  const marks = await testMarks();
+  const [cohort, verifiedTotal, active, plansLive, customers, sent] = await Promise.all([
+    milestones(marks, { signedUp: range }),
+    verifiedEngineerCount(marks, range.to),
+    activeEngineerIds(marks, range.to),
+    prisma.plan.count({ where: { ...liveAt(range.to), ...realPlanWhere(marks) } }),
+    customersOnPlans(range.to, marks),
+    offers(marks, range),
   ]);
+  const delivered = sent.filter((o) => o.delivery === "delivered");
+  const converted = delivered.length
+    ? await prisma.plan.count({ where: { id: { in: delivered.map((o) => o.planId) }, activatedAt: { not: null } } })
+    : 0;
   return {
-    signups,
-    verified: { inPeriod: verifiedInPeriod, allTime: verifiedAllTime },
-    active,
+    signups: cohort.size,
+    verified: { ofSignups: [...cohort.values()].filter((m) => m.verified.reached).length, total: verifiedTotal },
+    active: active.size,
+    activeWindowDays: ACTIVE_WINDOW_DAYS,
     plansLive,
     customers,
-    offers: sent,
-    conversion: { sent, converted, rate: sent ? converted / sent : 0 },
+    offers: offerCounts(sent),
+    conversion: { sent: delivered.length, converted, rate: delivered.length ? converted / delivered.length : 0 },
   };
 }
 
-// --- Sign-ups -----------------------------------------------------------------
+// --- Sign-ups -------------------------------------------------------------------
+
+/**
+ * How an engineer heard about TradeSura, as far as it can be trusted: a
+ * letter only when they redeemed a claim code from one (the answer "Letter"
+ * on its own is kept apart), and "not given" when there's no answer.
+ */
+const CHANNEL_SQL = Prisma.sql`CASE
+  WHEN cc.code IS NOT NULL THEN 'letter'
+  WHEN e.attribution->>'heardVia' = 'letter' THEN 'letter_unverified'
+  ELSE COALESCE(e.attribution->>'heardVia', 'not_given') END`;
 
 export async function signups({ from, to }: Range) {
-  const [days, channels] = await Promise.all([
-    bounded(prisma.$queryRaw<{ day: string; n: bigint }[]>`
-      SELECT to_char(("createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/London', 'YYYY-MM-DD') AS day, count(*) AS n
-      FROM "Engineer" WHERE "ownerId" IS NULL AND "createdAt" >= ${from} AND "createdAt" < ${to}
-      GROUP BY 1`),
-    bounded(prisma.$queryRaw<{ channel: string | null; n: bigint }[]>`
-      SELECT attribution->>'heardVia' AS channel, count(*) AS n
-      FROM "Engineer" WHERE "ownerId" IS NULL AND "createdAt" >= ${from} AND "createdAt" < ${to}
-      GROUP BY 1 ORDER BY 2 DESC, 1`),
-  ]);
-  const byDay = new Map(days.map((d) => [d.day, Number(d.n)]));
-  const total = channels.reduce((n, c) => n + Number(c.n), 0);
+  const marks = await testMarks();
+  // The same engineers as the Sign-ups card and the funnel.
+  const rows = await bounded(prisma.$queryRaw<{ createdAt: Date; channel: string }[]>`
+    SELECT e."createdAt", ${CHANNEL_SQL} AS channel
+    FROM "Engineer" e LEFT JOIN "ClaimCode" cc ON cc."redeemedByEngineerId" = e.id
+    WHERE e."ownerId" IS NULL AND e."deletedAt" IS NULL AND NOT (e.id = ANY(${marks.engineers}::text[]))
+      AND e."createdAt" >= ${from} AND e."createdAt" < ${to}`);
+  const byDay = new Map<string, number>();
+  const channels = new Map<string, number>();
+  for (const r of rows) {
+    const day = ukDay(r.createdAt);
+    byDay.set(day, (byDay.get(day) ?? 0) + 1);
+    channels.set(r.channel, (channels.get(r.channel) ?? 0) + 1);
+  }
   // Every UK day the range touches, from its first instant to its last.
   const lastDay = ukDay(new Date(to.getTime() - 1));
   return {
     byDay: daysBetween(ukDay(from), addDays(lastDay, 1)).map((date) => ({ date, count: byDay.get(date) ?? 0 })),
-    channels: channels.map((c) => ({ channel: c.channel ?? "other", count: Number(c.n), share: total ? Number(c.n) / total : 0 })),
+    channels: [...channels]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([channel, count]) => ({ channel, count, share: rows.length ? count / rows.length : 0 })),
   };
 }
 
 // --- Activation funnel ----------------------------------------------------------
 
-export const FUNNEL_LABELS = ["Signed up", "Payments set up", "First plan live", "First customer", "First payment"] as const;
-
-type FunnelRow = { signedUp: Date; paymentsReady: boolean; payments: Date | null; planLive: Date | null; tierLive: boolean; firstCustomer: Date | null; firstPayment: Date | null };
-
-/**
- * Engineers who signed up in the range, and when each first reached every
- * step. Each step is worked out once for the whole group (grouped, then
- * joined) rather than once per engineer, so it reads each kind of event once
- * through the Event (name, ts) index instead of once per sign-up: about 0.2 s
- * for a year of sign-ups at a million events, against minutes before.
- */
-async function funnelRows({ from, to }: Range): Promise<FunnelRow[]> {
-  return bounded(prisma.$queryRaw<FunnelRow[]>`
-    WITH e AS (
-      SELECT id, "createdAt", "stripeChargesEnabled" FROM "Engineer"
-      WHERE "ownerId" IS NULL AND "deletedAt" IS NULL AND "createdAt" >= ${from} AND "createdAt" < ${to}
-    ),
-    payments AS (
-      SELECT "actorId" AS id, min(ts) AS at FROM "Event"
-      WHERE name = 'stripe_onboarded' AND "actorId" IN (SELECT id FROM e) GROUP BY 1
-    ),
-    plan_live AS (
-      SELECT "actorId" AS id, min(ts) AS at FROM "Event"
-      WHERE name = 'plan_live' AND "actorType" = 'ENGINEER' AND "actorId" IN (SELECT id FROM e) GROUP BY 1
-    ),
-    tiers AS (
-      SELECT DISTINCT "engineerId" AS id FROM "PlanTier" WHERE status IN ('LIVE', 'STOPPED') AND "engineerId" IN (SELECT id FROM e)
-    ),
-    customers AS (
-      SELECT "engineerId" AS id, min("activatedAt") AS at FROM "Plan" WHERE "engineerId" IN (SELECT id FROM e) GROUP BY 1
-    ),
-    paid AS (
-      SELECT meta->>'engineerId' AS id, min(ts) AS at FROM "Event"
-      WHERE name = 'payment_confirmed' AND meta->>'engineerId' IN (SELECT id FROM e) GROUP BY 1
-    )
-    SELECT e."createdAt" AS "signedUp", e."stripeChargesEnabled" AS "paymentsReady", payments.at AS payments,
-      plan_live.at AS "planLive", tiers.id IS NOT NULL AS "tierLive", customers.at AS "firstCustomer", paid.at AS "firstPayment"
-    FROM e
-    LEFT JOIN payments ON payments.id = e.id
-    LEFT JOIN plan_live ON plan_live.id = e.id
-    LEFT JOIN tiers ON tiers.id = e.id
-    LEFT JOIN customers ON customers.id = e.id
-    LEFT JOIN paid ON paid.id = e.id`);
-}
-
-/** Engineers who signed up in the range, and how many have reached each step since. */
-export function funnel(range: Range) {
-  return shared(`funnel:${range.from.toISOString()}:${range.to.toISOString()}`, () => funnelSteps(range));
-}
-
-async function funnelSteps(range: Range) {
-  const rows = await funnelRows(range);
-  const gap = (a: Date | null, b: Date | null) => (a && b && b >= a ? (b.getTime() - a.getTime()) / DAY_MS : null);
-  const reached = [
-    rows.map(() => true),
-    rows.map((r) => r.paymentsReady || Boolean(r.payments)),
-    rows.map((r) => r.tierLive || Boolean(r.planLive)),
-    rows.map((r) => Boolean(r.firstCustomer)),
-    rows.map((r) => Boolean(r.firstPayment)),
-  ];
-  const gaps = [
-    [],
-    rows.map((r) => gap(r.signedUp, r.payments)),
-    rows.map((r) => gap(r.payments ?? r.signedUp, r.planLive)),
-    rows.map((r) => gap(r.planLive, r.firstCustomer)),
-    rows.map((r) => gap(r.firstCustomer, r.firstPayment)),
-  ];
-  const start = rows.length;
-  return FUNNEL_LABELS.map((label, i) => {
-    const count = reached[i].filter(Boolean).length;
-    const prev = i === 0 ? start : reached[i - 1].filter(Boolean).length;
-    return {
-      label,
-      count,
-      ofStart: start ? count / start : 0,
-      fromPrevious: prev ? count / prev : 0,
-      medianDaysFromPrevious: i === 0 ? null : median(gaps[i].filter((g): g is number => g !== null)),
-    };
+/** Engineers who signed up in the range, and how many have reached each step (and every one before it) since. */
+export function funnel(range: Range, steps: readonly FunnelStep[] = FUNNEL_STEPS) {
+  return shared(`funnel:${range.from.toISOString()}:${range.to.toISOString()}:${steps.join(",")}`, async () => {
+    const marks = await testMarks();
+    return funnelOf([...(await milestones(marks, { signedUp: range })).values()], steps);
   });
 }
 
 // --- Money ----------------------------------------------------------------------
-
-export type CollectedTotals = { count: number; grossPence: number; refundedPence: number; claimedPence: number; netPence: number; feePence: number };
-
-type PaidRow = { month: string; count: bigint; gross: bigint | null; fee: bigint | null };
-
-function totals(r: { count: bigint | number; gross: bigint | number | null; fee: bigint | number | null } | undefined): CollectedTotals {
-  const gross = Number(r?.gross ?? 0);
-  const fee = r?.fee === null || r?.fee === undefined ? Math.floor(gross * TRADESURA_FEE_RATE) : Number(r.fee);
-  return { count: Number(r?.count ?? 0), grossPence: gross, refundedPence: 0, claimedPence: 0, netPence: gross, feePence: fee };
-}
-
-// Paid invoices, from the stored webhook events. The fee is the application
-// fee Stripe took on each invoice. A fixed SQL fragment; values only ever go
-// in as parameters.
-const PAID_AT = Prisma.sql`to_timestamp((payload->'data'->'object'->'status_transitions'->>'paid_at')::bigint)`;
 
 export function money(range: Range, now: Date, months = 6) {
   const firstMonth = (() => {
@@ -245,28 +168,20 @@ export function money(range: Range, now: Date, months = 6) {
   return shared(`money:${range.from.toISOString()}:${range.to.toISOString()}:${firstMonth}:${months}`, () => moneyFrom(range, firstMonth, months));
 }
 
-async function moneyFrom({ from, to }: Range, firstMonth: string, months: number) {
-  const [byMonth, period] = await Promise.all([
-    bounded(prisma.$queryRaw<PaidRow[]>`
-      SELECT to_char(${PAID_AT} AT TIME ZONE 'Europe/London', 'YYYY-MM') AS month, count(*) AS count,
-        sum((payload->'data'->'object'->>'amount_paid')::bigint) AS gross,
-        sum((payload->'data'->'object'->>'application_fee_amount')::bigint) AS fee
-      FROM "StripeWebhookEvent"
-      WHERE type = 'invoice.paid' AND ${PAID_AT} >= ${ukMidnight(`${firstMonth}-01`)}
-      GROUP BY 1`),
-    bounded(prisma.$queryRaw<Omit<PaidRow, "month">[]>`
-      SELECT count(*) AS count, sum((payload->'data'->'object'->>'amount_paid')::bigint) AS gross,
-        sum((payload->'data'->'object'->>'application_fee_amount')::bigint) AS fee
-      FROM "StripeWebhookEvent"
-      WHERE type = 'invoice.paid' AND ${PAID_AT} >= ${from} AND ${PAID_AT} < ${to}`),
-  ]);
-  const found = new Map(byMonth.map((m) => [m.month, m]));
+/** Collections by UK month and in the range: the same payments as the funnel's first payment and a customer's history. */
+async function moneyFrom(range: Range, firstMonth: string, months: number) {
+  const marks = await testMarks();
+  const monthsFrom = ukMidnight(`${firstMonth}-01`);
+  const paid = await payments(marks, { from: monthsFrom < range.from ? monthsFrom : range.from });
   const keys = Array.from({ length: months }, (_, i) => {
     const d = new Date(`${firstMonth}-01T12:00:00Z`);
     d.setUTCMonth(d.getUTCMonth() + i);
     return d.toISOString().slice(0, 7);
   });
-  return { months: keys.map((month) => ({ month, ...totals(found.get(month)) })), period: totals(period[0]) };
+  return {
+    months: keys.map((month) => ({ month, ...paymentTotals(paid.filter((p) => ukDay(p.paidAt).slice(0, 7) === month)) })),
+    period: paymentTotals(paid.filter((p) => p.paidAt >= range.from && p.paidAt < range.to)),
+  };
 }
 
 // --- Health: cancellations and failed payments -----------------------------------
@@ -280,14 +195,15 @@ const REASON_LABELS: Record<string, string> = {
 };
 
 export async function health({ from, to }: Range) {
+  const marks = await testMarks();
   const [cancelled, activeAtStart, failed] = await Promise.all([
     prisma.plan.findMany({
-      where: { cancelledAt: { gte: from, lt: to } },
+      where: { cancelledAt: { gte: from, lt: to }, ...realPlanWhere(marks) },
       select: { cancellations: { orderBy: { createdAt: "desc" }, take: 1, select: { reason: true } } },
     }),
-    customersOnPlans(from),
+    customersOnPlans(from, marks),
     prisma.plan.findMany({
-      where: { paymentFailedAt: { gte: from, lt: to } },
+      where: { paymentFailedAt: { gte: from, lt: to }, ...realPlanWhere(marks) },
       select: { priceMonthlyPence: true, paymentRecoveredAt: true },
     }),
   ]);
