@@ -4,7 +4,7 @@ import { useState } from "react";
 import { btnClass } from "@/components/ui";
 
 export type Resolved =
-  | { valid: true; personalised: boolean; firstName?: string; businessName?: string }
+  | { valid: true; personalised: boolean; businessName?: string }
   | { valid: false }
   | null;
 
@@ -69,7 +69,7 @@ export function ClaimForm({
       {checked && resolved?.valid && resolved.personalised && (
         <>
           <div className="rounded-[12px] bg-ok-tint border border-ok-tint p-3.5 text-left">
-            <p className="font-semibold">Welcome, {resolved.firstName} 👋</p>
+            <p className="font-semibold">Welcome, {resolved.businessName} 👋</p>
             <p className="text-xs text-muted mt-0.5">
               Your free TradeSura account is reserved for <b>{resolved.businessName}</b>. Founding
               member pricing — you keep 80% of every plan.

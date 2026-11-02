@@ -106,6 +106,13 @@ export async function sendVerificationCode(to: string, code: string): Promise<{ 
   return delivered ? {} : { devCode: code };
 }
 
+// A text the person just asked for, before any account exists (the claim
+// page's "Send my code"). From the shared long code like the sign-up code;
+// not marketing, so no quiet hours or STOP line. Returns whether Twilio sent it.
+export async function sendPlatformText(to: string, body: string): Promise<boolean> {
+  return deliver("TradeSura", to, body, { fromLongCode: true });
+}
+
 // Service notification to the engineer's own verified mobile (plan signup,
 // payment issue, referral progress). Not a marketing send — no OutboundSms
 // row, no STOP suffix, no quiet hours; it goes to the account holder about

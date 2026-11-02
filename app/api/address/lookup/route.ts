@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getActor, verifyToken } from "@/lib/auth";
+import { claimLookupLimited, normaliseClaimCode, requestIp } from "@/lib/claim";
 
 const Body = z.object({
   postcode: z.string().min(4).max(10),
@@ -13,6 +14,9 @@ const Body = z.object({
   // authenticated account during the signup wizard.
   emailToken: z.string().max(2000).optional(),
   signupToken: z.string().min(1).max(200).optional(),
+  // 30 Oct update §1 — the claim page, before any account: a real letter
+  // code that hasn't made an account yet.
+  claimCode: z.string().min(4).max(20).optional(),
 });
 
 export type LookedUpAddress = {
@@ -43,7 +47,18 @@ export async function POST(req: Request) {
   const signup = !engineerId && onboarding?.verified !== "1" && parsed.data.signupToken
     ? await prisma.plan.findUnique({ where: { signupToken: parsed.data.signupToken }, select: { status: true } })
     : null;
-  if (!engineerId && onboarding?.verified !== "1" && signup?.status !== "PENDING") {
+  const claimOnly = !engineerId && onboarding?.verified !== "1" && signup?.status !== "PENDING" && Boolean(parsed.data.claimCode);
+  if (claimOnly && (await claimLookupLimited(requestIp(req.headers)))) {
+    return NextResponse.json({ error: "Too many tries. Wait a few minutes and try again." }, { status: 429 });
+  }
+  const claim = claimOnly && parsed.data.claimCode
+    ? await prisma.claimCode.findUnique({
+        where: { code: normaliseClaimCode(parsed.data.claimCode) },
+        select: { redeemedByEngineerId: true },
+      })
+    : null;
+  const claimOk = Boolean(claim && !claim.redeemedByEngineerId);
+  if (!engineerId && onboarding?.verified !== "1" && signup?.status !== "PENDING" && !claimOk) {
     return NextResponse.json({ error: "Sign in to look up addresses." }, { status: 401 });
   }
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ClaimForm, type Resolved } from "@/components/claim-form";
-import { resolveClaimCode } from "@/lib/claim";
+import { headers } from "next/headers";
+import { claimLookupLimited, requestIp, resolveClaimCode } from "@/lib/claim";
 import { track } from "@/lib/track";
 
 export const metadata: Metadata = {
@@ -18,10 +19,10 @@ export default async function ClaimPage({
   const { code } = await searchParams;
 
   let initialResolved: Resolved = null;
-  if (code) {
+  if (code && !(await claimLookupLimited(requestIp(await headers())))) {
     const r = await resolveClaimCode(code);
     initialResolved = r.valid
-      ? { valid: true, personalised: r.personalised, firstName: r.firstName, businessName: r.businessName }
+      ? { valid: true, personalised: r.personalised, businessName: r.businessName }
       : { valid: false };
     await track(r.valid ? "claim_code_resolved" : "claim_code_failed", { type: "SYSTEM" }, {
       code: code.slice(0, 20),
