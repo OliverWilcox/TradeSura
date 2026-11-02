@@ -69,6 +69,7 @@ export default async function ManagePage({
         figures={figures}
         passportLine={plan.passportId ? PASSPORT_FREEZE_LINE : null}
         warrantyLine={WARRANTY_LINE}
+        yearly={plan.billingInterval === "year"}
       />
     </CustomerShell>
   );

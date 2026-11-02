@@ -190,7 +190,9 @@ async function endNow(planId: string, now: Date) {
 // are refunded pro rata when the subscription actually ends (see
 // settleEndedSubscription), so "undo" before then costs nothing.
 // Does not create CancelRequest rows (lib/cancel-plan.ts does).
-export async function cancelAtPeriodEnd(planId: string): Promise<{ effectiveAt: Date }> {
+export async function cancelAtPeriodEnd(
+  planId: string,
+): Promise<{ effectiveAt: Date; refundPence?: number; unusedMonths?: number }> {
   const plan = await loadPlan(planId);
   const now = new Date();
   if (plan.status === "CANCELLED") return { effectiveAt: plan.cancelEffectiveAt ?? plan.cancelledAt ?? now };
@@ -229,6 +231,7 @@ export async function cancelAtPeriodEnd(planId: string): Promise<{ effectiveAt: 
   }
 
   let effectiveAt: Date;
+  let refund: { refundPence: number; unusedMonths: number } | undefined;
   const period = periodOf(sub);
   if (billingIntervalOf(plan.billingInterval) === "year" && period) {
     effectiveAt = addMonths(period.start, usedYearlyMonths(period.start, now));
@@ -238,6 +241,13 @@ export async function cancelAtPeriodEnd(planId: string): Promise<{ effectiveAt: 
       proration_behavior: "none",
     });
     if (updated.cancel_at) effectiveAt = new Date(updated.cancel_at * 1000);
+    // What settleEndedSubscription will refund when it ends, so the
+    // confirmation can say it. Only once the yearly payment has been taken.
+    const paid = await latestPaidPayment(sub.id).catch(() => null);
+    if (paid && paid.amountRefunded === 0) {
+      const unusedMonths = unusedYearlyMonths(period.start, effectiveAt);
+      refund = { unusedMonths, refundPence: yearlyRefundPence(paid.amountPaid, unusedMonths) };
+    }
   } else {
     const updated = await stripe.subscriptions.update(sub.id, { cancel_at_period_end: true });
     effectiveAt = updated.cancel_at
@@ -249,7 +259,7 @@ export async function cancelAtPeriodEnd(planId: string): Promise<{ effectiveAt: 
     where: { id: plan.id },
     data: { cancelRequestedAt: plan.cancelRequestedAt ?? now, cancelEffectiveAt: effectiveAt },
   });
-  return { effectiveAt };
+  return { effectiveAt, ...refund };
 }
 
 // The "save" in one tap: billing carries on as if nothing happened.
@@ -288,8 +298,26 @@ export async function settleEndedSubscription(planId: string, sub: Stripe.Subscr
   if (!paid || paid.amountRefunded > 0) return;
   const months = unusedYearlyMonths(period.start, endedAt);
   const amount = yearlyRefundPence(paid.amountPaid, months);
+  if (amount <= 0) return;
   await refundPayment(paid.paymentIntentId, amount, `yearly-refund:${paid.invoiceId}`);
   await track("yearly_refund", { type: "SYSTEM" }, { planId: plan.id, unusedMonths: months, amountPence: amount });
+  await emailYearlyRefund(plan.id, amount, months);
+}
+
+// The refund is real now: tell the customer what's coming back.
+async function emailYearlyRefund(planId: string, amountPence: number, months: number) {
+  const plan = await prisma.plan.findUnique({ where: { id: planId }, include: { customer: true, engineer: true } });
+  if (!plan?.customer.email) return;
+  const brand = brandName(plan.engineer);
+  await sendEmail({
+    to: plan.customer.email,
+    replyTo: plan.engineer.email,
+    subject: `Your ${poundsLabel(amountPence)} refund from ${brand} (${plan.ref})`,
+    html: `<p>Hi ${escapeHtml(plan.customer.firstName)},</p>
+<p>Your yearly care plan with ${escapeHtml(brand)} (${plan.ref}) has now ended. We've refunded <b>${poundsLabel(amountPence)}</b> for the ${months} whole month${months === 1 ? "" : "s"} you didn't use, in proportion to what you paid.</p>
+<p>It goes back to the bank account your Direct Debit was paid from and usually arrives within a few working days.</p>
+<p>Questions? Just reply to ${escapeHtml(brand)}.</p>`,
+  }).catch((err) => console.error("[yearly-refund] email failed:", err));
 }
 
 // ---------------------------------------------------------------------------

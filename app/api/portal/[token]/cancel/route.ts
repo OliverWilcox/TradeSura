@@ -61,6 +61,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       ok: true,
       effectiveAt: result.effectiveAt.toISOString(),
       endedNow: Boolean(result.endedNow),
+      refundPence: result.refundPence ?? null,
+      unusedMonths: result.unusedMonths ?? null,
     });
   }
 

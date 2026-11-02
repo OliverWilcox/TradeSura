@@ -66,6 +66,7 @@ export function CancelFlow(props: {
   figures: BeforeYouGo;
   passportLine: string | null;
   warrantyLine: string;
+  yearly?: boolean;
 }) {
   type View = "reason" | "offer" | "before" | "ended" | "ending" | "kept" | "paused" | "switched" | "switch";
   const initial: View =
@@ -80,6 +81,7 @@ export function CancelFlow(props: {
   const [reason, setReason] = useState<CancelReason | null>(null);
   const [endingOn, setEndingOn] = useState<string | null>(props.endingOn);
   const [pausedUntil, setPausedUntil] = useState<string | null>(props.pausedUntil);
+  const [refund, setRefund] = useState<{ pence: number; months: number } | null>(null);
   const [moveDate, setMoveDate] = useState("");
   const [postcode, setPostcode] = useState("");
   const [passportConsent, setPassportConsent] = useState(false);
@@ -110,7 +112,13 @@ export function CancelFlow(props: {
         setError(data.error ?? "Something went wrong. Try again.");
         return null;
       }
-      return data as { effectiveAt?: string; resumesAt?: string; endedNow?: boolean };
+      return data as {
+        effectiveAt?: string;
+        resumesAt?: string;
+        endedNow?: boolean;
+        refundPence?: number | null;
+        unusedMonths?: number | null;
+      };
     } catch {
       setError("Couldn't reach us. Check your connection and try again.");
       return null;
@@ -129,6 +137,7 @@ export function CancelFlow(props: {
     });
     if (data) {
       setEndingOn(data.effectiveAt ?? null);
+      setRefund(data.refundPence && data.unusedMonths ? { pence: data.refundPence, months: data.unusedMonths } : null);
       setView(data.endedNow ? "ended" : "ending");
     }
   }
@@ -205,6 +214,17 @@ export function CancelFlow(props: {
             That&apos;s the end of the month you&apos;ve paid for. Everything carries on as normal until then, and no more
             payments are taken after it. We&apos;ve emailed you to confirm.
           </p>
+          {/* Review 4 — yearly payers get the unused whole months back. */}
+          {refund ? (
+            <p className="text-[13px] mt-2 font-semibold">
+              You paid yearly, so when it ends we&apos;ll refund {pounds(refund.pence)} for the {refund.months} whole month
+              {refund.months === 1 ? "" : "s"} you won&apos;t use.
+            </p>
+          ) : props.yearly ? (
+            <p className={`text-[13px] mt-2 ${MUTED}`}>
+              You paid yearly, so the whole months you won&apos;t use are refunded when it ends.
+            </p>
+          ) : null}
         </div>
         {errorLine}
         <button onClick={undo} disabled={busy} className={JOIN_BTN}>

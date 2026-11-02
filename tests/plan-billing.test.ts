@@ -43,6 +43,7 @@ import {
   recordClearedPayment,
   rescueCodeCandidate,
   rescueTextBody,
+  settleEndedSubscription,
   startPaymentRescue,
   ukPhoneDisplay,
   undoCancel,
@@ -209,6 +210,58 @@ describe("cancelAtPeriodEnd", () => {
     const params = m.stripe.subscriptions.update.mock.calls[0][1];
     expect(params.proration_behavior).toBe("none");
     expect(sec(effectiveAt)).toBe(sec(addMonths(new Date(start.getTime()), 2)));
+  });
+});
+
+describe("yearly cancellation refund (Review 4)", () => {
+  const start = new Date(Date.now() - 40 * DAY);
+  const periodEnd = addMonths(start, 12);
+  const sub = {
+    id: "sub_1",
+    status: "active",
+    items: { data: [{ current_period_start: sec(start), current_period_end: sec(periodEnd) }] },
+  };
+  function paidYear(amountRefunded = 0) {
+    m.stripe.invoices.list.mockResolvedValue({ data: [{ id: "in_1", amount_paid: 16500 }] });
+    m.stripe.invoicePayments.list.mockResolvedValue({ data: [{ status: "paid", payment: { payment_intent: "pi_1" } }] });
+    m.stripe.paymentIntents.retrieve.mockResolvedValue({ latest_charge: { amount_refunded: amountRefunded } });
+  }
+
+  it("cancel says what comes back: the unused whole months of what was paid", async () => {
+    m.plan.findUniqueOrThrow.mockResolvedValue({ ...basePlan, billingInterval: "year" });
+    m.stripe.subscriptions.retrieve.mockResolvedValue(sub);
+    m.stripe.subscriptions.update.mockImplementation(async (_id, p) => ({ cancel_at: p.cancel_at }));
+    paidYear();
+    const r = await cancelAtPeriodEnd("plan_1");
+    expect(r.unusedMonths).toBe(10);
+    expect(r.refundPence).toBe(13750);
+    expect(m.stripe.refunds.create).not.toHaveBeenCalled();
+  });
+
+  it("no refund line before the yearly payment has been taken", async () => {
+    m.plan.findUniqueOrThrow.mockResolvedValue({ ...basePlan, billingInterval: "year" });
+    m.stripe.subscriptions.retrieve.mockResolvedValue(sub);
+    m.stripe.subscriptions.update.mockImplementation(async (_id, p) => ({ cancel_at: p.cancel_at }));
+    m.stripe.invoices.list.mockResolvedValue({ data: [] });
+    expect((await cancelAtPeriodEnd("plan_1")).refundPence).toBeUndefined();
+  });
+
+  it("when it ends: refunds that amount, reversing the engineer's share and our fee", async () => {
+    m.plan.findUniqueOrThrow.mockResolvedValue({ ...basePlan, billingInterval: "year" });
+    paidYear();
+    const endedAt = addMonths(start, 2);
+    await settleEndedSubscription("plan_1", { ...sub, ended_at: sec(endedAt) } as never);
+    expect(m.stripe.refunds.create).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_intent: "pi_1", amount: 13750, reverse_transfer: true, refund_application_fee: true }),
+      { idempotencyKey: "yearly-refund:in_1" },
+    );
+  });
+
+  it("never refunds twice", async () => {
+    m.plan.findUniqueOrThrow.mockResolvedValue({ ...basePlan, billingInterval: "year" });
+    paidYear(13750);
+    await settleEndedSubscription("plan_1", { ...sub, ended_at: sec(addMonths(start, 2)) } as never);
+    expect(m.stripe.refunds.create).not.toHaveBeenCalled();
   });
 });
 

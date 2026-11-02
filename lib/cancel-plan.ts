@@ -8,7 +8,7 @@ import { escapeHtml } from "@/lib/email-layout";
 import { cancelScheduledSms, notifyEngineer, sendSms } from "@/lib/sms";
 import { sendPushNotification } from "@/lib/push";
 import { appUrl } from "@/lib/app-url";
-import { cancelAtPeriodEnd, undoCancel } from "@/lib/plan-billing";
+import { cancelAtPeriodEnd, poundsLabel, undoCancel } from "@/lib/plan-billing";
 import { resolvePlanTier } from "@/lib/plan-tier";
 import {
   WINBACK_DELAY_DAYS,
@@ -31,7 +31,7 @@ import {
 // (lib/plan-billing.ts), and every request is stored with its reason, the
 // offer shown and the outcome.
 export type CancelResult =
-  | { ok: true; effectiveAt: Date; endedNow?: boolean }
+  | { ok: true; effectiveAt: Date; endedNow?: boolean; refundPence?: number; unusedMonths?: number }
   | { ok: false; status: number; error: string };
 
 export type CancelSource = "customer" | "engineer_logged";
@@ -140,8 +140,13 @@ export async function requestCancel(
   if (plan.cancelRequestedAt && plan.cancelEffectiveAt) return { ok: true, effectiveAt: plan.cancelEffectiveAt };
 
   let effectiveAt: Date;
+  // Yearly payers: what comes back for the unused whole months.
+  let refund: { refundPence?: number; unusedMonths?: number } = {};
   try {
-    ({ effectiveAt } = await cancelAtPeriodEnd(plan.id));
+    let refundPence: number | undefined;
+    let unusedMonths: number | undefined;
+    ({ effectiveAt, refundPence, unusedMonths } = await cancelAtPeriodEnd(plan.id));
+    if (refundPence && unusedMonths) refund = { refundPence, unusedMonths };
   } catch (err) {
     console.error("[cancel] cancelAtPeriodEnd failed:", err);
     return {
@@ -235,12 +240,16 @@ ${
         endedNow
           ? "It has ended today, inside your 14-day cooling-off period, so nothing more will be collected and any payment already taken is refunded in full."
           : `It ends on <b>${longDate(effectiveAt)}</b>, the end of the month you've paid for. Your plan carries on as normal until then, and no more payments will be taken after it.`
-      }</p>
+      }</p>${
+        !endedNow && refund.refundPence
+          ? `\n<p>You paid yearly, so when it ends we'll refund <b>${poundsLabel(refund.refundPence)}</b> for the ${refund.unusedMonths} whole month${refund.unusedMonths === 1 ? "" : "s"} you won't use. It goes back to the bank account your Direct Debit was paid from.</p>`
+          : ""
+      }
 <p>Changed your mind? <a href="${rejoin}"><b>Rejoin</b></a> in one tap.</p>
 <p>Questions? Just reply to ${escapeHtml(brand)}.</p>`,
     }).catch((err) => console.error("[cancel] confirmation email failed:", err));
   }
-  return { ok: true, effectiveAt, endedNow };
+  return { ok: true, effectiveAt, endedNow, ...refund };
 }
 
 // The customer or installer takes it back before the end date: billing
