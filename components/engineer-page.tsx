@@ -14,6 +14,7 @@ import { ProfileContact } from "@/components/profile-contact";
 import { rejoinFreeMonth } from "@/lib/rejoin-offer";
 import { pageMode } from "@/lib/public-page";
 import { TrustLine } from "@/components/verified-badge";
+import { isFoundingMember } from "@/lib/founding";
 import {
   ProfileHeader,
   ProfilePhotos,
@@ -196,6 +197,8 @@ export async function EngineerPage({
     source: mode === "preview" || mode === "practice" ? mode : demo ? "demo" : (src ?? (profile ? "profile" : "direct")),
   });
 
+  // 30 Oct update §10 — the Founding Member badge, on every page of theirs.
+  const founding = await isFoundingMember(engineer.id);
   const rated = profile && profile.rating.average !== null && profile.rating.count > 0 ? profile.rating : null;
   const jsonLd = published && mode !== "preview" && mode !== "practice"
     ? {
@@ -249,7 +252,7 @@ export async function EngineerPage({
       // Build Guide v2 Part 15.1 — the trust line. Never asserted for an
       // engineer who isn't actually verified.
       // On the profile the badge sits in the profile header instead, once.
-      sub={<TrustLine verified={Boolean(gasSafe) && !profile} />}
+      sub={<TrustLine verified={Boolean(gasSafe) && !profile} founding={founding && !profile} />}
     >
       {banner}
       {jsonLd && (
@@ -267,6 +270,7 @@ export async function EngineerPage({
             logoUrl={engineer.logoUrl}
             town={engineer.town}
             verified={Boolean(gasSafe)}
+            founding={founding}
             partner={profile.partner}
             rating={profile.rating}
           />

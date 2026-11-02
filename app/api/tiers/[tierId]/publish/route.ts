@@ -45,7 +45,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ tierId: string
     tier.clauses.map((c) => c.clause.code),
     cleanRates(tier.clauseRates),
     tier.name,
-    { id: tier.id, priceMonthlyPence: tier.priceMonthlyPence },
   );
   if (err) return NextResponse.json({ error: err.error, code: err.code }, { status: 400 });
   await prisma.planTier.update({

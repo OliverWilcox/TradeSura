@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { PublicRating } from "@/lib/ratings";
 import { VerifiedMemberBadge } from "@/components/verified-badge";
+import { FoundingBadge } from "@/components/founding-badge";
 
 // Section 6 — the pieces the Google-facing profile adds on top of the plan
 // page (components/engineer-page.tsx), and that the town page reuses.
@@ -49,6 +50,7 @@ export function ProfileHeader({
   verified,
   partner,
   rating,
+  founding = false,
 }: {
   brand: string;
   logoUrl: string | null;
@@ -56,6 +58,7 @@ export function ProfileHeader({
   verified: boolean;
   partner: boolean;
   rating: RatingSummary;
+  founding?: boolean;
 }) {
   return (
     <div className="bg-paper border border-line rounded-xl p-4 flex gap-3 items-start">
@@ -77,6 +80,7 @@ export function ProfileHeader({
         </h1>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           {verified && <VerifiedMemberBadge />}
+          {founding && <FoundingBadge />}
           {partner && <PartnerBadge />}
           <RatingLine rating={rating} />
         </div>

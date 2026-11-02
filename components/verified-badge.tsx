@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { FoundingBadge } from "@/components/founding-badge";
 
 // Review 4 — the Verified Member badge on the customer's plan pages: the
 // supplied badge artwork (public/brand, from mobile/assets/brand — never
@@ -21,10 +22,11 @@ export function VerifiedMemberBadge() {
 
 // The header's trust line: the badge once verified, then "Powered by
 // TradeSura" ("Backed by" read like a guarantee — Review 4).
-export function TrustLine({ verified }: { verified: boolean }) {
+export function TrustLine({ verified, founding = false }: { verified: boolean; founding?: boolean }) {
   return (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
       {verified && <VerifiedMemberBadge />}
+      {founding && <FoundingBadge />}
       <span>Powered by TradeSura</span>
     </span>
   );

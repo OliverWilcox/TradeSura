@@ -25,6 +25,7 @@ import {
   signupCheckoutResult,
 } from "@/lib/stripe";
 import type { Prisma } from "@/lib/generated/prisma/client";
+import { markAccountComplete } from "@/lib/founding";
 
 // One URL for both platform events (checkout, invoices, subscriptions) and
 // Connect events (account.updated) — but Stripe requires two separate
@@ -103,6 +104,8 @@ async function handleEvent(event: Stripe.Event) {
         });
       }
       await alertIfStripeNeedsMore(engineer, s);
+      // 30 Oct update §10 — payments on may be the last step of the account.
+      if (s.chargesEnabled) await markAccountComplete(engineer.id);
       return;
     }
 

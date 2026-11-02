@@ -8,6 +8,7 @@ import { endUnpaidPlans, resumeDuePausedPlans } from "@/lib/plan-billing";
 import { moveFollowUps } from "@/lib/move-followups";
 import { sendSetupNudges } from "@/lib/account-emails";
 import { sendYearlyRenewalNotices } from "@/lib/yearly-renewals";
+import { runFoundingJobs } from "@/lib/founding";
 import { chaseFinishSetup } from "@/lib/finish-setup";
 import { sendMissedVerifiedEmails } from "@/lib/verified-email";
 
@@ -29,12 +30,14 @@ async function run() {
   const setupNudges = await sendSetupNudges();
   // Review 4 — yearly payers hear 30 days before they renew.
   const renewalNotices = await sendYearlyRenewalNotices();
+  // 30 Oct update §10 — top 3 spots per town: release, hand on, remind.
+  const founding = await runFoundingJobs();
   // Matt, 30 Oct §9.1 — push chasers until payment setup is finished.
   const finishSetupChasers = await chaseFinishSetup();
   // Matt, 30 Oct §11 — a verified engineer who missed "You're verified".
   const verifiedEmails = await sendMissedVerifiedEmails();
   const sent = await flushSmsQueue();
-  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves, setupNudges, renewalNotices, finishSetupChasers, verifiedEmails });
+  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves, setupNudges, renewalNotices, founding, finishSetupChasers, verifiedEmails });
 }
 
 // Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.

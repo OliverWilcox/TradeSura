@@ -3,7 +3,6 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
-import { landlordRuleError } from "@/lib/plan-rules";
 
 const Body = z.object({ action: z.enum(["stop", "start"]) });
 
@@ -35,12 +34,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ tierId: string
   if (tier.status !== "STOPPED") {
     return NextResponse.json({ error: "This plan isn't stopped." }, { status: 409 });
   }
-  // 30 Oct §7.4 — restarting can't put a landlord plan under its homeowner plan.
-  const codes = (await prisma.tierClause.findMany({ where: { tierId }, select: { clause: { select: { code: true } } } })).map(
-    (c) => c.clause.code,
-  );
-  const landlord = await landlordRuleError(engineerId, { id: tierId, name: tier.name, priceMonthlyPence: tier.priceMonthlyPence, codes });
-  if (landlord) return NextResponse.json({ error: landlord.error, code: landlord.code }, { status: 400 });
   await prisma.planTier.update({ where: { id: tierId }, data: { status: "LIVE" } });
   await track("plan_restarted", { type: "ENGINEER", id: engineerId }, { tierId, name: tier.name });
   return NextResponse.json({ ok: true, status: "LIVE" as const });

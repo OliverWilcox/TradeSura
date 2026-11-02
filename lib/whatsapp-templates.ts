@@ -68,6 +68,18 @@ export const WHATSAPP_TEMPLATES = {
     text: "TradeSura: {{1}} asked for a one-off gas safety record before {{2}}, at your normal price. Their plan's own record isn't available until after their third payment.",
     example: ["Pat Hughes", "20 Dec 2026"],
   },
+  top_spot_awarded: {
+    text: "TradeSura: you've got a top spot in {{1}}, so your business now sits at the top of your town page. Sign your first customer by {{2}} to keep it.",
+    example: ["Holmfirth", "1 January 2027"],
+  },
+  top_spot_released: {
+    text: "TradeSura: your top spot in {{1}} has passed to the next Founding Member, as no customer joined within 60 days. You keep your Founding Member badge.",
+    example: ["Holmfirth"],
+  },
+  top_spot_reminder: {
+    text: "TradeSura: {{1}} days left to keep your top spot in {{2}}. Sign your first customer by {{3}}.",
+    example: ["14", "Holmfirth", "1 January 2027"],
+  },
   gas_safe_verified: {
     text: "You're Gas Safe verified on TradeSura. Your member pack is on its way.",
     example: [],

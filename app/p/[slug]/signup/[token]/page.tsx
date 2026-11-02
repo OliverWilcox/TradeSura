@@ -6,6 +6,7 @@ import { CustomerShell } from "@/components/shells";
 import { SignupTiers } from "@/components/signup-tiers";
 import { clauseLine } from "@/lib/clauses";
 import { TrustLine } from "@/components/verified-badge";
+import { isFoundingMember } from "@/lib/founding";
 import { signupPath } from "@/lib/public-url";
 
 export default async function SignupPage({
@@ -53,7 +54,12 @@ export default async function SignupPage({
     <CustomerShell
       tradingName={brand}
       legalLine={tradingNameOf(plan.engineer)}
-      sub={<TrustLine verified={Boolean(plan.engineer.gasSafeVerifiedAt)} />}
+      sub={
+        <TrustLine
+          verified={Boolean(plan.engineer.gasSafeVerifiedAt)}
+          founding={await isFoundingMember(plan.engineer.id)}
+        />
+      }
     >
       <p className="text-sm">
         Hi {plan.customer.firstName} — pick the plan that suits you. The monthly price you see is

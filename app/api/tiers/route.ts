@@ -73,14 +73,14 @@ export async function POST(req: Request) {
 
   // Review 3 — a draft has no name until Step 3; the box starts empty.
   let name = "";
-  // 30 Oct update §5 — prices start blank: 0 means "not set yet" on a draft.
-  let priceMonthlyPence = 0;
+  let priceMonthlyPence = 1200;
   let clauseCodes: string[] = [];
 
   if (typeof body.template === "string") {
     const p = TIER_PRESETS.find((t) => t.name === body.template);
     if (!p) return NextResponse.json({ error: "Unknown template." }, { status: 400 });
     name = p.name;
+    priceMonthlyPence = p.priceMonthlyPence;
     clauseCodes = [...p.clauseCodes];
   }
   if (typeof body.name === "string" && body.name.trim()) name = body.name.trim().slice(0, 28);
@@ -107,7 +107,7 @@ export async function POST(req: Request) {
     );
   }
 
-  if (priceMonthlyPence !== 0 && priceMonthlyPence < TIER_PRICE_MIN_PENCE) {
+  if (priceMonthlyPence < TIER_PRICE_MIN_PENCE) {
     return NextResponse.json({ error: "The minimum plan price is £10 a month." }, { status: 400 });
   }
   priceMonthlyPence = Math.min(TIER_PRICE_MAX_PENCE, priceMonthlyPence);
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
   }
   const clauseRates = cleanRates(body.clauseRates);
   if (publishNow) {
-    const err = await goLiveError(engineerId, finalCodes, clauseRates, name, { id: "", priceMonthlyPence });
+    const err = await goLiveError(engineerId, finalCodes, clauseRates, name);
     if (err) return NextResponse.json({ error: err.error, code: err.code }, { status: 400 });
   }
 

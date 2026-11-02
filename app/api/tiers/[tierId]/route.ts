@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { checkWording } from "@/lib/compliance/blocklist";
-import { landlordRuleError, rateWordingError } from "@/lib/plan-rules";
+import { rateWordingError } from "@/lib/plan-rules";
 import {
   TIER_PRICE_MIN_PENCE,
   TIER_PRICE_MAX_PENCE,
@@ -18,12 +18,7 @@ import {
 const Body = z.object({
   // Empty until Step 3 (the box starts empty); required to go live.
   name: z.string().max(28),
-  // 30 Oct update §5 — 0 is a draft's blank price; anything set is £10+.
-  priceMonthlyPence: z
-    .number()
-    .int()
-    .max(TIER_PRICE_MAX_PENCE)
-    .refine((p) => p === 0 || p >= TIER_PRICE_MIN_PENCE),
+  priceMonthlyPence: z.number().int().min(TIER_PRICE_MIN_PENCE).max(TIER_PRICE_MAX_PENCE),
   clauseCodes: z.array(z.string()).max(20),
   customLabels: z.array(z.string().min(2).max(80)).max(5),
   clauseRates: z.record(z.string(), z.string()).optional(),
@@ -104,9 +99,6 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
     );
   }
 
-  if (tier.status === "LIVE" && parsed.data.priceMonthlyPence < TIER_PRICE_MIN_PENCE) {
-    return NextResponse.json({ error: "The minimum plan price is £10 a month." }, { status: 400 });
-  }
   if (tier.status === "LIVE" && parsed.data.name.trim().length < 2) {
     return NextResponse.json({ error: "Give your plan a name — at least 2 characters." }, { status: 400 });
   }
@@ -140,16 +132,6 @@ export async function PUT(req: Request, ctx: { params: Promise<{ tierId: string 
   }
   const ruleError = serviceRuleError(wantedCodes);
   if (ruleError) return NextResponse.json({ error: ruleError }, { status: 400 });
-  // §7.4 — a live landlord plan can't end up cheaper than the homeowner plan it contains.
-  if (tier.status === "LIVE") {
-    const landlord = await landlordRuleError(engineerId, {
-      id: tierId,
-      name: parsed.data.name,
-      priceMonthlyPence: parsed.data.priceMonthlyPence,
-      codes: wantedCodes,
-    });
-    if (landlord) return NextResponse.json({ error: landlord.error, code: landlord.code }, { status: 400 });
-  }
 
   await prisma.$transaction([
     prisma.tierClause.deleteMany({ where: { tierId } }),

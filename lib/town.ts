@@ -150,19 +150,6 @@ export function isWebsitePartner(e: { websiteConnectedAt: Date | null; widgetDis
   return Boolean(e.websiteConnectedAt) && !e.widgetDisabledAt;
 }
 
-// Town page order: website partners first, then by rating, then rating count.
-export function townOrder<
-  T extends { partner: boolean; average: number | null; count: number; name: string },
->(rows: T[]): T[] {
-  return [...rows].sort(
-    (a, b) =>
-      Number(b.partner) - Number(a.partner) ||
-      (b.average ?? 0) - (a.average ?? 0) ||
-      b.count - a.count ||
-      a.name.localeCompare(b.name),
-  );
-}
-
 export async function loadTown(townSlug: string) {
   const page = await prisma.townPage.findUnique({ where: { slug: townSlug } });
   const engineers = await prisma.engineer.findMany({

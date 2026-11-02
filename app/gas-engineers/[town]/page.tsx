@@ -4,10 +4,12 @@ import { notFound } from "next/navigation";
 import { EMERGENCY_LINE } from "@/lib/compliance/interlock";
 import { brandName } from "@/lib/engineer";
 import { ratingSummary } from "@/lib/ratings";
-import { isWebsitePartner, loadTown, markTownPublished, townOrder } from "@/lib/town";
+import { isWebsitePartner, loadTown, markTownPublished } from "@/lib/town";
+import { foundingMemberIds, rankingFacts, syncTownSpots, topSpotHolders, townPageOrder } from "@/lib/founding";
 import { townPageUrl } from "@/lib/public-url";
 import { RingMark } from "@/components/ring-mark";
 import { PartnerBadge, RatingLine, RecruitBanner } from "@/components/engineer-profile";
+import { FoundingBadge } from "@/components/founding-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -43,11 +45,19 @@ export default async function TownPage({ params }: Params) {
   const name = townName(page, engineers, town);
   if (!page?.publishedAt) await markTownPublished(town, name);
 
-  const rows = townOrder(
+  // 30 Oct update §10 — hand out any free top spot before ordering.
+  await syncTownSpots(town);
+  const [holders, founding, facts] = await Promise.all([
+    topSpotHolders(town),
+    foundingMemberIds(engineers.map((e) => e.id)),
+    rankingFacts(engineers.map((e) => e.id)),
+  ]);
+  const rows = townPageOrder(
     await Promise.all(
       engineers.map(async (e) => {
         const rating = await ratingSummary(e.id);
         const prices = e.tiers.map((t) => t.priceMonthlyPence);
+        const f = facts.get(e.id);
         return {
           id: e.id,
           slug: e.slug,
@@ -55,9 +65,13 @@ export default async function TownPage({ params }: Params) {
           name: brandName(e),
           area: e.serviceArea?.trim() || null,
           partner: isWebsitePartner(e),
+          founding: founding.has(e.id),
           rating,
-          average: rating.isNew ? null : rating.average,
-          count: rating.count,
+          topSpotFrom: holders.get(e.id) ?? null,
+          payingCustomers: f?.payingCustomers ?? 0,
+          ratingCount: rating.count,
+          ratingAverage: rating.average,
+          lastRatedAt: f?.lastRatedAt ?? null,
           fromPence: Math.min(...prices),
         };
       }),
@@ -67,7 +81,7 @@ export default async function TownPage({ params }: Params) {
   const allPrices = engineers.flatMap((e) => e.tiers.map((t) => t.priceMonthlyPence)).sort((a, b) => a - b);
   const from = allPrices[0];
   const typical = allPrices[Math.floor((allPrices.length - 1) / 2)];
-  const ratingCount = rows.reduce((n, r) => n + r.count, 0);
+  const ratingCount = rows.reduce((n, r) => n + r.ratingCount, 0);
   const n = rows.length;
 
   const jsonLd = {
@@ -101,6 +115,9 @@ export default async function TownPage({ params }: Params) {
             {n} Gas Safe verified engineer{n === 1 ? "" : "s"} on TradeSura · care plans from{" "}
             <b className="text-ink">{pounds(from)}</b> a month
           </p>
+          <a href="#ordering" className="mt-1 inline-block text-[12px] text-flame underline">
+            How this page is ordered
+          </a>
         </div>
 
         <ul className="flex flex-col gap-2.5">
@@ -112,6 +129,7 @@ export default async function TownPage({ params }: Params) {
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-[15px]">{r.name}</span>
+                  {r.founding && <FoundingBadge />}
                   {r.partner && <PartnerBadge />}
                 </div>
                 <div className="mt-1 text-[12.5px] text-muted">
@@ -132,6 +150,16 @@ export default async function TownPage({ params }: Params) {
             {ratingCount > 0 &&
               ` Engineers in ${name} have ${ratingCount} rating${ratingCount === 1 ? "" : "s"} from verified TradeSura customers.`}{" "}
             Every engineer listed is on the Gas Safe Register, checked by us.
+          </p>
+        </div>
+
+        <div id="ordering" className="bg-paper border border-line rounded-xl p-3.5 text-[12.5px] text-muted scroll-mt-4">
+          <h2 className="font-sans font-semibold text-sm text-ink mb-1">How this page is ordered</h2>
+          <p>
+            First, the top 3 Founding Members: the first in {name} to finish setting up their account.
+            Then the engineers most active locally, by how many customers are on their plans, with ties
+            settled by reviews. Then everyone else, by the number of reviews, their average and how recent
+            they are. Nobody pays to be higher up.
           </p>
         </div>
 

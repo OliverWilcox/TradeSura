@@ -4,7 +4,6 @@ import {
   townFromDistrict,
   townFromServiceArea,
   townIsPublic,
-  townOrder,
   townSlugOf,
   type TownEngineer,
 } from "@/lib/town";
@@ -74,20 +73,5 @@ describe("town publish rule", () => {
     expect(townIsPublic({ heldAt: new Date() }, [real])).toBe(false);
     expect(townIsPublic(null, [])).toBe(false);
     expect(townIsPublic(null, [{ ...real, liveTiers: 0 }])).toBe(false);
-  });
-
-  it("lists website partners higher, then by rating", () => {
-    const rows = [
-      { name: "HD Boiler Services", partner: false, average: 4.6, count: 9 },
-      { name: "Colne Valley Gas", partner: false, average: 4.8, count: 21 },
-      { name: "Dave's Heating", partner: true, average: 4.5, count: 38 },
-      { name: "Pennine Heat", partner: false, average: null, count: 0 },
-    ];
-    expect(townOrder(rows).map((r) => r.name)).toEqual([
-      "Dave's Heating",
-      "Colne Valley Gas",
-      "HD Boiler Services",
-      "Pennine Heat",
-    ]);
   });
 });

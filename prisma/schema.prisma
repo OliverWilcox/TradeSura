@@ -179,18 +179,15 @@ model Engineer {
   enquiryPhone               String? // the number the profile's Call button rings (E.164)
   widgetDisabledAt           DateTime? // admin switch-off for the website widget
   leftAt                     DateTime? // installer exited TradeSura — customers offered a nearby engineer
+  // 30 Oct update §10 — first time the account could take sign-ups (Gas
+  // Safe check done, a live plan, payments on). Orders the race for a
+  // town's top 3 Founding spots.
+  accountCompletedAt         DateTime?
   enquiries                  Enquiry[]
   ratings                    Rating[]
   serviceRecords             ServiceRecord[]
   stickers                   Sticker[]         @relation("StickerAllocated")
   // E10 — who brought this engineer in, and whether their £50 bounty is paid.
-  detailsRequests            DetailsRequest[]
-  // 30 Oct update §5 — what the installer normally charges, asked blank in
-  // the plan builder. The customer page's "Worth over £X a year" uses only
-  // these figures (lib/value-sum.ts), never a guide or benchmark.
-  normalServicePence         Int?
-  normalCalloutPence         Int?
-  repairDiscountPercent      Int?
   referrerId                 String?
   referrer                   Engineer?         @relation("Referrals", fields: [referrerId], references: [id])
   referrals                  Engineer[]        @relation("Referrals")
@@ -473,15 +470,44 @@ model Suppression {
 // Letter-campaign claim codes (C5). One row per letter recipient; the split
 // test's variant cell is the attribution that must survive to the account.
 model ClaimCode {
-  code                 String    @id // e.g. TS-48217 (normalised: upper, no spaces)
-  firstName            String
-  businessName         String
-  letterBatch          String
-  variantCell          String // A | B | C | D
-  suppressedAt         DateTime? // opted out — resolve to the generic path
-  redeemedByEngineerId String?   @unique
-  redeemedAt           DateTime?
-  createdAt            DateTime  @default(now())
+  code                  String    @id // e.g. TS-48217 (normalised: upper, no spaces)
+  firstName             String
+  businessName          String
+  letterBatch           String
+  variantCell           String // A | B | C | D
+  suppressedAt          DateTime? // opted out — resolve to the generic path
+  redeemedByEngineerId  String?   @unique
+  redeemedAt            DateTime?
+  createdAt             DateTime  @default(now())
+  // 30 Oct update §1 — the claim page (tradesura.com/c/CODE). `town` is the
+  // one printed on the letter; the rest is what they confirm there, which
+  // the app shows back at sign-up (never our list data).
+  town                  String?
+  claimedAt             DateTime? // "Confirm your details" done: Founding spot reserved
+  tradingAddress        String? // "line1\ntown\npostcode"
+  tradingTown           String? // their home town, from the trading address
+  tradingTownSlug       String?
+  correspondenceAddress String? // "Send my post somewhere else"; null = trading address
+  mobile                String? // E.164
+  textConsentAt         DateTime? // "TradeSura can text me to help me finish setting up."
+  codeTextedAt          DateTime?
+}
+
+// 30 Oct update §10 — a Founding Member's top-3 spot in their town. The
+// first 3 Founding Members in a town to complete their account hold one;
+// released after 60 days without a customer, then it passes to the next to
+// complete. One open row per engineer.
+model TopSpot {
+  id            String    @id @default(cuid())
+  townSlug      String
+  engineerId    String
+  heldFrom      DateTime  @default(now())
+  releasedAt    DateTime?
+  releaseReason String? // no_customer | left_town | account_closed
+  createdAt     DateTime  @default(now())
+
+  @@index([townSlug, releasedAt])
+  @@index([engineerId])
 }
 
 // Stripe webhook idempotency guard.
@@ -680,25 +706,6 @@ model AdminNote {
   id          String    @id @default(cuid())
   subjectType String // engineer | customer
   subjectId   String
-// 30 Oct update §7.7 — "Send me the details" on the customer plan page: a
-// customer thinking about it leaves a name and mobile (with consent) and gets
-// the plan link again at 2 and 7 days. joinedAt stops the follow-ups.
-model DetailsRequest {
-  id         String    @id @default(cuid())
-  engineerId String
-  engineer   Engineer  @relation(fields: [engineerId], references: [id])
-  tierId     String?
-  name       String
-  phone      String // normalised E.164
-  consentAt  DateTime
-  source     String? // web | demo | website | …
-  joinedAt   DateTime?
-  createdAt  DateTime  @default(now())
-
-  @@index([engineerId, createdAt])
-  @@index([phone])
-}
-
   body        String
   authorId    String
   authorName  String

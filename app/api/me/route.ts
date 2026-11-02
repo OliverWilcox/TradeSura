@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getActor } from "@/lib/auth";
 import { brandName } from "@/lib/engineer";
 import { deleteOwnerAccount, deleteStaffAccount } from "@/lib/delete-account";
+import { markAccountComplete } from "@/lib/founding";
 import {
   getConnectAccountStatus,
   stripeConfigured,
@@ -50,6 +51,11 @@ export async function GET() {
       console.error("[me] Stripe account status refresh failed:", err);
     }
   }
+
+  // 30 Oct update §10 — the first open after the last step (often a Gas Safe
+  // approval made in the admin app) records the account as complete, which
+  // orders the race for the town's top 3 spots. Cheap no-op once set.
+  if (!engineer.accountCompletedAt) await markAccountComplete(engineerId).catch(() => {});
 
   // Build Guide v2 Part 7.3 — the routing distinction is "any plan at all"
   // (anyTierCount, any status: zero → every door opens the wizard directly)

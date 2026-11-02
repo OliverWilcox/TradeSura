@@ -4,13 +4,11 @@ import { prisma } from "@/lib/db";
 import {
   CLAUSE_TEMPLATES,
   QUALIFICATION_PROMPTS,
-  TIER_PRICE_MIN_PENCE,
   cleanRates,
   missingRateError,
   serviceRuleError,
 } from "@/lib/clauses";
 import { checkWording } from "@/lib/compliance/blocklist";
-import { landlordPriceError } from "@/lib/landlord-rule";
 
 export type GoLiveError = { error: string; code: string };
 
@@ -37,15 +35,9 @@ export async function goLiveError(
   codes: string[],
   rates: Record<string, string>,
   name?: string,
-  // 30 Oct update §5/§7.4 — the price starts blank, and a landlord plan can't
-  // undercut the homeowner plan it contains.
-  tier?: { id: string; priceMonthlyPence: number },
 ): Promise<GoLiveError | null> {
   if (name !== undefined && name.trim().length < 2) {
     return { error: "Give your plan a name before it goes live.", code: "name_required" };
-  }
-  if (tier && tier.priceMonthlyPence < TIER_PRICE_MIN_PENCE) {
-    return { error: "Set your monthly price (£10 or more) before this plan goes live.", code: "price_required" };
   }
   const service = serviceRuleError(codes);
   if (service) return { error: service, code: "maintenance_required" };
@@ -69,25 +61,5 @@ export async function goLiveError(
       };
     }
   }
-  if (tier) {
-    const landlord = await landlordRuleError(engineerId, { ...tier, name: name ?? "", codes });
-    if (landlord) return landlord;
-  }
   return null;
-}
-
-/** §7.4 against the engineer's other live plans. */
-export async function landlordRuleError(
-  engineerId: string,
-  candidate: { id: string; name: string; priceMonthlyPence: number; codes: string[] },
-): Promise<GoLiveError | null> {
-  const live = await prisma.planTier.findMany({
-    where: { engineerId, status: "LIVE", id: { not: candidate.id } },
-    select: { id: true, name: true, priceMonthlyPence: true, clauses: { select: { clause: { select: { code: true } } } } },
-  });
-  const error = landlordPriceError(
-    candidate,
-    live.map((t) => ({ id: t.id, name: t.name, priceMonthlyPence: t.priceMonthlyPence, codes: t.clauses.map((c) => c.clause.code) })),
-  );
-  return error ? { error, code: "landlord_price" } : null;
 }

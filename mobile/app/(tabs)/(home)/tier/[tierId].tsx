@@ -179,8 +179,8 @@ export default function EditPlan() {
               left="Price"
               right={
                 <View className="flex-row items-center gap-1.5">
-                  <Text className={`tabular-nums text-sm ${tier.priceMonthlyPence > 0 ? "text-ok" : "text-muted"}`}>
-                    {tier.priceMonthlyPence > 0 ? `${formatPounds(tier.priceMonthlyPence)}/mo` : "Not set yet"}
+                  <Text className="tabular-nums text-sm text-ok">
+                    {formatPounds(tier.priceMonthlyPence)}/mo
                   </Text>
                   <Chevron />
                 </View>

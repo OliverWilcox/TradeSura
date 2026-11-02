@@ -610,27 +610,22 @@ export const QUALIFICATION_PROMPTS: Record<string, string> = {
   LEGIONELLA: "I'm trained to carry out legionella risk assessments.",
 };
 
-// Starter chips on the builder's Step 1. 30 Oct update §5 — Service / Care /
-// Complete start with suggested items ticked (the engineer changes anything),
-// plus the Landlord pack (Review 4). No prices: the price starts blank and
-// there are no suggested prices or price hints anywhere. Wording still
-// assembles only from the clause templates.
+// Base for the self-assembling price suggestion: service + priority plus the
+// engineer's own margin. Uplifts stack on top of this.
+export const SUGGESTED_BASE_PENCE = 700;
+
+export function suggestedPricePence(upliftsPence: (number | null)[]): number {
+  return SUGGESTED_BASE_PENCE + upliftsPence.reduce<number>((a, b) => a + (b ?? 0), 0);
+}
+
+// Starter chips on the builder's Step 1 (2026 Build Guide target screens:
+// Boiler Care / Service + Priority / Landlord). Each is a starting point the
+// engineer re-prices and re-scopes; wording still assembles only from the
+// clause templates.
 export const TIER_PRESETS = [
   {
-    label: "Service",
-    name: "Boiler Service",
-    isRecommended: false,
-    clauseCodes: ["ANNUAL_SERVICE", "PRIORITY_48H", "ANNUAL_REMINDER", "SERVICE_HISTORY"],
-  },
-  {
-    label: "Care",
     name: "Boiler Care",
-    isRecommended: false,
-    clauseCodes: ["ANNUAL_SERVICE", "CO_ALARM_TEST", "PRIORITY_48H", "NO_CALLOUT_FEE"],
-  },
-  {
-    label: "Complete",
-    name: "Complete Care",
+    priceMonthlyPence: 1200,
     isRecommended: false,
     clauseCodes: [
       "ANNUAL_SERVICE",
@@ -642,11 +637,17 @@ export const TIER_PRESETS = [
     ],
   },
   {
+    name: "Service + Priority",
+    priceMonthlyPence: 1000,
+    isRecommended: false,
+    clauseCodes: ["ANNUAL_SERVICE", "PRIORITY_48H", "ANNUAL_REMINDER", "SERVICE_HISTORY"],
+  },
+  {
     // Review 4 — six options (the builder's recommended maximum), so our own
     // preset never trips the "Over 6 options" warning. The reminder and
     // service-history lines went: certificate storage already reminds them.
-    label: "Landlord",
     name: "Landlord Care",
+    priceMonthlyPence: 1600,
     isRecommended: false,
     clauseCodes: ["ANNUAL_SERVICE", "PRIORITY_48H", "NO_CALLOUT_FEE", "CP12", "SMOKE_CO_CHECKS", "CERT_STORAGE"],
   },
