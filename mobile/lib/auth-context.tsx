@@ -83,6 +83,26 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+// 30 Oct update 3.5 — "Stay logged in". A session lasts 180 days; once a
+// token has under 150 days left (about a month after it was issued) the app
+// swaps it for a fresh one, so a phone in regular use never signs out.
+const RENEW_WHEN_LEFT_MS = 150 * 24 * 60 * 60 * 1000;
+
+function expiresAt(token: string): number | null {
+  try {
+    const part = token.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/");
+    const exp = part ? (JSON.parse(atob(part)) as { exp?: number }).exp : undefined;
+    return typeof exp === "number" ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+export function needsRenewal(token: string, now = Date.now()): boolean {
+  const exp = expiresAt(token);
+  return exp !== null && exp - now < RENEW_WHEN_LEFT_MS;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setTokenState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,12 +111,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [meError, setMeError] = useState<string | null>(null);
   const [stripeSkipped, setStripeSkippedState] = useState(false);
 
+  // Best-effort: a failed renewal just tries again next time; the current
+  // token keeps working until it really expires.
+  const renewSession = useCallback(async (current: string) => {
+    if (!needsRenewal(current)) return;
+    try {
+      const { token: fresh } = await api<{ token: string }>("/api/auth/refresh", { method: "POST" });
+      await setToken(fresh);
+      setTokenState(fresh);
+    } catch {
+      // offline or signed out elsewhere — nothing to do here
+    }
+  }, []);
+
   useEffect(() => {
     getToken()
-      .then(setTokenState)
+      .then((saved) => {
+        setTokenState(saved);
+        if (saved) renewSession(saved);
+      })
       .finally(() => setLoading(false));
     getStripeSkipped().then(setStripeSkippedState);
-  }, []);
+  }, [renewSession]);
 
   const refreshMe = useCallback(async (): Promise<Me | null> => {
     setMeLoading(true);
@@ -119,15 +155,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     else setMe(null);
   }, [token, refreshMe]);
 
+
   // Coming back to the app is when outside changes land (badge approved,
   // Stripe onboarding finished in the browser) — re-read the profile.
   useEffect(() => {
     if (!token) return;
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") refreshMe();
+      if (state === "active") {
+        refreshMe();
+        renewSession(token);
+      }
     });
     return () => sub.remove();
-  }, [token, refreshMe]);
+  }, [token, refreshMe, renewSession]);
 
   async function signIn(newToken: string) {
     await setToken(newToken);

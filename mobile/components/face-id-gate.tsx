@@ -10,6 +10,19 @@ import { Lockup } from "@/components/ui";
 // no biometrics or passcode set up just open, as before.
 const RELOCK_AFTER_MS = 5 * 60 * 1000;
 
+// 30 Oct update 3.5 — "Face ID / fingerprint": name what this phone has.
+async function unlockMethod(): Promise<string> {
+  const types: LocalAuthentication.AuthenticationType[] =
+    await LocalAuthentication.supportedAuthenticationTypesAsync().catch(() => []);
+  if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
+    return Platform.OS === "ios" ? "Face ID" : "face unlock";
+  }
+  if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+    return Platform.OS === "ios" ? "Touch ID" : "your fingerprint";
+  }
+  return "your passcode";
+}
+
 async function biometricsReady(): Promise<boolean> {
   if (Platform.OS === "web") return false;
   const [hardware, enrolled] = await Promise.all([
@@ -23,6 +36,7 @@ export function FaceIdGate() {
   const { token, loading, signOut } = useAuth();
   const [locked, setLocked] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [method, setMethod] = useState("Face ID");
   const backgroundedAt = useRef<number | null>(null);
 
   const unlock = useCallback(async () => {
@@ -37,8 +51,9 @@ export function FaceIdGate() {
 
   // Locks only once the phone confirms Face ID / passcode is set up.
   const lockIfAvailable = useCallback(() => {
-    biometricsReady().then((ready) => {
+    biometricsReady().then(async (ready) => {
       if (!ready) return;
+      setMethod(await unlockMethod());
       setLocked(true);
       unlock();
     });
@@ -74,7 +89,7 @@ export function FaceIdGate() {
     <View style={StyleSheet.absoluteFill} className="items-center justify-center gap-6 bg-night px-8">
       <Lockup height={52} />
       <Text className="text-center text-[16px] text-white/85">
-        {failed ? "That didn't unlock TradeSura." : "Unlock with Face ID to carry on."}
+        {failed ? "That didn't unlock TradeSura." : `Unlock with ${method} to carry on.`}
       </Text>
       <Pressable onPress={unlock} className="w-full items-center rounded-xl bg-white py-3.5">
         <Text className="font-semibold text-on-light">Unlock</Text>
