@@ -43,7 +43,12 @@ type Template = {
   engineerNote: string | null;
   bodyText: string;
 };
-type Preset = { name: string; priceMonthlyPence: number; clauseCodes: string[] };
+type Preset = { label: string; name: string; clauseCodes: string[] };
+type NormalPrices = {
+  normalServicePence: number | null;
+  normalCalloutPence: number | null;
+  repairDiscountPercent: number | null;
+};
 
 // Small, non-compliance display constants duplicated by hand from
 // ../../../lib/clauses.ts (mobile/CLAUDE.md's convention).
@@ -61,7 +66,6 @@ const PRICE_MIN_PENCE = 1000;
 // typo guard, mirrored from ../../../lib/clauses.ts).
 const PRICE_MAX_PENCE = 100000;
 const PRICE_STEP_PENCE = 100;
-const SUGGESTED_BASE_PENCE = 700;
 // Ruling 2 — pre-ticked in a new plan but removable. Mirrors lib/clauses.ts.
 const DEFAULT_ON_CODES = ["ANNUAL_SERVICE"];
 const FEE_RATE = 0.2;
@@ -84,9 +88,13 @@ function pounds(pence: number, alwaysPence = false) {
 function roundPounds(pence: number) {
   return `£${Math.round(pence / 100).toLocaleString("en-GB")}`;
 }
-function guidePence(selected: Template[]) {
-  const sum = selected.reduce((a, t) => a + (t.upliftPence ?? 0), SUGGESTED_BASE_PENCE);
-  return Math.max(PRICE_MIN_PENCE, Math.round(sum / 100) * 100);
+// "£85" / "" for a normal-price box; null when it's blank or not a price.
+function penceFromText(v: string): number | null {
+  const n = Math.round(parseFloat(v.replace(/[£,\s]/g, "")) * 100);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+function textFromPence(p: number | null) {
+  return p ? (p / 100).toFixed(2).replace(/\.00$/, "") : "";
 }
 // Review 3 — our 20% rounds DOWN to the penny, in the engineer's favour.
 function keepPence(pricePence: number) {
@@ -122,8 +130,9 @@ export default function PlanWizard() {
 
   // Review 3 — the box starts empty (or from the quick start), never "New plan".
   const [name, setName] = useState("");
-  const [pricePence, setPricePence] = useState(1200);
-  const [priceTouched, setPriceTouched] = useState(false);
+  // 30 Oct update §5 — prices start blank (0 = not set). Only the £10
+  // minimum is shown; no suggested price or price hint anywhere.
+  const [pricePence, setPricePence] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [customLabels, setCustomLabels] = useState<string[]>([]);
   const [rates, setRates] = useState<Record<string, string>>({});
@@ -145,6 +154,10 @@ export default function PlanWizard() {
   const [priceText, setPriceText] = useState("");
   const [customers, setCustomers] = useState(10);
   const [tipsOpen, setTipsOpen] = useState(false);
+  // §5 — "What do you normally charge…?", blank until they say. Saved to the
+  // account (not the plan); the customer page's value sum uses only these.
+  const [normal, setNormal] = useState({ service: "", callout: "", discount: "" });
+  const [normalNote, setNormalNote] = useState<string | null>(null);
   const [attested, setAttested] = useState(false);
 
   const [blocked, setBlocked] = useState<{ explanation: string; suggestion: { title: string } } | null>(null);
@@ -173,7 +186,6 @@ export default function PlanWizard() {
         setTemplates(data.templates);
         setName(data.tier.name);
         setPricePence(data.tier.priceMonthlyPence);
-        setPriceTouched(true);
         // The tier stores clause ids; the picker and the API speak codes.
         const ids = new Set(data.tier.clauseIds);
         setSelected(new Set(data.templates.filter((t) => ids.has(t.id)).map((t) => t.code)));
@@ -192,8 +204,8 @@ export default function PlanWizard() {
         ]);
         setTemplates(t);
         setPresets(p);
-        // Target Step 1 opens on Boiler Care, ready to tweak.
-        const first = p[0];
+        // Opens on Care (the middle template), ready to tweak.
+        const first = p.find((x) => x.label === "Care") ?? p[0];
         const core = t.filter((x) => x.kind === "CORE" || DEFAULT_ON_CODES.includes(x.code)).map((x) => x.code);
         if (first) {
           setStarter(first.name);
@@ -220,6 +232,15 @@ export default function PlanWizard() {
           setQualified(q.confirmed);
         })
         .catch(() => {});
+      api<NormalPrices>("/api/settings/normal-prices")
+        .then((n) =>
+          setNormal({
+            service: textFromPence(n.normalServicePence),
+            callout: textFromPence(n.normalCalloutPence),
+            discount: n.repairDiscountPercent ? String(n.repairDiscountPercent) : "",
+          }),
+        )
+        .catch(() => {});
     }, [load]),
   );
 
@@ -228,7 +249,6 @@ export default function PlanWizard() {
     () => templates.filter((t) => selected.has(t.code)),
     [templates, selected],
   );
-  const guide = guidePence(selectedTemplates);
 
   // R2/R3 — no annual service means at least one other Core gas servicing
   // item, so every plan includes real maintenance. Mirrors lib/clauses.ts.
@@ -250,8 +270,8 @@ export default function PlanWizard() {
       : null;
   const landlordPlan = templates.some((t) => t.category === LANDLORD_CATEGORY && selected.has(t.code));
   const suggestedName = landlordPlan ? "Landlord Care" : "Boiler Care";
-  // Until the engineer sets a price themselves, the price follows the guide.
-  const price = priceTouched ? pricePence : guide;
+  const price = pricePence;
+  const priceSet = price >= PRICE_MIN_PENCE;
   const keep = keepPence(price);
   const fee = price - keep;
 
@@ -354,8 +374,22 @@ export default function PlanWizard() {
     // Review 3 P2 — say why the minus stops at £10 rather than just stopping.
     setPriceNote(p < PRICE_MIN_PENCE ? "£10 is the lowest price." : null);
     setPricePence(Math.min(PRICE_MAX_PENCE, Math.max(PRICE_MIN_PENCE, p)));
-    setPriceTouched(true);
     markDirty();
+  }
+
+  async function saveNormalPrices(next: typeof normal) {
+    const discount = parseInt(next.discount.replace(/[%\s]/g, ""), 10);
+    const body = {
+      normalServicePence: penceFromText(next.service),
+      normalCalloutPence: penceFromText(next.callout),
+      repairDiscountPercent: Number.isFinite(discount) && discount > 0 ? discount : null,
+    };
+    try {
+      await api("/api/settings/normal-prices", { method: "POST", body: JSON.stringify(body) });
+      setNormalNote(null);
+    } catch (e) {
+      setNormalNote(e instanceof ApiError ? e.message : "Couldn't save that — try again.");
+    }
   }
 
   function commitTypedPrice() {
@@ -531,6 +565,10 @@ export default function PlanWizard() {
   async function saveSingleStep() {
     if (!currentId) return;
     if (step === 3 && !(await checkName(name))) return;
+    if (step === 2 && !priceSet) {
+      setError("Set your monthly price: £10 or more.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -553,6 +591,10 @@ export default function PlanWizard() {
     if (step === 1 && serviceRuleError) return;
     if (step === 1 && rateError) {
       setError(rateError);
+      return;
+    }
+    if (step === 2 && !priceSet) {
+      setError("Set your monthly price: £10 or more.");
       return;
     }
     if (step === 3 && !(await checkName(name))) return;
@@ -687,8 +729,8 @@ export default function PlanWizard() {
             <View>
               <Text className="text-[22px] font-bold text-ink">Build your care plan</Text>
               <Text className="mt-1.5 text-[14.5px] leading-[21px] text-muted">
-                Pick what&apos;s included, set your price, then name it. Most engineers offer 2 or 3
-                plans, and you can add more any time.
+                Pick what&apos;s included, set your price, then name it. We recommend offering 3
+                plans: most customers pick the middle one.
               </Text>
             </View>
 
@@ -703,7 +745,7 @@ export default function PlanWizard() {
                       className={`rounded-full border px-4 py-2.5 ${on ? "border-flame bg-flame" : label === SCRATCH ? "border-white/70" : "border-line-strong"}`}
                     >
                       <Text className={`text-[14px] ${on ? "font-semibold text-white" : "text-ink"}`}>
-                        {label === "Landlord Care" ? "Landlord" : label}
+                        {presets.find((p) => p.name === label)?.label ?? label}
                       </Text>
                     </Pressable>
                   );
@@ -849,7 +891,7 @@ export default function PlanWizard() {
               </Text>
               <View className="mt-2 flex-row items-center justify-between">
                 <Pressable
-                  onPress={() => setPrice(price - PRICE_STEP_PENCE)}
+                  onPress={() => priceSet && setPrice(price - PRICE_STEP_PENCE)}
                   accessibilityLabel="Lower the price by £1"
                   className="h-12 w-12 items-center justify-center rounded-full border-[1.5px] border-white/80"
                 >
@@ -865,7 +907,7 @@ export default function PlanWizard() {
                     autoFocus
                     // Starts empty (the current price shows as the hint), so
                     // typing replaces the price instead of adding to it.
-                    placeholder={(price / 100).toFixed(2)}
+                    placeholder={priceSet ? (price / 100).toFixed(2) : "0.00"}
                     placeholderTextColor="#6e86a3"
                     returnKeyType="done"
                     className="min-w-[150px] text-center text-[44px] font-extrabold text-ink"
@@ -876,30 +918,27 @@ export default function PlanWizard() {
                       setPriceText("");
                       setTypingPrice(true);
                     }}
-                    accessibilityLabel={`Monthly price ${pounds(price, true)}. Tap to type a price.`}
+                    accessibilityLabel={priceSet ? `Monthly price ${pounds(price, true)}. Tap to type a price.` : "No price yet. Tap to type a price."}
                   >
-                    <Text className="text-[48px] font-extrabold text-ink" style={{ fontVariant: ["tabular-nums"] }}>
-                      {pounds(price, true)}
+                    <Text
+                      className={`text-[48px] font-extrabold ${priceSet ? "text-ink" : "text-faint"}`}
+                      style={{ fontVariant: ["tabular-nums"] }}
+                    >
+                      {priceSet ? pounds(price, true) : "£ —"}
                     </Text>
                   </Pressable>
                 )}
                 <Pressable
-                  onPress={() => setPrice(price + PRICE_STEP_PENCE)}
+                  onPress={() => setPrice(priceSet ? price + PRICE_STEP_PENCE : PRICE_MIN_PENCE)}
                   accessibilityLabel="Raise the price by £1"
                   className="h-12 w-12 items-center justify-center rounded-full border-[1.5px] border-white/80"
                 >
                   <Icon name="plus" size={20} weight="semibold" />
                 </Pressable>
               </View>
-              <Text className="mt-1 text-center text-[13px] text-muted">
-                Tap to type · from £10, no upper limit · pence allowed
-              </Text>
+              <Text className="mt-1 text-center text-[13px] text-muted">Tap to type · £10 minimum</Text>
               {priceNote && <Text className="mt-1 text-center text-[13px] text-warn">{priceNote}</Text>}
-              {!priceTouched && (
-                <Text className="mt-0.5 text-center text-[12px] text-faint">
-                  Starts at the guide price for what you picked
-                </Text>
-              )}
+              {priceSet && (
               <View className="mt-3.5 gap-2 border-t border-line-strong pt-3.5">
                 <View className="flex-row justify-between">
                   <Text className="text-[15px] text-ink">Customer pays</Text>
@@ -913,8 +952,43 @@ export default function PlanWizard() {
                   You keep {pounds(keep, true)} a month · {roundPounds(keep * 12)} a year
                 </Text>
               </View>
+              )}
             </Card>
 
+            {/* §5 — the installer's own prices, blank until they say. */}
+            <Card>
+              <SectionTitle>Your normal prices</SectionTitle>
+              <Text className="text-[13.5px] leading-[19px] text-muted">
+                We use these to show customers what your plan is worth. Leave any blank.
+              </Text>
+              {(
+                [
+                  { key: "service", label: "What do you normally charge for a service?", prefix: "£", kb: "decimal-pad" },
+                  { key: "callout", label: "What do you normally charge for a call-out?", prefix: "£", kb: "decimal-pad" },
+                  { key: "discount", label: "Any discount on repairs for plan customers?", suffix: "%", kb: "number-pad" },
+                ] as const
+              ).map((f) => (
+                <View key={f.key} className="mt-3">
+                  <Text className="text-[14px] text-ink">{f.label}</Text>
+                  <View className="mt-1.5 min-h-[44px] flex-row items-center rounded-xl border border-line-strong bg-bg px-3">
+                    {"prefix" in f && <Text className="text-[16px] text-muted">{f.prefix}</Text>}
+                    <TextInput
+                      value={normal[f.key]}
+                      onChangeText={(v) => setNormal({ ...normal, [f.key]: v.slice(0, 8) })}
+                      onEndEditing={() => saveNormalPrices(normal)}
+                      onBlur={() => saveNormalPrices(normal)}
+                      keyboardType={f.kb}
+                      accessibilityLabel={f.label}
+                      className="flex-1 px-1 text-[16px] text-ink"
+                    />
+                    {"suffix" in f && <Text className="text-[16px] text-muted">{f.suffix}</Text>}
+                  </View>
+                </View>
+              ))}
+              {normalNote && <Text className="mt-2 text-[13px] text-warn">{normalNote}</Text>}
+            </Card>
+
+            {priceSet && (
             <Card>
               <SectionTitle>What you could earn</SectionTitle>
               <Slider
@@ -931,6 +1005,7 @@ export default function PlanWizard() {
                 with {customers} customer{customers === 1 ? "" : "s"} on this plan
               </Text>
             </Card>
+            )}
 
             <Card>
               <SectionTitle>What your customer sees</SectionTitle>
@@ -957,9 +1032,8 @@ export default function PlanWizard() {
               {tipsOpen && (
                 <View className="mt-3 gap-2">
                   {[
-                    "Most engineers charge £10 to £15 a month for a plan with the annual service.",
                     "Price the work, not the risk: the plan pays for the service and checks you'll actually do.",
-                    "Offering 2 or 3 plans helps: customers like to pick, and many go for the middle one.",
+                    "We recommend offering 3 plans: most customers pick the middle one.",
                     "You can change the price later. Customers already on the plan keep what they signed up for.",
                   ].map((t) => (
                     <View key={t} className="flex-row gap-2">
@@ -1165,7 +1239,7 @@ export default function PlanWizard() {
               <Button
                 onPress={goNext}
                 // Review 3 — "Make this plan live" stays greyed out until ticked.
-                disabled={busy || (step === 3 && Boolean(blocked)) || (step === 4 && !attested)}
+                disabled={busy || (step === 2 && !priceSet) || (step === 3 && Boolean(blocked)) || (step === 4 && !attested)}
               >
                 {nextLabel}
               </Button>
@@ -1185,8 +1259,7 @@ export default function PlanWizard() {
               ) : selected.size < RECOMMENDED_MIN && !serviceRuleError ? (
                 <Text className="text-[12.5px] text-muted">Most plans have 3 to 6 options</Text>
               ) : null}
-              <Text className="text-[17px] font-semibold text-ok">Guide price {pounds(guide)}/mo</Text>
-              <Text className="text-[13px] text-muted">You set your final price next</Text>
+              <Text className="text-[13px] text-muted">You set your price next</Text>
             </View>
             <Button onPress={goNext} disabled={busy || Boolean(serviceRuleError) || Boolean(rateError)} className="min-w-[130px]">
               {busy ? "Saving…" : "Next"}

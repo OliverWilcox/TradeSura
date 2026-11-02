@@ -184,6 +184,13 @@ model Engineer {
   serviceRecords             ServiceRecord[]
   stickers                   Sticker[]         @relation("StickerAllocated")
   // E10 — who brought this engineer in, and whether their £50 bounty is paid.
+  detailsRequests            DetailsRequest[]
+  // 30 Oct update §5 — what the installer normally charges, asked blank in
+  // the plan builder. The customer page's "Worth over £X a year" uses only
+  // these figures (lib/value-sum.ts), never a guide or benchmark.
+  normalServicePence         Int?
+  normalCalloutPence         Int?
+  repairDiscountPercent      Int?
   referrerId                 String?
   referrer                   Engineer?         @relation("Referrals", fields: [referrerId], references: [id])
   referrals                  Engineer[]        @relation("Referrals")
@@ -673,6 +680,25 @@ model AdminNote {
   id          String    @id @default(cuid())
   subjectType String // engineer | customer
   subjectId   String
+// 30 Oct update §7.7 — "Send me the details" on the customer plan page: a
+// customer thinking about it leaves a name and mobile (with consent) and gets
+// the plan link again at 2 and 7 days. joinedAt stops the follow-ups.
+model DetailsRequest {
+  id         String    @id @default(cuid())
+  engineerId String
+  engineer   Engineer  @relation(fields: [engineerId], references: [id])
+  tierId     String?
+  name       String
+  phone      String // normalised E.164
+  consentAt  DateTime
+  source     String? // web | demo | website | …
+  joinedAt   DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([engineerId, createdAt])
+  @@index([phone])
+}
+
   body        String
   authorId    String
   authorName  String
