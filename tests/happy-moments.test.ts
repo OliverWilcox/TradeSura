@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({
   events: [] as { name: string; meta: Record<string, unknown> }[],
   engineer: { id: "eng1", email: "eng@example.com", firstName: "Dave", slug: "smithheating", firstPayoutEmailAt: new Date() as Date | null },
-  email: vi.fn(async (_opts: { to: string; subject: string; html: string }) => undefined),
+  email: vi.fn<(opts: { to: string; subject: string; html: string }) => Promise<undefined>>(async () => undefined),
 }));
 
 vi.mock("@/lib/db", () => ({
