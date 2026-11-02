@@ -149,7 +149,7 @@ function DetailsCapture({ url, brand, tierId, disabled }: { url: string; brand: 
       />
       <label className="flex gap-2 text-xs text-muted items-start">
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#5FA3F0]" />
-        {brand} can text me this plan&apos;s details and a reminder or two. Reply STOP any time.
+        <span>{`${brand} can text me this plan's details and a reminder or two. Reply STOP any time.`}</span>
       </label>
       {error && <p className="text-sm text-danger">{error}</p>}
       <button

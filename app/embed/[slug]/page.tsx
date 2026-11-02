@@ -120,7 +120,7 @@ export default async function EmbedPlans({
       )}
       {locked && tiers.length > 0 && (
         <p className="text-[13px] text-muted text-center pt-3">
-          {engineer.tradingName} isn&apos;t taking sign-ups online just yet. Check back soon, or ask them directly.
+          {`${engineer.tradingName} isn't taking sign-ups online just yet. Check back soon, or ask them directly.`}
         </p>
       )}
       {/* Section 7 — a visible, branded link back; never keyword-stuffed. */}
