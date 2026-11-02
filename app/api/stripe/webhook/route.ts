@@ -6,7 +6,7 @@ import { recordReferralEarning } from "@/lib/referral";
 import { activatePlan } from "@/lib/activate";
 import { sendPushNotification } from "@/lib/push";
 import { alertIfStripeNeedsMore } from "@/lib/stripe-onboarding";
-import { sendFirstPayoutEmail } from "@/lib/account-emails";
+import { sendPayoutEmail } from "@/lib/account-emails";
 import {
   completePaymentRescue,
   completeSignupCheckout,
@@ -318,8 +318,9 @@ async function handleEvent(event: Stripe.Event) {
         `£${(payout.amount / 100).toFixed(2)} should now be in your bank.`,
         { url: "/payouts" },
       );
-      // Build Review 3 §8 — the first Friday payout gets an email (once).
-      await sendFirstPayoutEmail(engineer.id, payout.amount);
+      // Build Review 3 §8 + Matt 30 Oct §9.4 — every payout is an email: the
+      // first gets the first-payout one, once per payout.
+      await sendPayoutEmail(engineer.id, payout.id, payout.amount);
       return;
     }
 

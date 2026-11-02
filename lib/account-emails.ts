@@ -12,6 +12,7 @@ import { EMAIL, SUPPORT_EMAIL, emailButton, emailShell, escapeHtml } from "@/lib
 import { engineerYearlyPence } from "@/lib/engineer-welcome-email";
 import { poundsFromPence } from "@/lib/plan-doc";
 import { poundsLabel } from "@/lib/billing-interval";
+import { track } from "@/lib/track";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Nudges only go to new sign-ups: an older account that never set up
@@ -31,6 +32,8 @@ function accountEmail(opts: {
   preheader: string;
   paragraphs: string[];
   button: { to: string; label: string };
+  /** Extra rows under the button (the happy-moment asks). */
+  after?: string;
 }) {
   const open = `${appUrl()}/api/open?to=${opts.button.to}`;
   const body = opts.paragraphs
@@ -43,6 +46,7 @@ function accountEmail(opts: {
     ${body}
   </td></tr>
   <tr><td style="padding:6px 32px 8px;">${emailButton(open, opts.button.label)}</td></tr>
+  ${opts.after ?? ""}
   <tr><td style="padding:18px 32px 26px;font-size:14px;line-height:21px;color:${EMAIL.body};">
     Any questions, just reply to this email or write to <a href="mailto:${SUPPORT_EMAIL}" style="color:${EMAIL.link};">${SUPPORT_EMAIL}</a>.<br><br>
     The TradeSura team
@@ -55,6 +59,30 @@ function accountEmail(opts: {
 }
 
 const money = (s: string) => `<b style="color:${EMAIL.money};">${s}</b>`;
+
+// Matt, 30 Oct §9.4 — happy moments (first customer, every payout) ask for
+// more customers and more installers in the email; the rating prompt is in
+// the app. Trustpilot shows once TRUSTPILOT_REVIEW_URL is set (no account yet).
+export function happyMomentAsks(referralCode: string | null): string {
+  const open = (to: string) => `${appUrl()}/api/open?to=${to}`;
+  const link = (to: string, label: string) => `<a href="${open(to)}" style="color:${EMAIL.link};font-weight:700;">${label}</a>`;
+  const item = (html: string) =>
+    `<tr><td style="padding:10px 32px 0;"><div style="border-top:1px solid ${EMAIL.line};padding-top:12px;font-size:14px;line-height:21px;color:${EMAIL.body};">${html}</div></td></tr>`;
+  const trustpilot = process.env.TRUSTPILOT_REVIEW_URL?.trim();
+  return [
+    item(
+      `<b>Who else have you worked for this year?</b> Every one of them is a customer you could offer a plan to. ${link("customers", "Offer them a plan")}`,
+    ),
+    item(
+      `<b>Know another installer?</b> ${referralCode ? `Share your code <b>${escapeHtml(referralCode)}</b>. ` : ""}You earn 25% of our fee on every plan they sell for 12 months, then 10% for life. ${link("referral", "Invite them")}`,
+    ),
+    trustpilot
+      ? item(
+          `<b>Happy with TradeSura?</b> A quick review helps other installers find us. <a href="${escapeHtml(trustpilot)}" style="color:${EMAIL.link};font-weight:700;">Review us on Trustpilot</a>`,
+        )
+      : "",
+  ].join("");
+}
 
 export function paymentsNudgeEmail(firstName: string | null) {
   // The engineer's 80% (our 20% rounds down in their favour).
@@ -84,8 +112,15 @@ export function noPlanNudgeEmail(firstName: string | null) {
   });
 }
 
-export function firstCustomerEmail(firstName: string | null, customerName: string, planName: string, yearlyPence: number) {
+export function firstCustomerEmail(
+  firstName: string | null,
+  customerName: string,
+  planName: string,
+  yearlyPence: number,
+  referralCode: string | null = null,
+) {
   return accountEmail({
+    after: happyMomentAsks(referralCode),
     firstName,
     title: "Your first customer has joined",
     preheader: `${customerName} joined ${planName}.`,
@@ -97,8 +132,9 @@ export function firstCustomerEmail(firstName: string | null, customerName: strin
   });
 }
 
-export function firstPayoutEmail(firstName: string | null, amountPence: number) {
+export function firstPayoutEmail(firstName: string | null, amountPence: number, referralCode: string | null = null) {
   return accountEmail({
+    after: happyMomentAsks(referralCode),
     firstName,
     title: "Your first payout has landed",
     preheader: `${poundsFromPence(amountPence)} is on its way to your bank.`,
@@ -107,6 +143,35 @@ export function firstPayoutEmail(firstName: string | null, amountPence: number) 
       "From now on you're paid every Friday. Every payment, fee and payout is in the Payouts tab.",
     ],
     button: { to: "payouts", label: "See payouts" },
+  });
+}
+
+// Matt, 30 Oct §9.4 — every payout is a happy moment, not just the first.
+export function payoutEmail(firstName: string | null, amountPence: number, referralCode: string | null = null) {
+  return accountEmail({
+    firstName,
+    title: `${poundsFromPence(amountPence)} paid to your bank`,
+    preheader: "Your Friday payout from TradeSura.",
+    paragraphs: [
+      `This week's TradeSura payout of ${money(poundsFromPence(amountPence))} has been paid to your bank. It can take a few hours to show.`,
+    ],
+    button: { to: "payouts", label: "See payouts" },
+    after: happyMomentAsks(referralCode),
+  });
+}
+
+// Matt, 30 Oct §9.1 — asked the moment the first customer joins, if Stripe
+// can't pay the engineer out yet.
+export function finishSetupEmail(firstName: string | null, customerName: string) {
+  return accountEmail({
+    firstName,
+    title: "Finish setup to get paid",
+    preheader: `${customerName} has joined. Add your details so we can pay you.`,
+    paragraphs: [
+      `${escapeHtml(customerName)} has joined your plan. To be paid on Fridays, finish your payment setup: it only takes a few minutes.`,
+      "Their payments are collected as normal in the meantime; your payouts start as soon as setup is done.",
+    ],
+    button: { to: "get-paid", label: "Finish setup" },
   });
 }
 
@@ -169,19 +234,46 @@ export async function sendSetupNudges(now = new Date()): Promise<{ payments: num
   return { payments, noPlan };
 }
 
+const HAPPY_SELECT = { id: true, email: true, firstName: true, slug: true } as const;
+
 export async function sendFirstCustomerEmail(
   engineerId: string,
   customerName: string,
   planName: string,
   yearlyPence: number,
 ): Promise<void> {
-  const e = await prisma.engineer.findUnique({ where: { id: engineerId }, select: { id: true, email: true, firstName: true } });
+  const e = await prisma.engineer.findUnique({ where: { id: engineerId }, select: HAPPY_SELECT });
   if (!e) return;
-  await sendClaimed(e, "firstCustomerEmailAt", firstCustomerEmail(e.firstName, customerName, planName, yearlyPence));
+  await sendClaimed(e, "firstCustomerEmailAt", firstCustomerEmail(e.firstName, customerName, planName, yearlyPence, e.slug));
 }
 
 export async function sendFirstPayoutEmail(engineerId: string, amountPence: number): Promise<void> {
-  const e = await prisma.engineer.findUnique({ where: { id: engineerId }, select: { id: true, email: true, firstName: true } });
+  const e = await prisma.engineer.findUnique({ where: { id: engineerId }, select: HAPPY_SELECT });
   if (!e) return;
-  await sendClaimed(e, "firstPayoutEmailAt", firstPayoutEmail(e.firstName, amountPence));
+  await sendClaimed(e, "firstPayoutEmailAt", firstPayoutEmail(e.firstName, amountPence, e.slug));
+}
+
+/**
+ * Every payout.paid: the first gets the first-payout email, later ones the
+ * weekly one. Once per payout — the event is recorded before sending, so a
+ * Stripe retry never sends it twice.
+ */
+export async function sendPayoutEmail(engineerId: string, payoutId: string, amountPence: number): Promise<void> {
+  const e = await prisma.engineer.findUnique({ where: { id: engineerId }, select: { ...HAPPY_SELECT, firstPayoutEmailAt: true } });
+  if (!e?.email) return;
+  if (!e.firstPayoutEmailAt) {
+    await sendFirstPayoutEmail(engineerId, amountPence);
+    await track("payout_email_sent", { type: "SYSTEM" }, { engineerId, payoutId, first: true });
+    return;
+  }
+  const seen = await prisma.event.findFirst({
+    where: { name: "payout_email_sent", meta: { path: ["payoutId"], equals: payoutId } },
+    select: { id: true },
+  });
+  if (seen) return;
+  await track("payout_email_sent", { type: "SYSTEM" }, { engineerId, payoutId });
+  const email = payoutEmail(e.firstName, amountPence, e.slug);
+  await sendEmail({ to: e.email, subject: email.subject, html: email.html, replyTo: SUPPORT_EMAIL }).catch((err) =>
+    console.error("[account-emails] payout email failed:", err),
+  );
 }

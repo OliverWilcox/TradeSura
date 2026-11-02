@@ -12,6 +12,7 @@ import { attachPlanToPassport } from "@/lib/passport";
 import { queueWelcomeTouches } from "@/lib/welcome-touches";
 import { firstCustomerPath, firstMemberYearlyPence } from "@/lib/first-member";
 import { sendFirstCustomerEmail } from "@/lib/account-emails";
+import { askToFinishSetup } from "@/lib/finish-setup";
 import { cp12Date } from "@/lib/cp12";
 
 // Idempotent: safe to call again if Stripe retries the webhook, or if the
@@ -130,6 +131,10 @@ export async function activatePlan(
       plan.tier?.name ?? "your plan",
       firstMemberYearlyPence(plan.priceMonthlyPence ?? 0, plan.billingInterval),
     ).catch((err) => console.error("[activate] first customer email failed:", err));
+    // Matt, 30 Oct §9.1 — "Finish setup to get paid", the moment it matters.
+    await askToFinishSetup(plan.engineerId, `${plan.customer.firstName} ${plan.customer.lastName}`).catch((err) =>
+      console.error("[activate] finish-setup ask failed:", err),
+    );
   }
   // Review 4 — a landlord whose gas safety record runs out before the plan's
   // CP12 is available asked for a one-off one; the engineer books it.
