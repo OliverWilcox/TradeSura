@@ -257,13 +257,13 @@ export default function Onboarding() {
                 {me?.firstName ? `Welcome, ${me.firstName}` : "Welcome"}
               </Text>
             </View>
-            <View className="items-center justify-center" style={{ width: 88, height: 88 }}>
-              <RingMarkProgress size={88} progress={done / live.length} />
+            <View className="items-center justify-center" style={{ width: 104, height: 104 }}>
+              <RingMarkProgress size={104} progress={done / live.length} />
               <View className="absolute items-center">
-                <Text className="text-[17px] font-extrabold text-ink">
+                <Text className="text-[15px] font-extrabold leading-[18px] text-ink">
                   {done} of {live.length}
                 </Text>
-                <Text className="text-[10px] text-muted">to go live</Text>
+                <Text className="text-[9px] leading-[11px] text-muted">to go live</Text>
               </View>
             </View>
           </View>

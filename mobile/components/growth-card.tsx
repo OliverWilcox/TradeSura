@@ -34,38 +34,33 @@ export function GrowthCard() {
         <Pressable className="flex-row items-center gap-2 py-1.5" onPress={() => router.push("/enquiries")}>
           <Icon name="message" size={18} color="#5fa3f0" />
           <Text className="flex-1 text-[13px] font-semibold text-flame">
-            {s.messagesThisWeek} new message{s.messagesThisWeek === 1 ? "" : "s"} this week — reply
+            {s.messagesThisWeek} new message{s.messagesThisWeek === 1 ? "" : "s"} this week — reply →
           </Text>
-          <Icon name="chevron" size={13} color="#5fa3f0" />
         </Pressable>
       )}
       <Pressable className="flex-row items-center gap-2 py-1.5" onPress={() => router.push("/enquiries")}>
         <Icon name="chat" size={18} color="#9fb6d0" />
         <Text className="flex-1 text-[13px] text-ink">
-          TradeSura sent you <Text className="font-bold">{n} enquir{n === 1 ? "y" : "ies"}</Text> this month
+          TradeSura sent you <Text className="font-bold">{n} enquir{n === 1 ? "y" : "ies"}</Text> this month →
         </Text>
-        <Icon name="chevron" size={13} color="#9fb6d0" />
       </Pressable>
       {s.websiteLive ? (
         <Pressable className="flex-row items-center gap-2 py-1.5" onPress={() => router.push("/website")}>
           <Icon name="globe" size={18} color="#9fb6d0" />
           <Text className="flex-1 text-[13px] text-ink">
             Your website sold <Text className="font-bold">{s.websiteSalesThisMonth}</Text> plan
-            {s.websiteSalesThisMonth === 1 ? "" : "s"} this month
+            {s.websiteSalesThisMonth === 1 ? "" : "s"} this month →
           </Text>
-          <Icon name="chevron" size={13} color="#9fb6d0" />
         </Pressable>
       ) : !s.websiteDisabled ? (
         <Pressable className="flex-row items-center gap-2 py-1.5" onPress={() => router.push("/website")}>
           <Icon name="globe" size={18} color="#5fa3f0" />
-          <Text className="flex-1 text-[13px] font-semibold text-flame">Add TradeSura to your website</Text>
-          <Icon name="chevron" size={13} color="#5fa3f0" />
+          <Text className="flex-1 text-[13px] font-semibold text-flame">Add TradeSura to your website →</Text>
         </Pressable>
       ) : null}
       <Pressable className="flex-row items-center gap-2 py-1.5" onPress={() => router.push("/your-numbers")}>
         <Icon name="growth" size={18} color="#9fb6d0" />
-        <Text className="flex-1 text-[13px] text-ink">Your numbers — ratings, cancellations, enquiries</Text>
-        <Icon name="chevron" size={13} color="#9fb6d0" />
+        <Text className="flex-1 text-[13px] text-ink">Your numbers — ratings, cancellations, enquiries →</Text>
       </Pressable>
     </Card>
   );

@@ -262,16 +262,19 @@ export default function OfferStart() {
       ) : (
         <ScrollView className="flex-1" contentContainerClassName="gap-3.5 px-4 pb-8 pt-4">
           {tierCount > 0 && (
-            <Card className="border-warn-tint bg-warn-tint">
+            // Amber means "pending" in the design system; a script isn't, so
+            // this is a plain card with the blue link colour.
+            <Card>
               <Pressable
                 onPress={() => setScriptOpen((v) => !v)}
                 className="flex-row items-center justify-between"
+                accessibilityRole="button"
               >
-                <Micro className="text-warn">What to say</Micro>
-                <Text className="font-sans text-xs text-warn">{scriptOpen ? "Hide" : "Show"}</Text>
+                <Micro className="text-flame">What to say</Micro>
+                <Text className="font-sans text-[13px] font-semibold text-flame">{scriptOpen ? "Hide" : "Show"}</Text>
               </Pressable>
               {scriptOpen && (
-                <Text className="mt-1.5 font-sans text-[13px] text-ink">{offerScript(selectedTier)}</Text>
+                <Text className="mt-2 font-sans text-[14px] leading-[21px] text-ink">{offerScript(selectedTier)}</Text>
               )}
             </Card>
           )}

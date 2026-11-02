@@ -63,7 +63,11 @@ export function RingProgress({
   });
 
   return (
-    <View style={{ width: size, height: size }}>
+    // Circles draw from 3 o'clock by default — the whole drawing is turned
+    // so the fill starts at 12 o'clock and sweeps clockwise, matching the
+    // brand ring's green segment. Turning the View, not the circle, also
+    // keeps react-native-svg from writing an invalid transform-origin on web.
+    <View style={{ width: size, height: size, transform: [{ rotate: "-90deg" }] }}>
       <Svg width={size} height={size}>
         <Circle
           cx={size / 2}
@@ -85,12 +89,6 @@ export function RingProgress({
           strokeDashoffset={strokeDashoffset}
           fill="none"
           opacity={dormant ? 0 : 1}
-          // Circles draw from 3 o'clock by default — rotate so the fill
-          // starts at 12 o'clock and sweeps clockwise, matching the brand
-          // ring's own green segment position.
-          rotation={-90}
-          originX={size / 2}
-          originY={size / 2}
         />
       </Svg>
     </View>

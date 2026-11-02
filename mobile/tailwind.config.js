@@ -11,6 +11,13 @@
 // font. Semantic keys are kept so screens don't churn: `flame`=brand blue,
 // `copper`/`ok`=money green, `iron`=dark chrome, `warn`=amber, `panel`=surface-2.
 /** @type {import('tailwindcss').Config} */
+const { platformSelect } = require("nativewind/theme");
+
+const APP_FONT = platformSelect({
+  web: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  default: "System",
+});
+
 module.exports = {
   content: ["./app/**/*.{js,jsx,ts,tsx}", "./components/**/*.{js,jsx,ts,tsx}"],
   presets: [require("nativewind/preset")],
@@ -78,15 +85,18 @@ module.exports = {
         // anywhere — the `mono*` keys are kept only so stray `font-mono`
         // classes still resolve, and they map to the app font too. Use
         // `tabular-nums` where figures need to line up.
-        sans: ["System"],
-        "sans-medium": ["System"],
-        "sans-semibold": ["System"],
-        "sans-bold": ["System"],
-        disp: ["System"],
-        "disp-bold": ["System"],
-        mono: ["System"],
-        "mono-medium": ["System"],
-        "mono-semibold": ["System"],
+        // "System" is the platform font on iOS/Android, but a browser has no
+        // font called System and fell back to Times in the web build, so web
+        // gets the browser's system-UI stack instead (the same SF on a Mac).
+        sans: APP_FONT,
+        "sans-medium": APP_FONT,
+        "sans-semibold": APP_FONT,
+        "sans-bold": APP_FONT,
+        disp: APP_FONT,
+        "disp-bold": APP_FONT,
+        mono: APP_FONT,
+        "mono-medium": APP_FONT,
+        "mono-semibold": APP_FONT,
       },
     },
   },

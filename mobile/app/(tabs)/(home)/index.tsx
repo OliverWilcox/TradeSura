@@ -69,7 +69,7 @@ function StandingStrip({ standing }: { standing: Standing }) {
       {standing.tone === "amber" && <Icon name="clock" size={16} color="#F5B544" />}
       {standing.tone === "red" && <Icon name="warning" size={14} color="#ff6b6b" />}
       <Text className={`flex-1 font-sans text-[13px] ${textCls}`} numberOfLines={2}>
-        {standing.text}
+        {standing.text} →
       </Text>
     </Pressable>
   );
@@ -319,9 +319,8 @@ function OwnerHome() {
           >
             <Icon name="camera" size={16} color="#F5B544" />
             <Text className="flex-1 text-[13.5px] font-semibold text-warn">
-              Photo needed · Add your Gas Safe ID
+              Photo needed · Add your Gas Safe ID →
             </Text>
-            <Icon name="chevron" size={13} color="#F5B544" weight="semibold" />
           </Pressable>
         )}
 

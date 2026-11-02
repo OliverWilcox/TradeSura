@@ -49,8 +49,7 @@ export function StripeStatusCard({
       </View>
       {copy.cta && (
         <View className="flex-row items-center gap-1">
-          <Text className="text-[14px] font-semibold text-warn">{copy.cta}</Text>
-          <Icon name="chevron" size={13} color="#F2B84B" weight="semibold" />
+          <Text className="text-[14px] font-semibold text-warn">{copy.cta} →</Text>
         </View>
       )}
     </View>
