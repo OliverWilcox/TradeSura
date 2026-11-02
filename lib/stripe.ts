@@ -307,6 +307,24 @@ function baseCreateParams(e: ConnectEngineer): Stripe.V2.Core.AccountCreateParam
   };
 }
 
+// "You keep 80%, paid every Friday" (member pack letter). New connected
+// accounts default to daily payouts (checked in test mode 2 Nov), so each
+// account is set to weekly on Fridays through Balance Settings, the API that
+// works for v2 accounts. Best-effort: a failure leaves Stripe's default and
+// is logged; _local-backup/tools/friday-payouts.ts fixes existing accounts.
+export async function setFridayPayouts(accountId: string): Promise<boolean> {
+  try {
+    await getStripe().balanceSettings.update(
+      { payments: { payouts: { schedule: { interval: "weekly", weekly_payout_days: ["friday"] } } } },
+      { stripeAccount: accountId },
+    );
+    return true;
+  } catch (err) {
+    console.error(`[stripe] weekly Friday payouts not set on ${accountId}:`, err);
+    return false;
+  }
+}
+
 // Creates the connected account on first call, returns the existing id after.
 // One account per engineer, always: an accidental "Return to TradeSura"
 // leaves this id saved and the next link carries on where they stopped.
@@ -328,6 +346,7 @@ export async function getOrCreateConnectAccount(engineer: ConnectEngineer): Prom
       },
     });
     if (p.representative) await addRepresentative(account.id, p.representative);
+    await setFridayPayouts(account.id);
     return account.id;
   };
   try {
@@ -348,6 +367,7 @@ export async function getOrCreateConnectAccount(engineer: ConnectEngineer): Prom
       }
     }
     const account = await stripe.v2.core.accounts.create(base);
+    await setFridayPayouts(account.id);
     return account.id;
   }
 }
