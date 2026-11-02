@@ -330,6 +330,11 @@ model Plan {
   termsAgreedAt           DateTime?
   // R9 — a Landlord plan: the customer confirmed at checkout the property is let.
   propertyLetConfirmedAt  DateTime?
+  // Review 4 — landlord plans with a CP12: when the customer's current gas
+  // safety record is due, and whether they asked for a one-off CP12 because
+  // it falls before the plan's own record is available (lib/cp12.ts).
+  gasSafetyRecordDueAt    DateTime?
+  oneOffCp12RequestedAt   DateTime?
   // Section 1 — "month" | "year" (12 months for the price of 11).
   billingInterval         String          @default("month")
   // First collection and all benefits wait for cooling-off; the service
@@ -337,11 +342,6 @@ model Plan {
   serviceStartsAt         DateTime?
   paymentsCleared         Int             @default(0) // the annual service unlocks at 3
   // Section 2 — cancellation at the end of the paid month; pause = no
-  // Review 4 — landlord plans with a CP12: when the customer's current gas
-  // safety record is due, and whether they asked for a one-off CP12 because
-  // it falls before the plan's own record is available (lib/cp12.ts).
-  gasSafetyRecordDueAt    DateTime?
-  oneOffCp12RequestedAt   DateTime?
   // collections, no benefits, restarts automatically.
   cancelRequestedAt       DateTime?
   cancelEffectiveAt       DateTime?
