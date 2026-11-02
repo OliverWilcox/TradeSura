@@ -1,8 +1,8 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/db";
 import { displayName } from "@/lib/engineer";
+import { cardAlertEmail } from "@/lib/card-alert-email";
 import { emailConfigured, sendEmail } from "@/lib/email";
-import { escapeHtml } from "@/lib/email-layout";
 import { textStaff } from "@/lib/sms";
 import { track } from "@/lib/track";
 
@@ -29,19 +29,12 @@ export async function alertCardUpload(engineerId: string, from: "signup" | "sett
   const business = displayName(e);
   const admin = process.env.ADMIN_APP_URL?.replace(/\s+/g, "").replace(/\/$/, "");
   const link = admin ? `${admin}/verification/${engineerId}` : null;
-  const when = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
-  const what = from === "signup" ? "signed up with" : "uploaded";
+  const email = cardAlertEmail({ business, gasSafeNo: e.gasSafeNo, from, at: new Date(), link });
 
   const sent = { email: 0, sms: 0 };
   for (const to of emails) {
     try {
-      await sendEmail({
-        to,
-        subject: `Gas Safe card to check: ${business}`,
-        html: `<p>${escapeHtml(business)} (Gas Safe ${escapeHtml(e.gasSafeNo ?? "number not given")}) ${what} their Gas Safe ID card at ${when}.</p>${
-          link ? `<p><a href="${escapeHtml(link)}">Check it now</a></p>` : "<p>Check it in TradeSura Admin, Verification.</p>"
-        }`,
-      });
+      await sendEmail({ to, ...email });
       if (emailConfigured()) sent.email++;
     } catch (err) {
       console.error("[card-alert] email failed:", err);
