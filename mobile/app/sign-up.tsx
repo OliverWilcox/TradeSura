@@ -94,7 +94,8 @@ type FieldKey =
   | "tradingName"
   | "companyNumber"
   | "soleOwner"
-  | "postcode";
+  | "postcode"
+  | "postAddress";
 
 // Which step owns each field — a server-side rejection jumps back to it.
 const FIELD_STEP: Record<FieldKey, 1 | 2 | 3> = {
@@ -108,6 +109,7 @@ const FIELD_STEP: Record<FieldKey, 1 | 2 | 3> = {
   companyNumber: 3,
   soleOwner: 3,
   postcode: 3,
+  postAddress: 3,
 };
 
 // Saved progress (step 1 item 12). The verified-phone token is kept only
@@ -130,6 +132,8 @@ type Draft = {
   postcode: string;
   addressLine1?: string;
   town?: string;
+  postElsewhere?: boolean;
+  postAddress?: Office;
   marketingConsent: boolean;
   phoneToken: string | null;
   phoneTexted?: boolean;
@@ -382,12 +386,14 @@ export default function SignUp() {
   const [company, setCompany] = useState<Company | null>(null);
   const [companyNumber, setCompanyNumber] = useState("");
   const [postcode, setPostcode] = useState("");
-  // 4 Oct notes, step 3.1 — correspondence address (where the pack posts).
+  // 30 Oct update 3.6 — three addresses. Trading (where they work from)
+  // sets the home town; post goes there unless "Send my post somewhere else"
+  // is ticked; a limited company's registered office comes from Companies
+  // House and is only shown, never used for the town.
   const [addressLine1, setAddressLine1] = useState("");
   const [town, setTown] = useState("");
-  // Limited companies start on the registered office, with "Use a different
-  // address" to switch to the lookup.
-  const [usingOffice, setUsingOffice] = useState(false);
+  const [postElsewhere, setPostElsewhere] = useState(false);
+  const [postAddress, setPostAddress] = useState<Office>({ line1: "", town: "", postcode: "" });
   // Build Review 3, section 7 — "Are you the only owner of the company?"
   // (limited companies only); yes lets Stripe skip the owner/director steps.
   const [soleOwner, setSoleOwner] = useState<boolean | null>(null);
@@ -425,6 +431,8 @@ export default function SignUp() {
         setPostcode(d.postcode);
         setAddressLine1(d.addressLine1 ?? "");
         setTown(d.town ?? "");
+        setPostElsewhere(Boolean(d.postElsewhere));
+        if (d.postAddress) setPostAddress(d.postAddress);
         setMarketingConsent(d.marketingConsent);
         if (tokenFresh) {
           setPhoneToken(d.phoneToken);
@@ -464,6 +472,8 @@ export default function SignUp() {
         postcode,
         addressLine1,
         town,
+        postElsewhere,
+        postAddress,
         marketingConsent,
         phoneToken,
         phoneTexted,
@@ -494,11 +504,14 @@ export default function SignUp() {
     postcode,
     addressLine1,
     town,
+    postElsewhere,
+    postAddress,
     marketingConsent,
     phoneToken,
     phoneTexted,
     emailToken,
-    smsEnabled,  ]);
+    smsEnabled,
+  ]);
 
   // C5 — arrived from a letter claim link: resolve the code and pre-fill.
   useEffect(() => {
@@ -875,14 +888,9 @@ export default function SignUp() {
     setCompanyResults([]);
     clearError("companyNumber");
     // Decision 1 — the trading name stays blank for a company (the hint says
-    // the Companies House name is used), so nothing is filled in here.
-    if (c.office && (!addressLine1.trim() || usingOffice)) {
-      setAddressLine1(c.office.line1);
-      setTown(c.office.town);
-      setPostcode(c.office.postcode);
-      setUsingOffice(true);
-      clearError("postcode");
-    }
+    // the Companies House name is used), so nothing is filled in here. 3.6 —
+    // nor the address: the registered office is shown, never used as the
+    // trading address, so the town can't come from it.
   }
 
   function clearCompany() {
@@ -891,36 +899,8 @@ export default function SignUp() {
     setCompanyQuery("");
   }
 
-  // Build Review 3, P2 — the company's registered office belongs to the
-  // company: changing business type clears it from the address (and a
-  // suggested trading name, below), never leaving a sole trader with it.
-  function isOfficeAddress(): boolean {
-    const o = company?.office;
-    if (usingOffice) return true;
-    if (!o) return false;
-    return (
-      addressLine1.trim() === o.line1 &&
-      town.trim() === o.town &&
-      postcode.replace(/\s/g, "").toUpperCase() === o.postcode.replace(/\s/g, "").toUpperCase()
-    );
-  }
-
   function changeBusinessType(value: BusinessType) {
     if (value === businessType) return;
-    if (isOfficeAddress()) {
-      setAddressLine1("");
-      setTown("");
-      setPostcode("");
-      setUsingOffice(false);
-    }
-    // Back to Limited company with the company still picked and no address
-    // typed: its registered office comes back, as when it was first picked.
-    if (value === "ltd" && company?.office && !addressLine1.trim()) {
-      setAddressLine1(company.office.line1);
-      setTown(company.office.town);
-      setPostcode(company.office.postcode);
-      setUsingOffice(true);
-    }
     setBusinessType(value);
     clearError("companyNumber");
     clearError("soleOwner");
@@ -953,7 +933,11 @@ export default function SignUp() {
           : null,
       postcode:
         checkUkPostcode(postcode) ??
-        (addressLine1.trim() ? null : "Enter your address — or tap Find address and pick it."),
+        (addressLine1.trim() ? null : "Enter your trading address — or tap Find address and pick it."),
+      postAddress: postElsewhere
+        ? (checkUkPostcode(postAddress.postcode) ??
+          (postAddress.line1.trim() ? null : "Enter the address for your post — or untick the box."))
+        : null,
     };
     if (fail(found)) return;
     setBusy(true);
@@ -983,6 +967,14 @@ export default function SignUp() {
             postcode: postcode.trim().toUpperCase(),
             addressLine1: addressLine1.trim() || undefined,
             town: town.trim() || undefined,
+            postAddress: postElsewhere
+              ? {
+                  line1: postAddress.line1.trim(),
+                  town: postAddress.town.trim(),
+                  postcode: postAddress.postcode.trim().toUpperCase(),
+                }
+              : undefined,
+            registeredOffice: businessType === "ltd" && company?.office ? company.office : undefined,
             marketingConsent,
             claimCode: claimCodeParam || undefined,
             appleToken: appleToken ?? undefined,
@@ -1545,6 +1537,11 @@ export default function SignUp() {
                                 <Text className="mt-0.5 text-[13px] text-white/65">
                                   {[company.number, company.town].filter(Boolean).join(" · ")}
                                 </Text>
+                                {company.office && (
+                                  <Text className="mt-1.5 text-[12.5px] leading-[17px] text-white/55">
+                                    Registered office: {[company.office.line1, company.office.town, company.office.postcode].filter(Boolean).join(", ")}
+                                  </Text>
+                                )}
                               </View>
                               <Pressable onPress={clearCompany} hitSlop={10}>
                                 <Text className="text-[14px] font-medium" style={{ color: BLUE }}>
@@ -1692,38 +1689,60 @@ export default function SignUp() {
                     )}
 
                     <View ref={fieldRef("postcode")} collapsable={false}>
-                      <Text className={labelCls}>Correspondence address</Text>
-                      {usingOffice && businessType === "ltd" ? (
-                        <View className="rounded-xl border-[1.5px] border-white/20 bg-[#081321] px-4 py-3">
-                          <Text className="text-[15px] text-white">{addressLine1}</Text>
-                          <Text className="text-[15px] text-white">
-                            {town} {postcode}
-                          </Text>
-                          <Text className="mt-1 text-[12.5px] text-white/55">
-                            Registered office, from Companies House
-                          </Text>
-                          <Pressable onPress={() => setUsingOffice(false)} hitSlop={8} className="mt-2">
-                            <Text className="text-[14px] font-medium" style={{ color: BLUE }}>
-                              Use a different address
-                            </Text>
-                          </Pressable>
-                        </View>
+                      <Text className={labelCls}>Trading address</Text>
+                      <AddressLookupField
+                        large
+                        phoneToken={phoneToken}
+                        emailToken={emailToken}
+                        value={{ line1: addressLine1, town, postcode }}
+                        onChange={(v) => {
+                          setAddressLine1(v.line1);
+                          setTown(v.town);
+                          setPostcode(v.postcode);
+                          clearError("postcode");
+                        }}
+                        postcodeError={errors.postcode}
+                      />
+                      <Hint>
+                        Where you work from — it sets your home town on TradeSura. Customers aren&apos;t
+                        shown your address.
+                      </Hint>
+                    </View>
+
+                    <View ref={fieldRef("postAddress")} collapsable={false}>
+                      <Pressable
+                        onPress={() => {
+                          setPostElsewhere((v) => !v);
+                          clearError("postAddress");
+                        }}
+                        className="mt-4 flex-row items-center gap-2.5 py-1"
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: postElsewhere }}
+                      >
+                        <Checkbox checked={postElsewhere} />
+                        <Text className="flex-1 text-[14px] leading-[19px] text-white">
+                          Send my post somewhere else
+                        </Text>
+                      </Pressable>
+                      {postElsewhere ? (
+                        <>
+                          <Text className={labelCls}>Address for post</Text>
+                          <AddressLookupField
+                            large
+                            phoneToken={phoneToken}
+                            emailToken={emailToken}
+                            value={postAddress}
+                            onChange={(v) => {
+                              setPostAddress(v);
+                              clearError("postAddress");
+                            }}
+                            postcodeError={errors.postAddress}
+                          />
+                          <Hint>Your member pack and all our post go here.</Hint>
+                        </>
                       ) : (
-                        <AddressLookupField
-                          large
-                          phoneToken={phoneToken}
-                          emailToken={emailToken}
-                          value={{ line1: addressLine1, town, postcode }}
-                          onChange={(v) => {
-                            setAddressLine1(v.line1);
-                            setTown(v.town);
-                            setPostcode(v.postcode);
-                            clearError("postcode");
-                          }}
-                          postcodeError={errors.postcode}
-                        />
+                        <Hint>Your member pack and all our post go to your trading address.</Hint>
                       )}
-                      <Hint>Where we&apos;ll post your member pack. Customers aren&apos;t shown this.</Hint>
                     </View>
 
                     {/* Opt-in, unticked by default — the legally correct shape. */}

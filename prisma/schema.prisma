@@ -136,6 +136,13 @@ model Engineer {
   // How the engineer arrived: { heardVia, referralCode?, letterBatch?, variantCell? }
   attribution                Json?
   packAddress                String? // founding-member pack postal address
+  // 30 Oct update 3.6 — three addresses. Trading = where they work from
+  // ("line1\ntown\npostcode"); it sets postcode and the home town. The
+  // correspondence address is packAddress above (defaults to trading). The
+  // registered office comes from Companies House, limited companies only,
+  // and never sets the town.
+  tradingAddress             String?
+  registeredOffice           String?
   packRequestedAt            DateTime?
   // Part 17.4 — the pack queues on request but only ships once the badge is
   // live; set from the admin queue's "Packs to post" list when it's posted.

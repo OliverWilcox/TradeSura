@@ -56,6 +56,8 @@ export async function GET() {
     legalName: engineer.legalName,
     vatRegistered: engineer.vatRegistered,
     postcode: engineer.postcode,
+    tradingAddress: engineer.tradingAddress,
+    registeredOffice: engineer.registeredOffice,
     // Review 4 — where the member pack goes, with Change on Account.
     packAddress: engineer.packAddress,
     packShipped: Boolean(engineer.packShippedAt),

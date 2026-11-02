@@ -9,6 +9,7 @@ import { normaliseClaimCode, resolveClaimCode } from "@/lib/claim";
 import { sendEmail } from "@/lib/email";
 import { engineerWelcomeEmailHtml } from "@/lib/engineer-welcome-email";
 import { notifyEngineer } from "@/lib/sms";
+import { townSlugOf } from "@/lib/town";
 import { sendPushNotification } from "@/lib/push";
 import {
   COMPANY_NUMBER,
@@ -17,6 +18,14 @@ import {
   normaliseCompanyNumber,
   normalisePostcode,
 } from "@/lib/validate";
+
+const AddressInput = z.object({
+  line1: z.string().trim().min(1).max(160),
+  town: z.string().trim().max(80).default(""),
+  postcode: z.string().max(10).transform(normalisePostcode).pipe(z.string().regex(UK_POSTCODE)),
+});
+const addressLines = (a: { line1: string; town?: string; postcode: string }) =>
+  [a.line1, a.town, a.postcode].filter(Boolean).join("\n");
 
 // Everything the sign-up wizard (steps 1-3) collects.
 const SignupData = z.object({
@@ -53,10 +62,16 @@ const SignupData = z.object({
   // "Are you the only owner of the company?" (Build Review 3, section 7).
   soleOwner: z.boolean().optional(),
   postcode: z.string().max(10).transform(normalisePostcode).pipe(z.string().regex(UK_POSTCODE)),
-  // 4 Oct notes, step 3.1 — correspondence address (PAF lookup); the member
-  // pack ships here once the badge is live.
+  // 30 Oct update 3.6 — the trading address (where they work from; sets the
+  // home town). Builds before 3 Nov sent the correspondence address here.
   addressLine1: z.string().trim().max(160).optional(),
   town: z.string().trim().max(80).optional(),
+  // "Send my post somewhere else" — the correspondence address, where the
+  // member pack and all post go. Absent = the trading address.
+  postAddress: AddressInput.optional(),
+  // Limited companies: the registered office from Companies House. Stored
+  // for the record only — the town never comes from it.
+  registeredOffice: AddressInput.optional(),
   marketingConsent: z.boolean().default(false),
   // E1 — "How did you hear about us?" + optional referral code. Pre-filled and
   // hidden when arriving from a claim/referral link (Blocks 2 & 4).
@@ -139,6 +154,8 @@ const FIELD_ERRORS: Record<string, FieldError> = {
   postcode: { error: "Enter a full UK postcode, like HD9 2TT.", field: "postcode" },
   addressLine1: { error: "That address line is too long — shorten it.", field: "postcode" },
   town: { error: "That town name is too long — shorten it.", field: "postcode" },
+  postAddress: { error: "Check the address for your post — or untick “Send my post somewhere else”.", field: "postAddress" },
+  registeredOffice: { error: "Find your company again, or enter its number instead.", field: "companyNumber" },
 };
 // Fields with no form field of their own (consent, attribution, claim and
 // Apple links) — a specific reason, never a misleading field.
@@ -400,12 +417,19 @@ export async function POST(req: Request) {
           postcode: rest.postcode,
         ...(rest.addressLine1
           ? {
-              packAddress: [rest.addressLine1, rest.town, rest.postcode].filter(Boolean).join("\n"),
+              tradingAddress: addressLines({ line1: rest.addressLine1, town: rest.town, postcode: rest.postcode }),
+              // 3.6 — the home town comes from the trading address only.
+              ...(townSlugOf(rest.town ?? "") ? { town: rest.town, townSlug: townSlugOf(rest.town ?? "") } : {}),
+              packAddress: rest.postAddress
+                ? addressLines(rest.postAddress)
+                : addressLines({ line1: rest.addressLine1, town: rest.town, postcode: rest.postcode }),
               // Queued, not shipped — the admin "packs to post" list only
               // shows it once the badge is granted (Part 17.4).
               packRequestedAt: new Date(),
             }
           : {}),
+          registeredOffice:
+            rest.businessType === "ltd" && rest.registeredOffice ? addressLines(rest.registeredOffice) : null,
           marketingConsent: rest.marketingConsent,
           gasSafeNo: rest.gasSafeNo,
           gasSafeCardUrl,

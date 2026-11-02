@@ -40,6 +40,8 @@ type Settings = {
   whatsappUpdates?: boolean;
   postcode: string | null;
   packAddress?: string | null;
+  tradingAddress?: string | null;
+  registeredOffice?: string | null;
   packShipped?: boolean;
   standing: { state: string } & Status;
   gasSafe: Status;
@@ -494,7 +496,30 @@ function OwnerAccount() {
               {settings.companyNumber && (
                 <RowLine left="Company number" right={settings.companyNumber} />
               )}
-              {settings.postcode && <RowLine left="Business postcode" right={settings.postcode} />}
+              {/* 30 Oct update 3.6 — trading address sets the town; the
+                  registered office is shown for the record only. */}
+              {settings.tradingAddress ? (
+                <RowLine
+                  left="Trading address"
+                  right={
+                    <Text className="max-w-[220px] text-right text-sm text-ink">
+                      {settings.tradingAddress.split("\n").join(", ")}
+                    </Text>
+                  }
+                />
+              ) : (
+                settings.postcode && <RowLine left="Business postcode" right={settings.postcode} />
+              )}
+              {settings.registeredOffice && (
+                <RowLine
+                  left="Registered office"
+                  right={
+                    <Text className="max-w-[220px] text-right text-sm text-ink">
+                      {settings.registeredOffice.split("\n").join(", ")}
+                    </Text>
+                  }
+                />
+              )}
             </View>
           )}
           {settings && settings.packAddress !== undefined && (

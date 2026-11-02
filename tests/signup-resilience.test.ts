@@ -55,3 +55,32 @@ it("a sole trader must enter a trading name", async () => {
   expect(await response.json()).toMatchObject({ field: "tradingName" });
   expect(m.create).not.toHaveBeenCalled();
 });
+
+// 30 Oct update 3.6 — three addresses; the town only ever comes from trading.
+it("sets the town from the trading address and posts there by default", async () => {
+  await signup({ tradingName: "Test Heating", businessType: "sole_trader", addressLine1: "4 Mill Lane", town: "Holmfirth", postcode: "HD9 2AB" });
+  expect(m.create.mock.calls[0][0].data).toMatchObject({
+    tradingAddress: "4 Mill Lane\nHolmfirth\nHD9 2AB",
+    packAddress: "4 Mill Lane\nHolmfirth\nHD9 2AB",
+    town: "Holmfirth",
+    townSlug: "holmfirth",
+    registeredOffice: null,
+  });
+});
+it("sends post to a separate address and keeps the registered office out of the town", async () => {
+  await signup({
+    tradingName: "", businessType: "ltd", companyNumber: "17325346", legalName: "TRADESURA LTD", soleOwner: true,
+    addressLine1: "4 Mill Lane", town: "Holmfirth", postcode: "HD9 2AB",
+    postAddress: { line1: "PO Box 12", town: "Leeds", postcode: "LS1 1AA" },
+    registeredOffice: { line1: "1 City Road", town: "London", postcode: "EC1V 2NX" },
+  });
+  expect(m.create.mock.calls[0][0].data).toMatchObject({
+    packAddress: "PO Box 12\nLeeds\nLS1 1AA",
+    registeredOffice: "1 City Road\nLondon\nEC1V 2NX",
+    town: "Holmfirth",
+  });
+});
+it("a sole trader's registered office is ignored", async () => {
+  await signup({ tradingName: "Test Heating", businessType: "sole_trader", addressLine1: "4 Mill Lane", town: "Holmfirth", postcode: "HD9 2AB", registeredOffice: { line1: "1 City Road", town: "London", postcode: "EC1V 2NX" } });
+  expect(m.create.mock.calls[0][0].data).toMatchObject({ registeredOffice: null, town: "Holmfirth" });
+});
