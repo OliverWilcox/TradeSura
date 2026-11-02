@@ -3,6 +3,7 @@ import { View, Text, Pressable, Animated, AccessibilityInfo, Share } from "react
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { askForRatingSoon } from "@/lib/rating-prompt";
 
 function pounds(pence: number) {
   return pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
@@ -42,6 +43,9 @@ export default function FirstPayout() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amount]);
+
+  // Matt, 30 Oct §8 — the rating prompt, 2.5 s after the count-up (0.7 s).
+  useEffect(() => askForRatingSoon("first_payout", 700), []);
 
   async function share() {
     await Share.share({

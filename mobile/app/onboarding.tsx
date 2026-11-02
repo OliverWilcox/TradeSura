@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { View, Text, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icon";
 import { RingMarkProgress } from "@/components/ring-mark";
 import { StripeBadge } from "@/components/stripe-badge";
+import { askForRatingSoon } from "@/lib/rating-prompt";
 
 // Matt's Getting Started layout (Review 4, 28 Oct). GO LIVE: the three steps
 // needed to take customers, counted by the ring. GROW: any time, optional.
@@ -174,6 +175,10 @@ export default function Onboarding() {
   const done = live.filter((s) => s.done).length;
   const currentIdx = live.findIndex((s) => !s.done && !s.waiting);
   const isLive = done === live.length;
+
+  // Matt, 30 Oct §8 — the rating prompt's "You're verified" moment: the
+  // You're live celebration, once the Gas Safe check (and the rest) is done.
+  useEffect(() => (isLive && me?.role !== "staff" ? askForRatingSoon("verified", 600) : undefined), [isLive, me?.role]);
 
   // "Skip for now" / "Go to dashboard": Home, and setup exits stop pulling
   // back here (lib/setup-exit.ts reads the same skipped flag).

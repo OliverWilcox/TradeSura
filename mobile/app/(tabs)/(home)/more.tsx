@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, ScrollView, RefreshControl, Pressable, Linking } from "react-native";
+import { View, Text, TextInput, ScrollView, RefreshControl, Pressable } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as ImagePicker from "expo-image-picker";
@@ -12,7 +12,7 @@ import { Skeleton, TextBone, RowBone, LoadingImage } from "@/components/skeleton
 import { StaffAccount } from "@/components/staff-account";
 import { Toggle } from "@/components/toggle";
 import { AddressPicker } from "@/components/address-picker";
-import { WHATSAPP_SUPPORT_URL } from "@/lib/support";
+import { openSupportChat } from "@/lib/support";
 
 type MoreData = {
   totalPence: number;
@@ -736,7 +736,7 @@ function OwnerAccount() {
           <Pressable onPress={() => router.push("/referral")}>
             <RowLine left="Invite an engineer · earn 25% of our fee" right={<Chevron />} />
           </Pressable>
-          <Pressable onPress={() => Linking.openURL(WHATSAPP_SUPPORT_URL)}>
+          <Pressable onPress={openSupportChat}>
             <RowLine left="WhatsApp support" right={<Chevron />} />
           </Pressable>
           <Pressable

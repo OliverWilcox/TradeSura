@@ -93,6 +93,26 @@ export async function setHasSeenFirstCustomer(): Promise<void> {
   await SecureStore.setItemAsync(HAS_SEEN_FIRST_CUSTOMER_KEY, "1");
 }
 
+// Matt, 30 Oct §8 — the native rating prompt is asked at most once per
+// moment (verified, first customer, first payout) on this device.
+export async function getRatingPrompted(moment: string): Promise<boolean> {
+  return (await SecureStore.getItemAsync(`ts_rating_prompted_${moment}`)) === "1";
+}
+
+export async function setRatingPrompted(moment: string): Promise<void> {
+  await SecureStore.setItemAsync(`ts_rating_prompted_${moment}`, "1");
+}
+
+// When something last went wrong for the engineer (an API error or support
+// chat): the rating prompt stays away for a while after (lib/rating-prompt.ts).
+let lastTroubleAt = 0;
+export function noteTrouble() {
+  lastTroubleAt = Date.now();
+}
+export function msSinceTrouble(): number {
+  return Date.now() - lastTroubleAt;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -100,6 +120,7 @@ export class ApiError extends Error {
     public body: unknown = undefined,
   ) {
     super(message);
+    noteTrouble();
   }
 }
 

@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui";
 import { RingMark } from "@/components/ring-mark";
 import { Confetti } from "@/components/confetti";
+import { askForRatingSoon } from "@/lib/rating-prompt";
 
 function pounds(pence: number) {
   return pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
@@ -37,6 +38,9 @@ export default function FirstCustomer() {
       })
       .catch(() => setReduceMotion(true));
   }, []);
+
+  // Matt, 30 Oct §8 — the rating prompt, 2.5 s after the confetti (1.1 s).
+  useEffect(() => askForRatingSoon("first_customer", 1100), []);
 
   const brand = me?.firstName?.trim() || me?.tradingName?.trim() || "you";
 
