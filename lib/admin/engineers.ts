@@ -8,8 +8,34 @@ import { adminEvent } from "@/lib/admin-api/audit";
 import { bounded, likeTerm } from "@/lib/admin-api/db";
 import { conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
-import { personName, verificationStatus } from "@/lib/admin/verifications";
+import { dateOnly, nextRegisterCheck, personName, qualificationsOf, verificationStatus } from "@/lib/admin/verifications";
 import { exactContactSearch, maskEmail, maskPhone } from "@/lib/admin/mask";
+import {
+  ACTIVE_WINDOW_DAYS,
+  FUNNEL_STEPS,
+  STEP_LABELS,
+  activeEngineerIds,
+  cancelRateOf,
+  customerStatus,
+  daysBetween,
+  ladderStep,
+  lastDeliveredOffers,
+  milestones,
+  offers,
+  payments,
+  testMarks,
+  type FunnelStep,
+  type Milestones,
+  type TestMarks,
+} from "@/lib/admin/metrics";
+import { FOUNDING_CLOCK_DAYS, FOUNDING_SPOTS_PER_TOWN, foundingFor, type FoundingStatus } from "@/lib/admin/founding";
+import { formatAddress, postcodeOf, sameAddress, saveAddresses, tradingAddressOf, type PostalAddress } from "@/lib/addresses";
+
+/** No test marks: statuses for every row a record shows (test rows are labelled, not hidden). */
+const EVERYONE: TestMarks = { engineers: [], customers: [] };
+import { testMarkOf } from "@/lib/admin/test-data";
+import { currentPlan } from "@/lib/admin/customers";
+import { companyProfile } from "@/lib/admin/companies";
 
 // Engineers for the admin API: find them, see one in full, and change their
 // standing. Pause and ban are the fields the app already enforces everywhere
@@ -17,11 +43,20 @@ import { exactContactSearch, maskEmail, maskPhone } from "@/lib/admin/mask";
 // them here takes effect on the engineer's next request. Contact details are
 // masked unless revealed, and every reveal is recorded.
 
-export type EngineerStatus = "active" | "paused" | "banned" | "left";
+/** The account's standing: what pause and ban change. */
+export type EngineerStanding = "active" | "paused" | "banned" | "left";
+
+/**
+ * What the admin shows as an engineer's status: banned, left or paused when
+ * the standing says so, otherwise active or inactive by the metrics layer's
+ * definition (a delivered offer in the last ACTIVE_WINDOW_DAYS), so a list
+ * and the dashboard's Active engineers agree.
+ */
+export type EngineerStatus = Exclude<EngineerStanding, "active"> | "active" | "inactive";
 
 const live = { deletedAt: null } satisfies Prisma.EngineerWhereInput;
 
-export const STATUS_WHERE: Record<EngineerStatus, Prisma.EngineerWhereInput> = {
+export const STATUS_WHERE: Record<EngineerStanding, Prisma.EngineerWhereInput> = {
   active: { bannedAt: null, pausedAt: null, leftAt: null },
   paused: { bannedAt: null, pausedAt: { not: null } },
   banned: { bannedAt: { not: null } },
@@ -37,11 +72,27 @@ const VERIFICATION_WHERE = {
 
 export type VerificationFilter = keyof typeof VERIFICATION_WHERE;
 
-export function engineerStatus(e: { bannedAt: Date | null; pausedAt: Date | null; leftAt: Date | null }): EngineerStatus {
+export function engineerStatus(e: { bannedAt: Date | null; pausedAt: Date | null; leftAt: Date | null }): EngineerStanding {
   if (e.bannedAt) return "banned";
   if (e.leftAt) return "left";
   if (e.pausedAt) return "paused";
   return "active";
+}
+
+/** The status the admin shows, given who's active now (activeEngineerIds). */
+export function displayStatus(e: { id: string; bannedAt: Date | null; pausedAt: Date | null; leftAt: Date | null }, active: Set<string>): EngineerStatus {
+  const standing = engineerStatus(e);
+  return standing !== "active" ? standing : active.has(e.id) ? "active" : "inactive";
+}
+
+/** The furthest step an engineer has reached, taking the steps in order (as the funnel does). */
+export function furthestStep(m: Milestones): FunnelStep {
+  let furthest: FunnelStep = FUNNEL_STEPS[0];
+  for (const step of FUNNEL_STEPS) {
+    if (!m[step].reached) break;
+    furthest = step;
+  }
+  return furthest;
 }
 
 function channelOf(attribution: unknown): string | null {
@@ -77,21 +128,6 @@ const LIST_SELECT = {
   },
 } satisfies Prisma.EngineerSelect;
 
-/** How far through getting started an engineer is: the furthest step they've reached. */
-export type ActivationStep = "signed_up" | "payments" | "plan" | "customer" | "payout";
-
-const hasLiveTier = { tiers: { some: { status: { in: ["LIVE", "STOPPED"] } } } } satisfies Prisma.EngineerWhereInput;
-const hasCustomer = { plans: { some: { activatedAt: { not: null } } } } satisfies Prisma.EngineerWhereInput;
-const hasPayment = { plans: { some: { paymentsCleared: { gte: 1 } } } } satisfies Prisma.EngineerWhereInput;
-
-const STEP_WHERE: Record<ActivationStep, Prisma.EngineerWhereInput> = {
-  signed_up: { stripeChargesEnabled: false, NOT: hasLiveTier },
-  payments: { stripeChargesEnabled: true, NOT: hasLiveTier },
-  plan: { ...hasLiveTier, NOT: hasCustomer },
-  customer: { ...hasCustomer, NOT: hasPayment },
-  payout: hasPayment,
-};
-
 /**
  * plans: customer plans live now (ACTIVE); tiers: the engineer's own plans on
  * sale (LIVE); customers: everyone on their book; customersOnPlans: customers
@@ -103,7 +139,7 @@ export type EngineerListQuery = {
   q?: string;
   status?: EngineerStatus;
   verification?: VerificationFilter;
-  step?: ActivationStep;
+  step?: FunnelStep;
   town?: string;
   type?: "sole_trader" | "ltd" | "partnership";
   channel?: string;
@@ -116,18 +152,35 @@ export type EngineerListQuery = {
   size: number;
 };
 
-function listWhere(q: EngineerListQuery): Prisma.EngineerWhereInput {
+/**
+ * The list's filters. Active, inactive and the furthest step reached come
+ * from the metrics layer, worked out for the engineers the other filters
+ * match, so they can't drift from the dashboard.
+ */
+async function listWhere(q: EngineerListQuery, marks: TestMarks, active: Set<string>): Promise<Prisma.EngineerWhereInput> {
   const and: Prisma.EngineerWhereInput[] = [live];
-  if (q.status) and.push(STATUS_WHERE[q.status]);
+  if (q.status === "active" || q.status === "inactive") {
+    and.push(STATUS_WHERE.active, q.status === "active" ? { id: { in: [...active] } } : { id: { notIn: [...active] } });
+  } else if (q.status) and.push(STATUS_WHERE[q.status]);
   if (q.verification) and.push(VERIFICATION_WHERE[q.verification]);
   if (q.type) and.push({ businessType: q.type });
-  if (q.step) and.push(STEP_WHERE[q.step]);
   if (q.town) and.push({ town: { equals: q.town, mode: "insensitive" } });
   if (q.channel) and.push({ attribution: { path: ["heardVia"], equals: q.channel } });
   if (q.staff) and.push(q.staff === "staff" ? { ownerId: { not: null } } : { ownerId: null });
   if (q.joinedFrom || q.joinedTo) and.push({ createdAt: { ...(q.joinedFrom ? { gte: q.joinedFrom } : {}), ...(q.joinedTo ? { lt: q.joinedTo } : {}) } });
   if (q.q) and.push(engineerSearch(q.q));
+  if (q.step) {
+    const ids = (await prisma.engineer.findMany({ where: { AND: and }, select: { id: true } })).map((r) => r.id);
+    const steps = await milestones(marks, { ids });
+    and.push({ id: { in: ids.filter((id) => steps.has(id) && furthestStep(steps.get(id)!) === q.step) } });
+  }
   return { AND: and };
+}
+
+/** What every list answer needs: who's test data, and who's active now. */
+async function listContext() {
+  const marks = await testMarks();
+  return { marks, active: await activeEngineerIds(marks, new Date()) };
 }
 
 /** What a search box matches: names, business, town, postcode, Gas Safe and company numbers, or a whole email or phone number. */
@@ -208,7 +261,8 @@ async function customersOnPlans(ids: string[]): Promise<Map<string, number>> {
 }
 
 export async function listEngineers(q: EngineerListQuery) {
-  const where = listWhere(q);
+  const ctx = await listContext();
+  const where = await listWhere(q, ctx.marks, ctx.active);
   const skip = (q.page - 1) * q.size;
   let rows: ListRow[];
   let total: number;
@@ -227,13 +281,13 @@ export async function listEngineers(q: EngineerListQuery) {
       prisma.engineer.count({ where }),
     ]);
   }
-  return { items: await listItems(rows), page: q.page, size: q.size, total };
+  return { items: await listItems(rows, ctx), page: q.page, size: q.size, total };
 }
 
 type ListRow = Prisma.EngineerGetPayload<{ select: typeof LIST_SELECT }>;
 
 /** List rows as the API shows them, with each one's latest offer and customers on a plan. */
-async function listItems(rows: ListRow[]) {
+async function listItems(rows: ListRow[], ctx: { marks: TestMarks; active: Set<string> }) {
   const [lastOffers, onPlans] = await Promise.all([
     rows.length ? prisma.plan.groupBy({ by: ["engineerId"], where: { engineerId: { in: rows.map((r) => r.id) } }, _max: { createdAt: true } }) : [],
     customersOnPlans(rows.map((r) => r.id)),
@@ -248,7 +302,8 @@ async function listItems(rows: ListRow[]) {
     type: r.businessType,
     channel: channelOf(r.attribution),
     isStaff: Boolean(r.ownerId),
-    status: engineerStatus(r),
+    isTest: ctx.marks.engineers.includes(r.id),
+    status: displayStatus(r, ctx.active),
     verification: verificationStatus(r),
     paymentsReady: r.stripeChargesEnabled,
     plansLive: r._count.plans,
@@ -265,7 +320,8 @@ async function listItems(rows: ListRow[]) {
  * a CSV export streams. One query per batch, however many there are.
  */
 export async function* exportEngineers(q: Omit<EngineerListQuery, "page" | "size" | "sort" | "dir">, batch = 500) {
-  const where = listWhere({ ...q, page: 1, size: batch });
+  const ctx = await listContext();
+  const where = await listWhere({ ...q, page: 1, size: batch }, ctx.marks, ctx.active);
   let after: string | undefined;
   for (;;) {
     const rows = await prisma.engineer.findMany({
@@ -276,7 +332,7 @@ export async function* exportEngineers(q: Omit<EngineerListQuery, "page" | "size
       select: LIST_SELECT,
     });
     if (!rows.length) return;
-    yield await listItems(rows);
+    yield await listItems(rows, ctx);
     if (rows.length < batch) return;
     after = rows[rows.length - 1].id;
   }
@@ -302,8 +358,10 @@ export async function getEngineer(id: string) {
     },
   });
   if (!e) return null;
-  const weekAgo = new Date(Date.now() - 7 * 86_400_000);
-  const [planCounts, tiersLive, mrr, earnings, ratings, tiers, recentCustomers, payouts, invitees, milestones, offersLast7Days, onPlans] = await Promise.all([
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - ACTIVE_WINDOW_DAYS * 86_400_000);
+  const marks = await testMarks();
+  const [planCounts, tiersLive, mrr, earnings, ratings, tiers, recentCustomers, payouts, invitees, steps, recentOffersSent, onPlans, test, company, cancelReasons] = await Promise.all([
     prisma.plan.groupBy({ by: ["status"], where: { engineerId: id }, _count: { _all: true } }),
     prisma.planTier.count({ where: { engineerId: id, status: "LIVE" } }),
     prisma.plan.aggregate({ where: { engineerId: id, status: "ACTIVE" }, _sum: { priceMonthlyPence: true } }),
@@ -318,7 +376,10 @@ export async function getEngineer(id: string) {
       where: { engineerId: id },
       orderBy: { createdAt: "desc" },
       take: 50,
-      include: { properties: { select: { postcode: true }, take: 1 }, plans: { select: { status: true, activatedAt: true, createdAt: true } } },
+      include: {
+        properties: { select: { postcode: true }, take: 1 },
+        plans: { select: { id: true, status: true, activatedAt: true, createdAt: true, mandateStatus: true, priceMonthlyPence: true, linkOpenedAt: true, paymentFailedAt: true, paymentRecoveredAt: true } },
+      },
     }),
     engineerPayouts(e.stripeAccountId),
     prisma.engineer.findMany({
@@ -326,10 +387,29 @@ export async function getEngineer(id: string) {
       orderBy: { createdAt: "desc" },
       select: { id: true, tradingName: true, legalName: true, slug: true, createdAt: true, bannedAt: true, pausedAt: true, leftAt: true },
     }),
-    engineerMilestones(id, e.stripeAccountId),
-    prisma.plan.count({ where: { engineerId: id, createdAt: { gte: weekAgo } } }),
+    milestones(marks, { ids: [id] }),
+    offers(marks, { engineerIds: [id], from: weekAgo, to: now }),
     customersOnPlans([id]),
+    testMarkOf("engineer", id),
+    e.companyNumber ? companyProfile(e.companyNumber) : Promise.resolve(null),
+    cancelReasonCounts(id),
   ]);
+  const recentPlanIds = recentCustomers.flatMap((c) => c.plans.map((p) => p.id));
+  const [tradingRow, claim, founding, lastOffer, cancelRate] = await Promise.all([
+    prisma.engineerTradingAddress.findUnique({ where: { engineerId: id } }),
+    prisma.claimCode.findUnique({ where: { redeemedByEngineerId: id }, select: { code: true, letterBatch: true, variantCell: true, redeemedAt: true } }),
+    foundingFor(marks, [id], now),
+    lastDeliveredOffers(marks, [id]),
+    cancelRateOf(marks, id, now),
+  ]);
+  const [active, recentOffers, recentPaid] = await Promise.all([
+    activeEngineerIds(marks, new Date(), [id, ...invitees.map((i) => i.id)]),
+    recentPlanIds.length ? offers(EVERYONE, { planIds: recentPlanIds }) : [],
+    recentPlanIds.length ? payments(EVERYONE, { planIds: recentPlanIds }) : [],
+  ]);
+  const offerByPlan = new Map(recentOffers.map((o) => [o.planId, o]));
+  const paidPlans = new Set(recentPaid.map((p) => p.planId));
+  const reached = steps.get(id)!;
   const byInvitee = invitees.length
     ? await prisma.referralEarning.groupBy({ by: ["inviteeId"], where: { referrerId: id, inviteeId: { in: invitees.map((i) => i.id) } }, _sum: { amountPence: true }, _max: { ratePercent: true, createdAt: true } })
     : [];
@@ -339,6 +419,12 @@ export async function getEngineer(id: string) {
   for (const p of planCounts) plans[p.status] = p._count._all;
   const monthly = mrr._sum.priceMonthlyPence ?? 0;
   const attribution = (e.attribution ?? {}) as { heardVia?: string; referralCode?: string; letterBatch?: string; variantCell?: string };
+  const trading = tradingAddressOf(tradingRow, e.packAddress);
+  const office = company?.registeredOffice ?? null;
+  // The call ladder counts from their last delivered offer, or from being verified.
+  const lastOfferAt = lastOffer.get(id) ?? null;
+  const chaseFrom = lastOfferAt ?? e.gasSafeVerifiedAt;
+  const chaseDays = chaseFrom && engineerStatus(e) === "active" && !e.ownerId ? daysBetween(chaseFrom, now) : null;
   return {
     id: e.id,
     name: personName(e),
@@ -355,12 +441,55 @@ export async function getEngineer(id: string) {
     town: e.town,
     postcode: e.postcode,
     serviceArea: e.serviceArea,
-    contact: { email: maskEmail(e.email), phone: e.phone ? maskPhone(e.phone) : null, revealed: false },
+    /**
+     * Each address on its own: the areas the engineer says they cover, the
+     * postcode given at sign-up, the postal address packs go to, and the
+     * registered office Companies House holds (limited companies).
+     */
+    addresses: {
+      areasCovered: (e.serviceArea ?? "").split(",").map((a) => a.trim()).filter(Boolean),
+      signupPostcode: e.postcode,
+      postal: e.packAddress,
+      registeredOffice: office,
+      /** Sets the town and town page. Null source: read from the pack address, not saved yet. */
+      trading: trading && {
+        lines: trading.lines,
+        town: trading.town,
+        postcode: trading.postcode,
+        source: trading.source,
+        updatedAt: trading.updatedAt?.toISOString() ?? null,
+        updatedBy: trading.updatedByName,
+      },
+      /** Where the member pack and all post go (the pack address). */
+      correspondence: { address: e.packAddress, sameAsTrading: !e.packAddress || (trading ? sameAddress(e.packAddress, formatAddress(trading)) : false) },
+      /** The trading address is at Companies House's registered office: usually not where they work. */
+      tradingIsRegisteredOffice: Boolean(office && trading && postcodeOf(office) === postcodeOf(trading.postcode)),
+    },
+    company: company ? { name: company.name, type: company.type, status: company.status } : null,
+    contact: {
+      email: maskEmail(e.email),
+      phone: e.phone ? maskPhone(e.phone) : null,
+      revealed: false,
+      phoneVerifiedAt: e.phoneVerifiedAt?.toISOString() ?? null,
+      /** "TradeSura can text me to help me finish setting up": when they agreed. */
+      setupTextConsentAt: e.setupTextConsentAt?.toISOString() ?? null,
+      /** "Send me tips and product updates", asked at sign-up. */
+      marketingConsent: e.marketingConsent,
+    },
     joinedAt: e.createdAt.toISOString(),
     channel: attribution.heardVia ?? null,
     letterBatch: attribution.letterBatch ?? null,
-    status: engineerStatus(e),
+    /** The referral code they typed at sign-up, if any (who referred them is referrals.referredBy). */
+    referralCodeGiven: attribution.referralCode ?? null,
+    /** The letter they came from: the claim code they redeemed, or the batch their link carried. */
+    letter: claim
+      ? { code: claim.code, batch: claim.letterBatch, variant: claim.variantCell, redeemedAt: claim.redeemedAt?.toISOString() ?? null }
+      : attribution.letterBatch
+        ? { code: null, batch: attribution.letterBatch, variant: attribution.variantCell ?? null, redeemedAt: null }
+        : null,
+    status: displayStatus(e, active),
     standing: standingState(e),
+    test,
     pause: e.pausedAt ? { at: e.pausedAt.toISOString(), reason: e.pauseReason } : null,
     ban: e.bannedAt ? { at: e.bannedAt.toISOString(), reason: e.banReason } : null,
     leftAt: e.leftAt?.toISOString() ?? null,
@@ -371,6 +500,24 @@ export async function getEngineer(id: string) {
       rejectedAt: e.gasSafeRejectedAt?.toISOString() ?? null,
       rejectReason: e.gasSafeRejectReason,
     },
+    /** The Gas Safe ID card and register details (3.5, 3.6). */
+    gasSafe: {
+      number: e.gasSafeNo,
+      registerName: e.gasSafeName,
+      registerCompany: e.gasSafeCompany,
+      categories: e.gasSafeCategories,
+      cardOnFile: Boolean(e.gasSafeCardUrl),
+      cardExpiresOn: dateOnly(e.gasSafeCardExpiresOn),
+      qualifications: qualificationsOf(e.qualificationConfirmations),
+      nextRegisterCheck: dateOnly(nextRegisterCheck(e.gasSafeVerifiedAt, e.gasSafeCardExpiresOn)),
+    },
+    founding: foundingDto(founding.get(id)!),
+    /** Days since their last delivered offer and the call-ladder step; null unless verified and active. */
+    chase:
+      chaseDays === null
+        ? null
+        : { lastDeliveredOfferAt: lastOfferAt?.toISOString() ?? null, countingFrom: lastOfferAt ? "last_offer" : "verified", days: chaseDays, step: ladderStep(chaseDays) },
+    cancelRate,
     payments: {
       accountId: e.stripeAccountId,
       connected: Boolean(e.stripeAccountId),
@@ -387,6 +534,7 @@ export async function getEngineer(id: string) {
       websiteConnected: Boolean(e.websiteConnectedAt),
     },
     counts: { customers: e._count.customers, customersOnPlans: onPlans.get(id) ?? 0, plans, tiersLive, enquiries: e._count.enquiries, stickers: e._count.stickers },
+    cancelReasons,
     money: { monthlyPlanValuePence: monthly, tradesuraFeePence: Math.floor(monthly * TRADESURA_FEE_RATE) },
     team: {
       owner: e.owner ? { id: e.owner.id, business: displayName(e.owner) } : null,
@@ -411,7 +559,7 @@ export async function getEngineer(id: string) {
         id: i.id,
         business: displayName(i),
         joinedAt: i.createdAt.toISOString(),
-        status: engineerStatus(i),
+        status: displayStatus(i, active),
         earnedPence: earnedBy.get(i.id)?._sum.amountPence ?? 0,
         currentRatePercent: earnedBy.get(i.id)?._max.ratePercent ?? null,
       })),
@@ -425,19 +573,22 @@ export async function getEngineer(id: string) {
       customersOnIt: t._count.plans,
     })),
     recentCustomers: recentCustomers.map((c) => {
-      const plan = [...c.plans].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+      const plan = currentPlan(c.plans);
       return {
         id: c.id,
         name: `${c.firstName} ${c.lastName}`.trim(),
         postcode: c.properties[0]?.postcode ?? null,
         planStatus: plan?.status ?? null,
+        status: customerStatus(plan ?? null, { offer: plan ? (offerByPlan.get(plan.id) ?? null) : null, paid: plan ? paidPlans.has(plan.id) : false }),
         since: (plan?.activatedAt ?? c.createdAt).toISOString(),
       };
     }),
     payouts: payouts.recent,
     lifetimePayoutsPence: payouts.totalPence,
-    milestones,
-    offersLast7Days,
+    /** The activation steps, in the funnel's order, from the same source as the funnel. */
+    steps: FUNNEL_STEPS.map((step) => ({ key: step, label: STEP_LABELS[step], reached: reached[step].reached, at: reached[step].at?.toISOString() ?? null })),
+    /** Delivered offers in the last ACTIVE_WINDOW_DAYS: what makes them active. */
+    offersLast7Days: recentOffersSent.filter((o) => o.delivery === "delivered").length,
     ratings: { count: ratings._count._all, average: ratings._avg.stars === null ? null : Math.round(ratings._avg.stars * 10) / 10 },
     memberPack: { requestedAt: e.packRequestedAt?.toISOString() ?? null, shippedAt: e.packShippedAt?.toISOString() ?? null },
     website: { connectedAt: e.websiteConnectedAt?.toISOString() ?? null, host: e.websiteHost, widgetDisabledAt: e.widgetDisabledAt?.toISOString() ?? null },
@@ -446,6 +597,46 @@ export async function getEngineer(id: string) {
 }
 
 export type EngineerDetail = NonNullable<Awaited<ReturnType<typeof getEngineer>>>;
+
+/** A Founding status as the API sends it, with the rules it was worked out by. */
+function foundingDto(f: FoundingStatus) {
+  const rules = { spotsPerTown: FOUNDING_SPOTS_PER_TOWN, clockDays: FOUNDING_CLOCK_DAYS };
+  switch (f.state) {
+    case "top_spot":
+    case "badge":
+      return { ...rules, state: f.state, town: f.town, position: f.position, since: f.since.toISOString(), clockEndsAt: f.clockEndsAt.toISOString(), kept: f.kept };
+    case "released":
+      return { ...rules, state: f.state, town: f.town, since: f.since.toISOString(), releasedAt: f.releasedAt.toISOString() };
+    case "waiting":
+      return { ...rules, state: f.state, town: f.town, place: f.place };
+    case "no_town":
+      return { ...rules, state: f.state };
+    case "not_in_line":
+      return { ...rules, state: f.state, reason: f.reason };
+  }
+}
+
+/**
+ * An admin changes the trading address and where post goes (engineer record
+ * 1), for an engineer whose sign-up gave the registered office (302 MD LTD)
+ * or who's told TradeSura of a move. Town, town page and pack address follow
+ * (lib/addresses.ts); the change is recorded with the town before and after.
+ */
+export async function saveEngineerAddresses(admin: AdminPrincipal, id: string, input: { trading: PostalAddress; correspondence: PostalAddress | "same" }, reason: string | null) {
+  const e = await prisma.engineer.findFirst({ where: { id, ...live }, select: { ownerId: true } });
+  if (!e) throw notFound("There's no engineer with that ID.");
+  if (e.ownerId) throw conflict("Staff work from the business's addresses: change the owner's instead.");
+  return prisma.$transaction(async (tx) => {
+    const saved = await saveAddresses(tx, id, input, { source: "admin", id: admin.id, name: admin.name });
+    await adminEvent(
+      admin,
+      "engineer_addresses_changed",
+      { engineerId: id, townBefore: saved.townBefore, town: saved.town, postChanged: saved.packAddressChanged, sameAsTrading: saved.correspondenceSameAsTrading, reason },
+      tx,
+    );
+    return { town: saved.town, townBefore: saved.townBefore, correspondenceSameAsTrading: saved.correspondenceSameAsTrading };
+  });
+}
 
 /** Payouts to the engineer's bank, from the payout.paid events Stripe sends for their Connect account. */
 async function engineerPayouts(accountId: string | null) {
@@ -469,23 +660,18 @@ async function engineerPayouts(accountId: string | null) {
   };
 }
 
-/** When the engineer reached each step, from their events and plans. */
-async function engineerMilestones(id: string, accountId: string | null) {
-  const [row] = await bounded(prisma.$queryRaw<{ signedUp: Date; payments: Date | null; planLive: Date | null; firstCustomer: Date | null; firstPayout: Date | null }[]>`
-    SELECT e."createdAt" AS "signedUp",
-      (SELECT min(ts) FROM "Event" WHERE name = 'stripe_onboarded' AND "actorId" = e.id) AS payments,
-      (SELECT min(ts) FROM "Event" WHERE name = 'plan_live' AND "actorType" = 'ENGINEER' AND "actorId" = e.id) AS "planLive",
-      (SELECT min("activatedAt") FROM "Plan" WHERE "engineerId" = e.id) AS "firstCustomer",
-      (SELECT min("processedAt") FROM "StripeWebhookEvent" WHERE type = 'payout.paid' AND payload->>'account' = ${accountId ?? ""}) AS "firstPayout"
-    FROM "Engineer" e WHERE e.id = ${id}`);
-  const iso = (d: Date | null | undefined) => d?.toISOString() ?? null;
-  return {
-    signedUpAt: iso(row?.signedUp),
-    paymentsSetUpAt: iso(row?.payments),
-    firstPlanLiveAt: iso(row?.planLive),
-    firstCustomerAt: iso(row?.firstCustomer),
-    firstPayoutAt: iso(row?.firstPayout),
-  };
+/** Why their customers cancelled: each cancelled plan's latest reason, counted. */
+async function cancelReasonCounts(engineerId: string) {
+  const cancelled = await prisma.plan.findMany({
+    where: { engineerId, status: "CANCELLED" },
+    select: { cancellations: { orderBy: { createdAt: "desc" }, take: 1, select: { reason: true } } },
+  });
+  const counts = new Map<string, number>();
+  for (const p of cancelled) {
+    const reason = p.cancellations[0]?.reason ?? "none";
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  }
+  return [...counts].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason));
 }
 
 /** What happened to an engineer: their own actions and anything done to them, newest first. */

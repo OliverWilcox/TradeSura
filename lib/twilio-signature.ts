@@ -3,8 +3,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 // Twilio's request-signing algorithm: HMAC-SHA1, keyed by the Auth Token, of
 // the exact webhook URL with every POST param's key+value appended in
 // alphabetical order — see https://www.twilio.com/docs/usage/security.
-// The URL must match byte-for-byte what's configured in the Twilio console,
-// so this trusts req.url as-is rather than reconstructing it.
+// The URL must match byte-for-byte what Twilio was given (the console, or a
+// message's StatusCallback).
 export function verifyTwilioSignature(url: string, params: URLSearchParams, signature: string, authToken: string) {
   const sorted = [...params.keys()].sort();
   const data = sorted.reduce((acc, key) => acc + key + params.get(key), url);

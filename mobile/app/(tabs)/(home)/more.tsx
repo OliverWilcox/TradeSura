@@ -40,7 +40,8 @@ type Settings = {
   whatsappUpdates?: boolean;
   postcode: string | null;
   packAddress?: string | null;
-  tradingAddress?: string | null;
+  // lib/addresses.ts: trading sets the town; post goes to packAddress.
+  addresses?: { trading: { lines: string[]; town: string; postcode: string } | null };
   registeredOffice?: string | null;
   packShipped?: boolean;
   standing: { state: string } & Status;
@@ -498,12 +499,12 @@ function OwnerAccount() {
               )}
               {/* 30 Oct update 3.6 — trading address sets the town; the
                   registered office is shown for the record only. */}
-              {settings.tradingAddress ? (
+              {settings.addresses?.trading ? (
                 <RowLine
                   left="Trading address"
                   right={
                     <Text className="max-w-[220px] text-right text-sm text-ink">
-                      {settings.tradingAddress.split("\n").join(", ")}
+                      {[...settings.addresses.trading.lines, settings.addresses.trading.town, settings.addresses.trading.postcode].join(", ")}
                     </Text>
                   }
                 />

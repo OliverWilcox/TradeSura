@@ -23,13 +23,16 @@ import { POST as packsPosted } from "@/app/api/admin/v1/member-packs/posted/rout
 import { call, CHECKER, resetDb, SUPER_ADMIN, withPermissions } from "./helpers";
 import { makeCustomer, makeEngineer, makePlan } from "./factories";
 
+/** These applications have open warnings (no card photo, not on the register), so approving takes a note (3.7). */
+const CHECKED = "Checked the card and register by phone";
+
 // The fixes from the production-readiness QA of 25 October 2026, one block
 // per finding (M1 = medium 1, and so on).
 
 const sent = vi.hoisted(() => ({ push: vi.fn(), sms: vi.fn(), email: vi.fn() }));
 vi.mock("@/lib/push", () => ({ sendPushNotification: sent.push }));
-vi.mock("@/lib/sms", () => ({ notifyEngineer: sent.sms }));
-vi.mock("@/lib/email", () => ({ sendEmail: sent.email }));
+vi.mock("@/lib/sms", () => ({ notifyEngineer: sent.sms, smsConfigured: () => true }));
+vi.mock("@/lib/email", () => ({ sendEmail: sent.email, emailConfigured: () => true }));
 
 beforeEach(async () => {
   await resetDb();
@@ -111,7 +114,7 @@ describe("M3: telling the engineer", () => {
     });
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const e = await makeEngineer();
-    const res = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve" } });
+    const res = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", reason: CHECKED } });
     log.mockRestore();
     expect(res.status).toBe(200);
     expect(order).toEqual(["push, verified true"]);
@@ -197,20 +200,20 @@ describe("M6: a stale view", () => {
     const { revision } = (await call(verification, { as: CHECKER, params: { engineerId: e.id } })).body;
     expect(revision).toMatch(/^[0-9a-f]{16}$/);
     await prisma.engineer.update({ where: { id: e.id }, data: { gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/new.jpg" } });
-    const stale = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", revision } });
+    const stale = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", revision, reason: CHECKED } });
     expect(stale.status).toBe(409);
     expect(stale.body.error.message).toMatch(/changed while you had it open/);
     expect((await prisma.engineer.findUniqueOrThrow({ where: { id: e.id } })).gasSafeVerifiedAt).toBeNull();
 
     const fresh = (await call(verification, { as: CHECKER, params: { engineerId: e.id } })).body.revision;
-    expect((await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", revision: fresh } })).status).toBe(200);
+    expect((await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", revision: fresh, reason: CHECKED } })).status).toBe(200);
   });
 
   it("still says it's already decided, rather than changed", async () => {
     const e = await makeEngineer();
     const { revision } = (await call(verification, { as: CHECKER, params: { engineerId: e.id } })).body;
-    await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve" } });
-    const again = await call(decide, { as: other, params: { engineerId: e.id }, body: { decision: "approve", revision } });
+    await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", reason: CHECKED } });
+    const again = await call(decide, { as: other, params: { engineerId: e.id }, body: { decision: "approve", revision, reason: CHECKED } });
     expect(again.body.error.message).toMatch(/already been decided/);
   });
 });
@@ -252,7 +255,8 @@ describe("L5: CSV exports", () => {
     const e = await makeEngineer();
     await makeEngineer({ pausedAt: new Date() });
     for (let i = 0; i < 3; i++) await makeCustomer(e.id);
-    const res = await call(engineerExport, { query: { status: "active" } });
+    // Neither has sent an offer, so the one not paused is inactive.
+    const res = await call(engineerExport, { query: { status: "inactive" } });
     expect(res.headers.get("content-type")).toContain("application/x-ndjson");
     const lines = (res.body as string).trim().split("\n").map((l) => JSON.parse(l));
     expect(lines).toHaveLength(2);

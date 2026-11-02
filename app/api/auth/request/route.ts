@@ -9,7 +9,9 @@ import { normaliseClaimCode, resolveClaimCode } from "@/lib/claim";
 import { sendEmail } from "@/lib/email";
 import { engineerWelcomeEmailHtml } from "@/lib/engineer-welcome-email";
 import { notifyEngineer } from "@/lib/sms";
-import { townSlugOf } from "@/lib/town";
+import { cardExpiry } from "@/lib/gas-safe-card";
+import { saveAddresses } from "@/lib/addresses";
+import { queueCardAlert } from "@/lib/card-alert";
 import { sendPushNotification } from "@/lib/push";
 import {
   COMPANY_NUMBER,
@@ -24,8 +26,6 @@ const AddressInput = z.object({
   town: z.string().trim().max(80).default(""),
   postcode: z.string().max(10).transform(normalisePostcode).pipe(z.string().regex(UK_POSTCODE)),
 });
-const addressLines = (a: { line1: string; town?: string; postcode: string }) =>
-  [a.line1, a.town, a.postcode].filter(Boolean).join("\n");
 
 // Everything the sign-up wizard (steps 1-3) collects.
 const SignupData = z.object({
@@ -48,6 +48,8 @@ const SignupData = z.object({
     .transform((v) => v.replace(/\s/g, ""))
     .pipe(z.string().regex(GAS_SAFE_NO)),
   gasSafeCardToken: z.string().max(2000).optional(),
+  // The ID card's expiry, given with the photo (YYYY-MM-DD, not yet passed).
+  gasSafeCardExpiresOn: cardExpiry.optional(),
   // Build Review 3, section 2 — required for a sole trader; a limited
   // company (or partnership) with a Companies House name may leave it blank
   // and trade under that name. Length is checked in the refine below.
@@ -73,6 +75,9 @@ const SignupData = z.object({
   // for the record only — the town never comes from it.
   registeredOffice: AddressInput.optional(),
   marketingConsent: z.boolean().default(false),
+  // "TradeSura can text me to help me finish setting up" — opt-in, so older
+  // builds that don't send it leave it unticked.
+  setupTextConsent: z.boolean().default(false),
   // E1 — "How did you hear about us?" + optional referral code. Pre-filled and
   // hidden when arriving from a claim/referral link (Blocks 2 & 4).
   attribution: z
@@ -141,6 +146,10 @@ const FIELD_ERRORS: Record<string, FieldError> = {
     error: "Your ID card photo didn't come through — add it again on step 2.",
     field: "gasSafeCard",
   },
+  gasSafeCardExpiresOn: {
+    error: "Enter the expiry date on your Gas Safe ID card. It can't have passed.",
+    field: "gasSafeCard",
+  },
   trades: { error: "Check the trades you picked on step 1, then try again.", field: "email" },
   tradingName: { error: "Enter your trading name.", field: "tradingName" },
   businessType: { error: "Choose your business type.", field: "tradingName" },
@@ -161,6 +170,7 @@ const FIELD_ERRORS: Record<string, FieldError> = {
 // Apple links) — a specific reason, never a misleading field.
 const OTHER_ERRORS: Record<string, string> = {
   marketingConsent: "Tick or untick the tips box again, then try again.",
+  setupTextConsent: "Tick or untick the texts box again, then try again.",
   attribution: "Check “How did you hear about us?” and any referral code, then try again.",
   claimCode: "That letter code didn't go through — try again, or carry on without it.",
   appleToken: "Your Apple sign-in expired — go back and tap Continue with Apple again.",
@@ -415,24 +425,21 @@ export async function POST(req: Request) {
               : null,
           companyStatus: rest.businessType === "ltd" ? (rest.companyStatus ?? null) : null,
           postcode: rest.postcode,
+        // The trading address, town and post address are saved just after
+        // this, through saveAddresses (lib/addresses.ts). The registered
+        // office is never stored: lib/admin/companies.ts looks it up.
         ...(rest.addressLine1
           ? {
-              tradingAddress: addressLines({ line1: rest.addressLine1, town: rest.town, postcode: rest.postcode }),
-              // 3.6 — the home town comes from the trading address only.
-              ...(townSlugOf(rest.town ?? "") ? { town: rest.town, townSlug: townSlugOf(rest.town ?? "") } : {}),
-              packAddress: rest.postAddress
-                ? addressLines(rest.postAddress)
-                : addressLines({ line1: rest.addressLine1, town: rest.town, postcode: rest.postcode }),
               // Queued, not shipped — the admin "packs to post" list only
               // shows it once the badge is granted (Part 17.4).
               packRequestedAt: new Date(),
             }
           : {}),
-          registeredOffice:
-            rest.businessType === "ltd" && rest.registeredOffice ? addressLines(rest.registeredOffice) : null,
           marketingConsent: rest.marketingConsent,
+          setupTextConsentAt: rest.setupTextConsent ? new Date() : null,
           gasSafeNo: rest.gasSafeNo,
           gasSafeCardUrl,
+          gasSafeCardExpiresOn: gasSafeCardUrl && rest.gasSafeCardExpiresOn ? rest.gasSafeCardExpiresOn : null,
           // Into the admin queue — the badge is granted by a person
           // (app/admin/verifications), never by signup.
           gasSafeReviewRequestedAt: new Date(),
@@ -481,6 +488,23 @@ export async function POST(req: Request) {
     ).catch(() => {
       console.error("[signup] account created, but signup event could not be recorded");
     });
+
+    // The sign-up address is their trading address (lib/addresses.ts): it sets
+    // their town and town page, and their post goes there until they change it.
+    // 30 Oct 3.6: "Send my post somewhere else" sends post there instead.
+    if (rest.addressLine1 && rest.town) {
+      const id = engineer.id;
+      const trading = { lines: [rest.addressLine1], town: rest.town, postcode: rest.postcode };
+      const correspondence = rest.postAddress
+        ? { lines: [rest.postAddress.line1], town: rest.postAddress.town ?? "", postcode: rest.postAddress.postcode }
+        : ("same" as const);
+      await prisma
+        .$transaction((tx) => saveAddresses(tx, id, { trading, correspondence }, { source: "signup" }))
+        .catch((err) => console.error("[signup] account created, but the trading address wasn't saved:", err));
+    }
+
+    // 3.2: tell the team there's a card to check.
+    if (gasSafeCardUrl) await queueCardAlert(engineer.id, "signup");
 
     engineerWelcomeEmailHtml(engineer.id)
       .then(({ subject, html }) => sendEmail({ to: email, subject, html }))

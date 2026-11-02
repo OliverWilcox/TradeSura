@@ -7,6 +7,8 @@ import { standingCopy, gasSafeStatus, paymentsStatus } from "@/lib/verification-
 
 import { smsAvailable } from "@/lib/contact-verification";
 import { whatsappConfigured } from "@/lib/whatsapp";
+import { formatAddress, sameAddress, tradingAddressOf } from "@/lib/addresses";
+import { companyProfile } from "@/lib/admin/companies";
 
 const Body = z.object({
   // Blank is allowed for a company with a Companies House name on file —
@@ -18,6 +20,8 @@ const Body = z.object({
   firstName: z.string().trim().min(1).max(60).optional(),
   lastName: z.string().trim().min(1).max(60).optional(),
   logoUrl: z.string().url().max(400).optional().or(z.literal("")),
+  // "TradeSura can text me to help me finish setting up". Left out, it stays as it is.
+  setupTextConsent: z.boolean().optional(),
 });
 
 // Mobile counterpart to the settings form's initial values in app/more/page.tsx.
@@ -25,8 +29,16 @@ export async function GET() {
   const engineerId = await getEngineerId();
   if (!engineerId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
-  const engineer = await prisma.engineer.findUnique({ where: { id: engineerId } });
+  const [engineer, tradingRow] = await Promise.all([
+    prisma.engineer.findUnique({ where: { id: engineerId } }),
+    prisma.engineerTradingAddress.findUnique({ where: { engineerId } }),
+  ]);
   if (!engineer) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  const trading = tradingAddressOf(tradingRow, engineer.packAddress);
+  const registeredOffice =
+    engineer.businessType === "ltd" && engineer.companyNumber
+      ? ((await companyProfile(engineer.companyNumber))?.registeredOffice ?? null)
+      : null;
 
   // Review 4 — a company that left its trading name blank trades under its
   // Companies House name, which is stored as the trading name. Show the box
@@ -56,11 +68,21 @@ export async function GET() {
     legalName: engineer.legalName,
     vatRegistered: engineer.vatRegistered,
     postcode: engineer.postcode,
-    tradingAddress: engineer.tradingAddress,
-    registeredOffice: engineer.registeredOffice,
+    // 30 Oct 3.6 — the registered office, for limited companies only, comes
+    // from Companies House each time (never stored, lib/addresses.ts).
+    registeredOffice,
     // Review 4 — where the member pack goes, with Change on Account.
     packAddress: engineer.packAddress,
     packShipped: Boolean(engineer.packShippedAt),
+    setupTextConsent: Boolean(engineer.setupTextConsentAt),
+    gasSafeCardExpiresOn: engineer.gasSafeCardExpiresOn?.toISOString().slice(0, 10) ?? null,
+    // Trading sets the town and town page; correspondence is where the pack
+    // and all post go (lib/addresses.ts). Changed with PUT /api/settings/addresses.
+    addresses: {
+      trading: trading && { lines: trading.lines, town: trading.town, postcode: trading.postcode },
+      correspondence: engineer.packAddress,
+      correspondenceSameAsTrading: !engineer.packAddress || (trading ? sameAddress(engineer.packAddress, formatAddress(trading)) : false),
+    },
     // Part 6.4/17.3 — the same truth source the dashboard strip and Payouts'
     // banner read. `standing` is the collapsed single-line ladder (used only
     // when banned/paused outranks everything else); `gasSafe`/`payments` are
@@ -117,6 +139,7 @@ export async function PATCH(req: Request) {
       ...(parsed.data.lastName ? { lastName: parsed.data.lastName } : {}),
       logoUrl: parsed.data.logoUrl || null,
       ...address,
+      ...(parsed.data.setupTextConsent === undefined ? {} : { setupTextConsentAt: parsed.data.setupTextConsent ? new Date() : null }),
     },
   });
   return NextResponse.json({ ok: true, slug: address.slug, tradingName });

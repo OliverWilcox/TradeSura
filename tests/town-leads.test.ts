@@ -9,7 +9,7 @@ const m = vi.hoisted(() => ({
   lead: null as Record<string, unknown> | null,
   updateCount: 1,
   setting: null as string | null,
-  notify: vi.fn(async () => undefined),
+  notify: vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true),
   push: vi.fn(async () => undefined),
   sms: vi.fn(async () => ({ sent: true })),
   enquiry: vi.fn(async () => ({ id: "enq1" })),
@@ -132,7 +132,7 @@ describe("a new request", () => {
 });
 
 describe("taking a request", () => {
-  const open = { id: "lead1", townSlug: "holmfirth", claimedById: null, foundingUntil: mins(120), createdAt: now, ...input, postcode: "HD9 2AB" };
+  const open = { ...input, id: "lead1", townSlug: "holmfirth", claimedById: null, foundingUntil: mins(120), createdAt: now, postcode: "HD9 2AB" };
 
   it("a Founding Member can take it during the window and gets the details as an enquiry", async () => {
     m.lead = { ...open, openedAt: null };

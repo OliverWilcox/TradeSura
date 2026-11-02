@@ -8,14 +8,17 @@ import { POST as claim } from "@/app/api/admin/v1/verifications/[engineerId]/cla
 import { call, CHECKER, resetDb, withPermissions } from "./helpers";
 import { makeEngineer } from "./factories";
 
+/** These applications have open warnings (no card photo, not on the register), so approving takes a note (3.7). */
+const CHECKED = "Checked the card and register by phone";
+
 // The Gas Safe queue through the admin API: the same queue and rules as the
 // old /admin/verifications page, plus who decided and a guard against two
 // admins deciding the same application.
 
 const sent = vi.hoisted(() => ({ push: vi.fn(), sms: vi.fn(), email: vi.fn() }));
 vi.mock("@/lib/push", () => ({ sendPushNotification: sent.push }));
-vi.mock("@/lib/sms", () => ({ notifyEngineer: sent.sms }));
-vi.mock("@/lib/email", () => ({ sendEmail: sent.email }));
+vi.mock("@/lib/sms", () => ({ notifyEngineer: sent.sms, smsConfigured: () => true }));
+vi.mock("@/lib/email", () => ({ sendEmail: sent.email, emailConfigured: () => true }));
 
 beforeEach(async () => {
   await resetDb();
@@ -133,7 +136,7 @@ describe("deciding an application", () => {
   it("approves it, records who did, tells the engineer and points to the next one", async () => {
     const e = await makeEngineer({ createdAt: new Date("2026-10-01T09:00:00Z") });
     const nextUp = await makeEngineer({ createdAt: new Date("2026-10-02T09:00:00Z") });
-    const res = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve" }, headers: { "x-request-id": "req-approve-1" } });
+    const res = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", reason: CHECKED }, headers: { "x-request-id": "req-approve-1" } });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ id: e.id, outcome: "verified", nextId: nextUp.id });
 
@@ -155,7 +158,7 @@ describe("deciding an application", () => {
     const deciding = await makeEngineer({ createdAt: new Date("2026-10-01T09:00:00Z") });
     await makeEngineer({ businessType: "ltd", companyNumber: "87654321", createdAt: new Date("2026-10-02T09:00:00Z") }); // older, but a flagged duplicate
     const nextNew = await makeEngineer({ createdAt: new Date("2026-10-03T09:00:00Z") });
-    const res = await call(decide, { as: CHECKER, params: { engineerId: deciding.id }, body: { decision: "approve" } });
+    const res = await call(decide, { as: CHECKER, params: { engineerId: deciding.id }, body: { decision: "approve", reason: CHECKED } });
     expect(res.body.nextId).toBe(nextNew.id);
   });
 
@@ -178,7 +181,7 @@ describe("deciding an application", () => {
 
   it("can only happen once", async () => {
     const e = await makeEngineer();
-    await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve" } });
+    await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", reason: CHECKED } });
     const again = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "reject", reason: "Changed my mind" } });
     expect(again.status).toBe(409);
     expect((await prisma.engineer.findUniqueOrThrow({ where: { id: e.id } })).gasSafeRejectedAt).toBeNull();
@@ -188,7 +191,7 @@ describe("deciding an application", () => {
     sent.email.mockRejectedValueOnce(new Error("Resend is down"));
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const e = await makeEngineer();
-    const res = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve" } });
+    const res = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", reason: CHECKED } });
     expect(res.status).toBe(200);
     expect((await prisma.engineer.findUniqueOrThrow({ where: { id: e.id } })).gasSafeVerifiedAt).not.toBeNull();
     log.mockRestore();
@@ -196,7 +199,7 @@ describe("deciding an application", () => {
 
   it("needs the decide permission", async () => {
     const e = await makeEngineer();
-    const res = await call(decide, { as: withPermissions("verification:read"), params: { engineerId: e.id }, body: { decision: "approve" } });
+    const res = await call(decide, { as: withPermissions("verification:read"), params: { engineerId: e.id }, body: { decision: "approve", reason: CHECKED } });
     expect(res.status).toBe(403);
   });
 });
@@ -217,10 +220,10 @@ describe("claiming an application", () => {
   it("stops anyone else deciding it, and ends when it's decided", async () => {
     const e = await makeEngineer();
     await call(claim, { as: CHECKER, params: { engineerId: e.id }, method: "POST" });
-    const blocked = await call(decide, { as: other, params: { engineerId: e.id }, body: { decision: "approve" } });
+    const blocked = await call(decide, { as: other, params: { engineerId: e.id }, body: { decision: "approve", reason: CHECKED } });
     expect(blocked.status).toBe(409);
     expect(blocked.body.error.message).toContain(CHECKER.name);
-    expect((await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve" } })).status).toBe(200);
+    expect((await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", reason: CHECKED } })).status).toBe(200);
     expect(await prisma.verificationClaim.count()).toBe(0);
   });
 

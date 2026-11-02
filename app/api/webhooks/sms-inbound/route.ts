@@ -4,6 +4,10 @@ import { track } from "@/lib/track";
 import { suppress, unsuppress } from "@/lib/suppression";
 import { verifyTwilioSignature } from "@/lib/twilio-signature";
 
+// Twilio signs each request (lib/twilio-signature.ts). The URL must match
+// byte-for-byte what's configured in the Twilio console, so this trusts
+// req.url as-is rather than reconstructing it.
+
 const STOP_KEYWORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
 const START_KEYWORDS = new Set(["START", "YES", "UNSTOP"]);
 

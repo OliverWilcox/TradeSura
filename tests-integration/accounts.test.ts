@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
+import { planWipe } from "@/lib/admin/accounts";
 import { GET as engineerAccounts } from "@/app/api/admin/v1/accounts/engineers/route";
 import { GET as customerAccounts } from "@/app/api/admin/v1/accounts/customers/route";
 import { POST as remove } from "@/app/api/admin/v1/accounts/delete/route";
@@ -193,5 +194,22 @@ describe("deleting accounts", () => {
     expect((await del({})).status).toBe(400);
     expect((await call(remove, { as: CHECKER, body: { engineerIds: [other.id] } })).status).toBe(403);
     expect((await prisma.engineer.findUniqueOrThrow({ where: { id: other.id } })).deletedAt).toBeNull();
+  });
+});
+
+describe("wiping test data", () => {
+  it("plans to delete marked engineers and customers, leaving anyone on a live plan, and changes nothing", async () => {
+    const free = await makeEngineer({ tradingName: "Tester Heating" });
+    const busy = await makeEngineer({ tradingName: "Tester With Customers" });
+    await makePlan(busy.id, (await makeCustomer(busy.id)).id);
+    const realEngineer = await makeEngineer();
+    const testCustomer = await makeCustomer(realEngineer.id);
+    for (const [subjectType, subjectId] of [["engineer", free.id], ["engineer", busy.id], ["customer", testCustomer.id]]) {
+      await prisma.adminTestMark.create({ data: { subjectType, subjectId, adminId: "a", adminName: "A" } });
+    }
+    const plan = await planWipe();
+    expect(plan.engineers.map((e) => [e.name, e.canDelete]).sort()).toEqual([["Tester Heating", true], ["Tester With Customers", false]]);
+    expect(plan.customers).toEqual([expect.objectContaining({ id: testCustomer.id, canDelete: true })]);
+    expect(await prisma.engineer.count({ where: { deletedAt: { not: null } } })).toBe(0);
   });
 });

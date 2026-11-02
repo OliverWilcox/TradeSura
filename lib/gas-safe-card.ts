@@ -1,4 +1,5 @@
 import { put } from "@vercel/blob";
+import { z } from "zod";
 
 // Gas Safe ID card photo → Blob under an unguessable path. Shared by the
 // engineer's own upload and the owner adding a staff engineer (Build Review 2,
@@ -23,3 +24,21 @@ export async function storeGasSafeCard(
   });
   return { ok: true, url: blob.url };
 }
+
+const YEARS_AHEAD = 5;
+
+/**
+ * The card's expiry date as the app sends it (YYYY-MM-DD), as a UTC date. A
+ * date that's passed, or more than five years off (a typo), is refused.
+ */
+export const cardExpiry = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .transform((s) => new Date(`${s}T00:00:00Z`))
+  .refine((d) => {
+    if (Number.isNaN(d.getTime())) return false;
+    const today = new Date(new Date().toISOString().slice(0, 10));
+    const limit = new Date(today);
+    limit.setUTCFullYear(limit.getUTCFullYear() + YEARS_AHEAD);
+    return d >= today && d <= limit;
+  });

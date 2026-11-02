@@ -188,14 +188,17 @@ export async function POST(req: Request) {
 
   // Signup link is customer-requested at the end of the job → transactional.
   // On the WhatsApp path the engineer shares it himself, so skip our text.
+  // The offer event names the text, so whether it arrived can be told (QA-02).
+  let smsId: string | undefined;
+  let textWent: boolean | null | undefined;
   if (b.channel === "sms") {
-    await sendSms({
+    ({ id: smsId, delivered: textWent } = await sendSms({
       engineerId,
       to: customer.phone,
       body: messageBody,
       messageClass: "TRANSACTIONAL",
       consentBasis: "engineer-initiated",
-    });
+    }));
   }
 
   // 30 Oct update §6 — follow-ups at 2 and 7 days, worded for the visit
@@ -225,6 +228,7 @@ export async function POST(req: Request) {
     customerId: customer.id,
     channel: b.channel,
     reason: b.reason ?? null,
+    ...(smsId ? { smsId } : {}),
   });
 
   return NextResponse.json({
@@ -234,6 +238,10 @@ export async function POST(req: Request) {
     message: messageBody,
     customerFirstName: customer.firstName,
     sessionToken: session?.token ?? null,
+    // QA-26: whether our text went ("not_sent": Twilio refused it, or texts
+    // aren't set up), so the app can say so and offer the link another way.
+    // Null on the WhatsApp path.
+    text: b.channel === "sms" ? (textWent ? "sent" : "not_sent") : null,
   });
 }
 
