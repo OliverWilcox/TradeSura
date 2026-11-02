@@ -80,6 +80,14 @@ export const WHATSAPP_TEMPLATES = {
     text: "TradeSura: {{1}} days left to keep your top spot in {{2}}. Sign your first customer by {{3}}.",
     example: ["14", "Holmfirth", "1 January 2027"],
   },
+  town_lead_founding: {
+    text: "TradeSura: new homeowner request in {{1}} ({{2}}). As a Founding Member you get first pick for {{3}}. Open the app to claim it.",
+    example: ["Holmfirth", "Pat in HD9", "2 hours"],
+  },
+  town_lead_open: {
+    text: "TradeSura: new homeowner request in {{1}} ({{2}}). The first engineer to claim it gets it. Open the app to claim it.",
+    example: ["Holmfirth", "Pat in HD9"],
+  },
   gas_safe_verified: {
     text: "You're Gas Safe verified on TradeSura. Your member pack is on its way.",
     example: [],

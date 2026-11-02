@@ -11,6 +11,7 @@ import { sendYearlyRenewalNotices } from "@/lib/yearly-renewals";
 import { runFoundingJobs } from "@/lib/founding";
 import { chaseFinishSetup } from "@/lib/finish-setup";
 import { sendMissedVerifiedEmails } from "@/lib/verified-email";
+import { openDueTownLeads } from "@/lib/town-leads";
 
 // Queue due service reminders (Part 11's 30/14/3 engine), apply due price
 // reviews, then flush the SMS
@@ -36,8 +37,10 @@ async function run() {
   const finishSetupChasers = await chaseFinishSetup();
   // Matt, 30 Oct §11 — a verified engineer who missed "You're verified".
   const verifiedEmails = await sendMissedVerifiedEmails();
+  // 30 Oct §10 — town requests past their Founding-first window: alert the rest of the town.
+  const townLeadsOpened = await openDueTownLeads();
   const sent = await flushSmsQueue();
-  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves, setupNudges, renewalNotices, founding, finishSetupChasers, verifiedEmails });
+  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves, setupNudges, renewalNotices, founding, finishSetupChasers, verifiedEmails, townLeadsOpened });
 }
 
 // Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.

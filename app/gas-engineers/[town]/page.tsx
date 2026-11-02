@@ -10,6 +10,7 @@ import { townPageUrl } from "@/lib/public-url";
 import { RingMark } from "@/components/ring-mark";
 import { PartnerBadge, RatingLine, RecruitBanner } from "@/components/engineer-profile";
 import { FoundingBadge } from "@/components/founding-badge";
+import { TownLeadForm } from "@/components/town-lead-form";
 
 export const dynamic = "force-dynamic";
 
@@ -141,6 +142,8 @@ export default async function TownPage({ params }: Params) {
             </li>
           ))}
         </ul>
+
+        <TownLeadForm town={town} townName={name} />
 
         <div className="bg-paper border border-line rounded-xl p-3.5 text-[13px] text-muted">
           <h2 className="font-sans font-semibold text-sm text-ink mb-1">Boiler care plans in {name}</h2>

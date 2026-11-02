@@ -220,6 +220,7 @@ model Engineer {
   plans                      Plan[]
 
   @@index([previousSlugs], type: Gin)
+  townLeadsClaimed           TownLead[]        @relation("TownLeadClaims")
 }
 
 model Customer {
@@ -713,6 +714,32 @@ model Enquiry {
   createdAt  DateTime @default(now())
 
   @@index([engineerId, createdAt])
+}
+
+// 30 Oct update §10 — a homeowner's request from a town page, not addressed
+// to any one engineer. Founding Members in the town get first pick until
+// foundingUntil; then it opens to every listed engineer there. The first to
+// claim it gets the contact details (as an Enquiry in their app).
+model TownLead {
+  id            String    @id @default(cuid())
+  townSlug      String
+  name          String
+  phone         String?
+  email         String?
+  postcode      String
+  message       String
+  // The homeowner ticked "Pass my details to one local engineer on TradeSura…".
+  consentAt     DateTime
+  emergency     String? // interlock keyword they acknowledged, if any
+  foundingUntil DateTime
+  openedAt      DateTime? // set when it opens to everyone in the town
+  claimedById   String?
+  claimedBy     Engineer? @relation("TownLeadClaims", fields: [claimedById], references: [id])
+  claimedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([townSlug, claimedAt])
+  @@index([claimedById])
 }
 
 // Section 6 — a town page publishes only once it has real engineers; admin
