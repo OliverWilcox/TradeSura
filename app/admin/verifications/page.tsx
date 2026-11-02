@@ -6,6 +6,7 @@ import { CLAUSE_TEMPLATES } from "@/lib/clauses";
 import { confirmedQualifications } from "@/lib/plan-rules";
 import { notifyEngineer } from "@/lib/sms";
 import { sendEmail } from "@/lib/email";
+import { sendVerifiedEmail } from "@/lib/verified-email";
 import { sendPushNotification } from "@/lib/push";
 import { track } from "@/lib/track";
 import { companyOfficers, officerMatches, type Officer } from "@/lib/companies-house";
@@ -55,13 +56,9 @@ async function decide(formData: FormData) {
       { url: "/more" },
     );
     await notifyEngineer(engineerId, "You're Gas Safe verified on TradeSura — your member pack is on its way.");
-    // Build Review 2 — texts aren't switched on yet, so email carries the
-    // result alongside the push.
-    await emailEngineer(
-      engineerId,
-      "You're Gas Safe verified on TradeSura",
-      "<p>Good news — we've checked your Gas Safe registration and your Verified Member badge is now live. You can send plan offers straight away, and your member pack is on its way.</p>",
-    );
+    // Matt, 30 Oct §11 — the "You're verified" email goes out the moment
+    // the check passes.
+    await sendVerifiedEmail(engineerId).catch((err) => console.error("[verify] verified email failed:", err));
     await track("gas_safe_verified", { type: "SYSTEM" }, { engineerId, via: "admin_review" });
   } else {
     await prisma.engineer.update({

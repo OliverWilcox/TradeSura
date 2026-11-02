@@ -9,6 +9,7 @@ import { moveFollowUps } from "@/lib/move-followups";
 import { sendSetupNudges } from "@/lib/account-emails";
 import { sendYearlyRenewalNotices } from "@/lib/yearly-renewals";
 import { chaseFinishSetup } from "@/lib/finish-setup";
+import { sendMissedVerifiedEmails } from "@/lib/verified-email";
 
 // Queue due service reminders (Part 11's 30/14/3 engine), apply due price
 // reviews, then flush the SMS
@@ -30,8 +31,10 @@ async function run() {
   const renewalNotices = await sendYearlyRenewalNotices();
   // Matt, 30 Oct §9.1 — push chasers until payment setup is finished.
   const finishSetupChasers = await chaseFinishSetup();
+  // Matt, 30 Oct §11 — a verified engineer who missed "You're verified".
+  const verifiedEmails = await sendMissedVerifiedEmails();
   const sent = await flushSmsQueue();
-  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves, setupNudges, renewalNotices, finishSetupChasers });
+  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves, setupNudges, renewalNotices, finishSetupChasers, verifiedEmails });
 }
 
 // Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
