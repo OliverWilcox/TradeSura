@@ -25,7 +25,9 @@ export async function GET() {
       stars: r.stars,
       comment: r.comment,
       customerName: r.customerName,
-      customerId: r.plan.customerId,
+      // At-the-job reviews from customers who didn't join have no plan.
+      customerId: r.plan?.customerId ?? null,
+      atTheJob: r.source === "offer",
       ratedAt: r.ratedAt!.toISOString(),
       reply: r.reply,
       repliedAt: r.repliedAt?.toISOString() ?? null,

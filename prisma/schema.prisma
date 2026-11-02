@@ -320,6 +320,12 @@ model Plan {
   customer                Customer        @relation(fields: [customerId], references: [id])
   tierId                  String?
   tier                    PlanTier?       @relation(fields: [tierId], references: [id])
+  // 30 Oct update §6 — why the installer was there (lib/visit-reasons.ts),
+  // the content variant the customer saw, and the at-the-job offer it came
+  // from, so conversion can be tracked by reason.
+  visitReason             String?
+  visitVariant            String?
+  offerSessionId          String?
   status                  PlanStatus      @default(PENDING)
   priceMonthlyPence       Int?
   signupToken             String          @unique
@@ -608,10 +614,18 @@ model Rating {
   id              String        @id @default(cuid())
   engineerId      String
   engineer        Engineer      @relation(fields: [engineerId], references: [id])
-  planId          String
-  plan            Plan          @relation(fields: [planId], references: [id])
-  serviceRecordId String        @unique
-  serviceRecord   ServiceRecord @relation(fields: [serviceRecordId], references: [id])
+  // A service rating has a plan and a logged service; an at-the-job review
+  // (30 Oct update §6, "plans first, then the review") may have neither.
+  planId          String?
+  plan            Plan?          @relation(fields: [planId], references: [id])
+  serviceRecordId String?        @unique
+  serviceRecord   ServiceRecord? @relation(fields: [serviceRecordId], references: [id])
+  source          String         @default("service") // service | offer
+  offerSessionId  String?        @unique
+  contactPhone    String? // E.164, verified by a text code (non-joiners)
+  contactEmail    String? // verified by an emailed code (non-joiners)
+  // "[Business] may send you occasional plan offers" — ticked by default.
+  offerConsent    Boolean        @default(false)
   requestToken    String        @unique
   stars           Int?
   comment         String?
@@ -684,4 +698,46 @@ model AppSetting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+// 30 Oct update §6 — the per-reason content the customer screens are
+// tailored with. Muhammad's admin writes these rows; with none for a reason
+// the defaults in lib/visit-reasons.ts apply. Several rows per reason with
+// different `variant`s are a split test, weighted by `weight`.
+model VisitReasonContent {
+  id           String   @id @default(cuid())
+  reason       String // new_boiler | breakdown | yearly_service | landlord | other (or a new key)
+  variant      String   @default("A")
+  weight       Int      @default(1)
+  active       Boolean  @default(true)
+  label        String // the installer's one-tap button, e.g. "New boiler fitted"
+  sortOrder    Int      @default(0)
+  headline     String
+  worries      Json // string[] — the customer's likely worries
+  messages     Json // string[] — the answers, in order
+  graphicKey   String?
+  benefitOrder Json // string[] of clause codes, most relevant first
+  preselect    String   @default("middle") // first | middle | top | landlord
+  followUp2d   String // text 2 days later; {first}, {engineer}, {link}
+  followUp7d   String
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  @@unique([reason, variant])
+}
+
+// One at-the-job offer: the reason picked, and whether the customer joined
+// there and then ("Show them now") — the review afterwards hangs off it.
+model OfferSession {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  engineerId String
+  soldById   String?
+  reason     String
+  variant    String   @default("A")
+  channel    String // show | sms | whatsapp
+  planId     String?  @unique
+  createdAt  DateTime @default(now())
+
+  @@index([engineerId, createdAt])
 }

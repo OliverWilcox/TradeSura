@@ -10,6 +10,8 @@ import { normaliseUkPhone } from "@/lib/phone";
 import { newPlanRef, newToken } from "@/lib/plans";
 import { signupUrl } from "@/lib/public-url";
 import { clauseLine } from "@/lib/clauses";
+import { queueFollowUps, startOfferSession } from "@/lib/offer-session";
+import { reasonContent } from "@/lib/visit-reasons";
 
 const Body = z.object({
   customerId: z.string().optional(),
@@ -27,6 +29,9 @@ const Body = z.object({
   // 'sms' sends our branded text now; 'whatsapp' skips it (the engineer shares
   // the link himself) but still queues the follow-up nudges.
   channel: z.enum(["sms", "whatsapp"]).default("sms"),
+  // 30 Oct update §6 — why the installer was there (lib/visit-reasons.ts).
+  // Required in the app; optional here so older builds still send.
+  reason: z.string().min(1).max(40).optional(),
 });
 
 // Mobile counterpart to the customer-picker query in app/offer/page.tsx.
@@ -193,25 +198,20 @@ export async function POST(req: Request) {
     });
   }
 
-  // Abandon nudges (spec Screen 04): that evening + 3 days later. Marketing
-  // class → STOP suffix + quiet hours in lib/sms. Cancelled on activation.
-  const now = new Date();
-  const evening = new Date(now);
-  evening.setHours(18, 30, 0, 0);
-  if (evening <= now) evening.setTime(now.getTime() + 30 * 60 * 1000);
-  const day3 = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-  day3.setHours(10, 0, 0, 0);
-  const nudgeBody = `Your quote for ${brand}'s ${tier.name} plan is still open — pick your plan: ${link}`;
-  for (const sendAfter of [evening, day3]) {
-    await sendSms({
-      engineerId,
-      to: customer.phone,
-      body: nudgeBody,
-      messageClass: "MARKETING",
-      sendAfter,
-      cancelKey: `nudge:${plan.id}`,
-    });
-  }
+  // 30 Oct update §6 — follow-ups at 2 and 7 days, worded for the visit
+  // reason (replaces "that evening + 3 days"). Marketing class → STOP suffix
+  // + quiet hours in lib/sms. Cancelled on activation (nudge:{planId}).
+  const session = b.reason
+    ? await startOfferSession({ engineerId, soldById: staffId, reason: b.reason, channel: b.channel, planId: plan.id })
+    : null;
+  await queueFollowUps({
+    engineerId,
+    phone: customer.phone,
+    firstName: customer.firstName,
+    link,
+    content: session?.content ?? (await reasonContent("other", plan.signupToken)),
+    cancelKey: `nudge:${plan.id}`,
+  });
 
   await track("offer_link_sent", { type: "ENGINEER", id: engineerId }, {
     planId: plan.id,
@@ -224,6 +224,7 @@ export async function POST(req: Request) {
     soldById: staffId,
     customerId: customer.id,
     channel: b.channel,
+    reason: b.reason ?? null,
   });
 
   return NextResponse.json({
@@ -232,6 +233,7 @@ export async function POST(req: Request) {
     link,
     message: messageBody,
     customerFirstName: customer.firstName,
+    sessionToken: session?.token ?? null,
   });
 }
 

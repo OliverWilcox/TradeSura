@@ -181,7 +181,9 @@ export async function submitRating(
     where: { requestToken: token },
     include: { plan: { include: { customer: true } }, engineer: true },
   });
-  if (!rating) return { ok: false, status: 404, error: "This rating link isn't valid." };
+  // Service ratings always have a plan; an at-the-job review has no link to rate from.
+  if (!rating || !rating.plan) return { ok: false, status: 404, error: "This rating link isn't valid." };
+  const plan = rating.plan;
   if (rating.ratedAt) return { ok: false, status: 409, error: "You've already rated this service — thank you." };
   if (!isValidStars(input.stars)) return { ok: false, status: 400, error: "Tap 1 to 5 stars." };
   const comment = input.comment?.trim().slice(0, COMMENT_MAX) || null;
@@ -189,7 +191,7 @@ export async function submitRating(
   if (comment) {
     const check = checkEmergency(comment);
     if (check.emergency && !input.acknowledged) {
-      await track("emergency_interlock_triggered", { type: "CUSTOMER", id: rating.plan.customerId }, {
+      await track("emergency_interlock_triggered", { type: "CUSTOMER", id: plan.customerId }, {
         planId: rating.planId,
         matched: check.matched,
         surface: "rating",
@@ -197,15 +199,15 @@ export async function submitRating(
       await sendPushNotification(
         rating.engineerId,
         "Gas safety alert",
-        `${rating.plan.customer.firstName} ${rating.plan.customer.lastName} mentioned a possible gas emergency and was told to call 0800 111 999.`,
-        { url: `/customer/${rating.plan.customerId}` },
+        `${plan.customer.firstName} ${plan.customer.lastName} mentioned a possible gas emergency and was told to call 0800 111 999.`,
+        { url: `/customer/${plan.customerId}` },
       );
       return { ok: false, status: 409, error: "emergency", emergency: true };
     }
   }
 
   const stars = input.stars;
-  const customerName = publicCustomerName(rating.plan.customer.firstName, rating.plan.customer.lastName);
+  const customerName = publicCustomerName(plan.customer.firstName, plan.customer.lastName);
   // Conditional update so two taps can't both land.
   const updated = await prisma.rating.updateMany({
     where: { id: rating.id, ratedAt: null },
@@ -213,7 +215,7 @@ export async function submitRating(
   });
   if (updated.count === 0) return { ok: false, status: 409, error: "You've already rated this service — thank you." };
 
-  await track("rating_given", { type: "CUSTOMER", id: rating.plan.customerId }, {
+  await track("rating_given", { type: "CUSTOMER", id: plan.customerId }, {
     ratingId: rating.id,
     engineerId: rating.engineerId,
     stars,
@@ -229,12 +231,13 @@ export async function submitRating(
   return { ok: true, low };
 }
 
-async function alertLowRating(ratingId: string) {
+export async function alertLowRating(ratingId: string) {
   const r = await prisma.rating.findUniqueOrThrow({
     where: { id: ratingId },
     include: { plan: { include: { customer: true } }, engineer: true },
   });
-  const who = `${r.plan.customer.firstName} ${r.plan.customer.lastName}`;
+  // An at-the-job review may have no plan: its public name stands in.
+  const who = r.plan ? `${r.plan.customer.firstName} ${r.plan.customer.lastName}` : (r.customerName ?? "A customer");
   const line = `${who} rated their service ${r.stars} star${r.stars === 1 ? "" : "s"}${r.comment ? `: "${r.comment.slice(0, 120)}"` : "."}`;
   await sendPushNotification(r.engineerId, "Low rating", `${line} A quick call often helps.`, { url: "/ratings" });
   const rated = `${r.stars} star${r.stars === 1 ? "" : "s"}${r.comment ? `: "${r.comment.slice(0, 120)}"` : ""}`;
@@ -248,7 +251,7 @@ async function alertLowRating(ratingId: string) {
   await sendEmail({
     to: admin,
     subject: `Low rating (${r.stars}★) — ${brandName(r.engineer)}`,
-    html: `<p><b>${escapeHtml(brandName(r.engineer))}</b> (engineer ${escapeHtml(r.engineerId)}) received a ${r.stars}-star rating from ${escapeHtml(who)} on plan ${escapeHtml(r.plan.ref)}.</p>
+    html: `<p><b>${escapeHtml(brandName(r.engineer))}</b> (engineer ${escapeHtml(r.engineerId)}) received a ${r.stars}-star rating from ${escapeHtml(who)}${r.plan ? ` on plan ${escapeHtml(r.plan.ref)}` : " at the job (not on a plan)"}.</p>
 ${r.comment ? `<blockquote>${escapeHtml(r.comment)}</blockquote>` : "<p>No comment left.</p>"}
 <p>Rating id: ${escapeHtml(r.id)}</p>`,
   }).catch((err) => console.error("[ratings] admin email failed:", err));

@@ -13,6 +13,8 @@ export type PageSearch = {
   preview?: string;
   practice?: string;
   rejoin?: string;
+  /** 30 Oct §6 — the at-the-job offer this page was opened from. */
+  o?: string;
 };
 
 export function queryString(q: Record<string, string | undefined>): string {
@@ -48,6 +50,7 @@ export async function renderEngineerPage(slug: string, q: PageSearch, opts: { pl
       tier={opts.tierId ?? q.tier}
       by={q.by}
       rejoin={q.rejoin}
+      offer={q.o}
       preview={preview}
       practice={q.practice === "1"}
       profile={showProfile && rating ? { rating, ratings, partner: isWebsitePartner(engineer) } : undefined}

@@ -13,10 +13,12 @@ export const SUPERSEDED_MESSAGE = "We sent you a newer code — use the one in t
 export class VerificationError extends Error {
   constructor(message: string, public status = 400) { super(message); }
 }
-type Purpose = "signup-email" | "signup-sms" | "enable-sms" | "signin-sms";
+// review-* — a customer who didn't join confirms their mobile or email
+// before leaving the installer a review (30 Oct update §6).
+type Purpose = "signup-email" | "signup-sms" | "enable-sms" | "signin-sms" | "review-sms" | "review-email";
 // All attempts and resends for a destination share a lock, even across app instances.
 export async function requestContactCode(purpose: Purpose, destination: string, claims: Record<string, string>) {
-  const sms = purpose !== "signup-email";
+  const sms = purpose !== "signup-email" && purpose !== "review-email";
   // Local development only, with no provider set up: hand the code back so
   // the screen can fill it in (same as sign-in's devCode). Never in production.
   const devNoProvider = process.env.NODE_ENV === "development" && (sms ? !smsAvailable() : !emailConfigured());
@@ -41,7 +43,7 @@ export async function requestContactCode(purpose: Purpose, destination: string, 
   }
   try {
     if (sms) await sendVerificationCode(destination, code);
-    else await sendEmail({ to: destination, ...codeEmail({ code, expiresAt: row.expiresAt }) });
+    else await sendEmail({ to: destination, ...codeEmail({ code, expiresAt: row.expiresAt, ...(purpose === "review-email" ? { purpose: "leave your review" } : {}) }) });
   } catch {
     await prisma.signInCode.delete({ where: { id: row.id } });
     throw new VerificationError("We couldn't send your code — please try again.", 503);

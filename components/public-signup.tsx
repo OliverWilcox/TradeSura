@@ -43,6 +43,7 @@ export function PublicSignup({
   rejoin,
   firstMonthFree,
   mode = "live",
+  offerToken,
 }: {
   slug: string;
   tiers: Tier[];
@@ -58,6 +59,8 @@ export function PublicSignup({
   firstMonthFree?: boolean;
   /** Review 4 — only "live" ever creates a customer or plan. */
   mode?: PageMode;
+  /** 30 Oct §6 — the at-the-job offer this sign-up belongs to. */
+  offerToken?: string;
 }) {
   const [selectedId, setSelectedId] = useState(
     tiers.find((t) => t.id === initialTierId)?.id ??
@@ -103,6 +106,7 @@ export function PublicSignup({
         soldById,
         billingInterval,
         rejoin,
+        offer: offerToken,
       }),
     });
     const data = await res.json();

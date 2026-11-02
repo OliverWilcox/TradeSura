@@ -13,6 +13,7 @@ import { createSignupCheckout, ensureRecipientConfiguration, isMissingDestinatio
 import { snapshotTier } from "@/lib/plan-tier";
 import { signupUrl } from "@/lib/public-url";
 import { offerBlockedReason } from "@/lib/verification-state";
+import { attachPlanToSession } from "@/lib/offer-session";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 const Body = z.object({
@@ -28,6 +29,8 @@ const Body = z.object({
   billingInterval: z.enum(["month", "year"]).default("month"),
   // Retention §9 — arrived from a win-back rejoin link.
   rejoin: z.string().max(64).optional(),
+  // 30 Oct §6 — handed over at the job: links the plan to that offer.
+  offer: z.string().max(80).optional(),
 });
 
 // Public plan page (C1) → embedded checkout. No pre-created plan and no
@@ -126,6 +129,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       linkOpenedAt: new Date(),
     },
   });
+
+  if (b.channel === "demo") await attachPlanToSession(b.offer, engineer.id, plan.id);
 
   const brand = brandName(engineer);
   const base = signupUrl(engineer.slug, plan.signupToken);

@@ -10,7 +10,7 @@ type Rating = {
   stars: number | null;
   comment: string | null;
   customerName: string | null;
-  customerId: string;
+  customerId: string | null;
   ratedAt: string;
   reply: string | null;
   repliedAt: string | null;

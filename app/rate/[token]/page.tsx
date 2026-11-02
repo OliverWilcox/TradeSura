@@ -16,7 +16,8 @@ export default async function RatePage({ params }: { params: Promise<{ token: st
     where: { requestToken: token },
     include: { engineer: true, serviceRecord: { select: { doneAt: true } } },
   });
-  if (!rating) notFound();
+  // At-the-job reviews are left in the app, not from a link.
+  if (!rating || !rating.serviceRecord) notFound();
   const brand = brandName(rating.engineer);
   const when = rating.serviceRecord.doneAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" });
 

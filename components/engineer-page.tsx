@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { verifyGasSafe } from "@/lib/gas-safe";
-import { clauseLine } from "@/lib/clauses";
+import { clauseLine, isLandlordPlan } from "@/lib/clauses";
+import { orderBenefits, preselectedTierId, reasonContent, type ReasonContent } from "@/lib/visit-reasons";
+import { VisitReasonIntro } from "@/components/visit-reason-intro";
 import { canonicalProfileUrl, profileUrl } from "@/lib/public-url";
 import { tradingNameOf } from "@/lib/engineer";
 import type { PublicRating } from "@/lib/ratings";
@@ -98,6 +100,14 @@ const FAQS: { q: string; a: string }[] = [
 // Section 6 — what the Google-facing profile adds on top of the plan page.
 // Since Review 4 it lives at the one address, tradesura.com/{slug}, once
 // the engineer publishes it.
+// The visit-reason content for an at-the-job offer, if the token is this
+// engineer's. Anything else (a stale or someone else's token) is ignored.
+async function visitForOffer(token: string, engineerId: string): Promise<ReasonContent | null> {
+  const session = await prisma.offerSession.findUnique({ where: { token } });
+  if (!session || session.engineerId !== engineerId) return null;
+  return reasonContent(session.reason, session.token);
+}
+
 export type ProfileExtras = {
   rating: RatingSummary;
   ratings: PublicRating[];
@@ -115,6 +125,7 @@ export async function EngineerPage({
   rejoin,
   preview = false,
   practice = false,
+  offer,
 }: {
   data: Loaded;
   slug: string;
@@ -130,6 +141,8 @@ export async function EngineerPage({
   preview?: boolean;
   /** Review 4 — demo mode while offers are locked: nothing is saved. */
   practice?: boolean;
+  /** 30 Oct §6 — an at-the-job offer's token: the page is tailored to its visit reason. */
+  offer?: string;
 }) {
   const { engineer, tiers } = data;
   const brand = engineer.tradingName!;
@@ -138,6 +151,15 @@ export async function EngineerPage({
   const published = Boolean(engineer.profilePublishedAt);
   const legalLine = tradingNameOf(engineer);
   const mode = pageMode({ preview, practice, engineer });
+  // 30 Oct §6 — handed over at the job: the reason's content leads the page,
+  // its benefits come first on each plan, and it picks the plan to pre-select.
+  const visit = demo && offer && mode === "live" ? await visitForOffer(offer, engineer.id) : null;
+  const visitTierId = visit
+    ? preselectedTierId(
+        tiers.map((t) => ({ id: t.id, landlord: isLandlordPlan(t.clauses.map((c) => c.clause.code)) })),
+        visit.preselect,
+      )
+    : undefined;
   const banner = <ModeBanner mode={mode} />;
 
   // The engineer's Stripe Connect business_profile.url points here from the
@@ -275,6 +297,8 @@ export async function EngineerPage({
         </div>
       )}
 
+      {visit && <VisitReasonIntro content={visit} engineerFirstName={engineer.firstName?.trim() || brand} />}
+
       {/* Build Guide v2 Part 15.1 — title + sub-line, verbatim. */}
       <div>
         <h2 className="font-sans font-semibold text-lg">Choose your plan</h2>
@@ -285,7 +309,8 @@ export async function EngineerPage({
         slug={slug}
         engineerName={brand}
         vatRegistered={engineer.vatRegistered}
-        initialTierId={tier}
+        initialTierId={tier ?? visitTierId}
+        offerToken={visit ? offer : undefined}
         rejoin={rejoin}
         firstMonthFree={await rejoinFreeMonth(engineer.id, rejoin)}
         mode={mode}
@@ -299,9 +324,12 @@ export async function EngineerPage({
           priceMonthlyPence: t.priceMonthlyPence,
           isRecommended: t.isRecommended,
           lines: [
-            ...t.clauses
-              .sort((a, b) => a.clause.sortOrder - b.clause.sortOrder)
-              .map((tc) => clauseLine(tc.clause, t.clauseRates)),
+            ...orderBenefits(
+              t.clauses
+                .sort((a, b) => a.clause.sortOrder - b.clause.sortOrder)
+                .map((tc) => ({ code: tc.clause.code, tc })),
+              visit?.benefitOrder ?? [],
+            ).map(({ tc }) => clauseLine(tc.clause, t.clauseRates)),
             ...t.customLabels,
           ],
         }))}
