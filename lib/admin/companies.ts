@@ -55,14 +55,19 @@ const COMPANY_WORD = /(^|[^a-z])(ltd|limited|plc|llp)\.?($|[^a-z])/i;
  * Whether a business's name and type disagree: a name that says it's a
  * company (Ltd, Limited, PLC, LLP) with a type that isn't, or a limited
  * company whose registered name doesn't. A trading name may leave "Ltd" out,
- * so the reverse is judged on the registered (legal) name when there is one.
+ * so the reverse is judged on the registered name: Companies House's for a
+ * company that gave its number (pass it once looked up; until then there's
+ * nothing to judge), otherwise the legal name it gave.
  */
-export function businessTypeMismatch(b: { tradingName: string | null; legalName: string | null; businessType: string | null }): "name_says_company" | "type_says_company" | null {
+export function businessTypeMismatch(
+  b: { tradingName: string | null; legalName: string | null; businessType: string | null; companyNumber?: string | null },
+  companiesHouseName: string | null = null,
+): "name_says_company" | "type_says_company" | null {
   const names = [b.tradingName, b.legalName].filter((n): n is string => !!n?.trim());
   const isCompany = b.businessType === "ltd";
   const llpPartnership = b.businessType === "partnership" && names.some((n) => /(^|[^a-z])llp\.?($|[^a-z])/i.test(n));
   if (!isCompany && !llpPartnership && names.some((n) => COMPANY_WORD.test(n))) return "name_says_company";
-  const registered = b.legalName?.trim() || b.tradingName?.trim();
+  const registered = b.companyNumber?.trim() ? companiesHouseName?.trim() : b.legalName?.trim() || b.tradingName?.trim();
   if (isCompany && registered && !COMPANY_WORD.test(registered)) return "type_says_company";
   return null;
 }
