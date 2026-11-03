@@ -41,85 +41,20 @@ type Settings = {
   postcode: string | null;
   packAddress?: string | null;
   // lib/addresses.ts: trading sets the town; post goes to packAddress.
-  addresses?: { trading: { lines: string[]; town: string; postcode: string } | null };
+  addresses?: {
+    trading: { lines: string[]; town: string; postcode: string } | null;
+    correspondence: string | null;
+    correspondenceSameAsTrading: boolean;
+  };
   registeredOffice?: string | null;
   packShipped?: boolean;
+  setupTextConsent?: boolean;
+  gasSafeCardExpiresOn?: string | null;
   standing: { state: string } & Status;
   gasSafe: Status;
   gasSafePhotoNeeded?: boolean;
   payments: Status;
 };
-
-// Review 4 — the sign-up correspondence address (where the member pack
-// goes), with Change. Locked once the pack has been posted.
-function PackAddress({ value, shipped, onSaved }: { value: string; shipped: boolean; onSaved: () => void }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  async function save() {
-    if (draft.trim().length < 10) return setErr("Enter your full postal address, including the postcode.");
-    setBusy(true);
-    setErr(null);
-    try {
-      await api("/api/settings/pack-address", { method: "POST", body: JSON.stringify({ address: draft.trim() }) });
-      setEditing(false);
-      onSaved();
-    } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Couldn't save your address.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <View className="border-t border-line pt-2.5">
-      <View className="flex-row items-start justify-between gap-3">
-        <View className="flex-1">
-          <Text className="font-sans text-xs text-muted">Member pack posts to</Text>
-          {!editing && (
-            <Text className="mt-0.5 font-sans text-sm text-ink">
-              {value ? value.replace(/\s*\n\s*/g, ", ") : "No address yet"}
-            </Text>
-          )}
-        </View>
-        {!editing && !shipped && (
-          <Pressable
-            onPress={() => {
-              setDraft(value);
-              setEditing(true);
-            }}
-            accessibilityRole="button"
-            hitSlop={8}
-          >
-            <Text className="font-sans text-[13px] font-semibold text-flame">Change</Text>
-          </Pressable>
-        )}
-      </View>
-      {shipped && <Text className="mt-0.5 font-sans text-xs text-faint">Posted — on its way.</Text>}
-      {editing && (
-        <View className="mt-1.5 gap-2">
-          <TextInput
-            value={draft}
-            onChangeText={setDraft}
-            multiline
-            placeholder="Full postal address, including postcode"
-            placeholderTextColor="#6e86a3"
-            className="min-h-[72px] rounded-[10px] border border-line bg-paper px-3.5 py-2.5 font-sans text-[16px] text-ink"
-          />
-          {err && <Text className="font-sans text-[13px] text-warn">{err}</Text>}
-          <View className="flex-row gap-2">
-            <Button className="flex-1" onPress={save} disabled={busy}>
-              {busy ? "Saving…" : "Save address"}
-            </Button>
-            <Button className="flex-1" variant="ghost" onPress={() => setEditing(false)} disabled={busy}>
-              Cancel
-            </Button>
-          </View>
-        </View>
-      )}
-    </View>
-  );
-}
 
 function StatusLine({ status }: { status: Status }) {
   return (
@@ -177,6 +112,8 @@ function OwnerAccount() {
 
   const [waBusy, setWaBusy] = useState(false);
   const [waError, setWaError] = useState<string | null>(null);
+  const [setupBusy, setSetupBusy] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
 
   const [winback, setWinback] = useState<WinbackOffer | null>(null);
   const [winbackBusy, setWinbackBusy] = useState(false);
@@ -347,6 +284,24 @@ function OwnerAccount() {
     }
   }
 
+  // "TradeSura can text me to help me finish setting up" — without it the
+  // admin's setup chase goes by email only.
+  async function setSetupTexts(next: boolean) {
+    if (!settings) return;
+    const prev = Boolean(settings.setupTextConsent);
+    setSettings({ ...settings, setupTextConsent: next });
+    setSetupBusy(true);
+    setSetupError(null);
+    try {
+      await api("/api/settings", { method: "PATCH", body: JSON.stringify({ setupTextConsent: next }) });
+    } catch (e) {
+      setSettings((s) => (s ? { ...s, setupTextConsent: prev } : s));
+      setSetupError(e instanceof ApiError ? e.message : "Couldn't save that — try again.");
+    } finally {
+      setSetupBusy(false);
+    }
+  }
+
   // Installer updates (new customer, cancel requests, failed payments…) by
   // WhatsApp instead of text. Turning it on is the opt-in Meta requires.
   async function setWhatsapp(next: boolean) {
@@ -497,19 +452,21 @@ function OwnerAccount() {
               {settings.companyNumber && (
                 <RowLine left="Company number" right={settings.companyNumber} />
               )}
-              {/* 30 Oct update 3.6 — trading address sets the town; the
-                  registered office is shown for the record only. */}
-              {settings.addresses?.trading ? (
-                <RowLine
-                  left="Trading address"
-                  right={
-                    <Text className="max-w-[220px] text-right text-sm text-ink">
-                      {[...settings.addresses.trading.lines, settings.addresses.trading.town, settings.addresses.trading.postcode].join(", ")}
-                    </Text>
-                  }
-                />
-              ) : (
-                settings.postcode && <RowLine left="Business postcode" right={settings.postcode} />
+              {/* The card's expiry, given with the photo; Update takes a new
+                  photo and date when it's renewed. */}
+              {!settings.gasSafePhotoNeeded && (
+                <Pressable onPress={() => router.push("/add-id")} accessibilityRole="button">
+                  <RowLine
+                    left="Gas Safe ID card"
+                    right={
+                      <Text className="text-sm text-flame">
+                        {settings.gasSafeCardExpiresOn
+                          ? `Expires ${new Date(`${settings.gasSafeCardExpiresOn}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} · Update`
+                          : "Add expiry date"}
+                      </Text>
+                    }
+                  />
+                </Pressable>
               )}
               {settings.registeredOffice && (
                 <RowLine
@@ -523,9 +480,34 @@ function OwnerAccount() {
               )}
             </View>
           )}
-          {settings && settings.packAddress !== undefined && (
-            <View className="mt-2">
-              <PackAddress value={settings.packAddress ?? ""} shipped={Boolean(settings.packShipped)} onSaved={load} />
+          {/* Engineer record 1 — the trading address sets the town; post
+              (and the member pack) goes there or to an address of its own.
+              Both change on the Addresses screen. */}
+          {settings?.addresses && (
+            <View className="mt-2 border-t border-line pt-2.5">
+              <View className="flex-row items-start justify-between gap-3">
+                <View className="flex-1 gap-2">
+                  <View>
+                    <Text className="font-sans text-xs text-muted">Trading address</Text>
+                    <Text className="mt-0.5 font-sans text-sm text-ink">
+                      {settings.addresses.trading
+                        ? [...settings.addresses.trading.lines, settings.addresses.trading.town, settings.addresses.trading.postcode].join(", ")
+                        : "Not added yet"}
+                    </Text>
+                  </View>
+                  <View>
+                    <Text className="font-sans text-xs text-muted">Post and member pack go to</Text>
+                    <Text className="mt-0.5 font-sans text-sm text-ink">
+                      {settings.addresses.correspondenceSameAsTrading || !settings.addresses.correspondence
+                        ? "Your trading address"
+                        : settings.addresses.correspondence.replace(/\s*\n\s*/g, ", ")}
+                    </Text>
+                  </View>
+                </View>
+                <Pressable onPress={() => router.push("/addresses")} accessibilityRole="button" hitSlop={8}>
+                  <Text className="font-sans text-[13px] font-semibold text-flame">Change</Text>
+                </Pressable>
+              </View>
             </View>
           )}
           {/* Editable so accounts from older signup builds, which saved no
@@ -691,6 +673,26 @@ function OwnerAccount() {
             {flushResult && (
               <Text className="mt-1.5 font-semibold text-xs text-ink">{flushResult}</Text>
             )}
+          </Card>
+        )}
+
+        {settings && settings.setupTextConsent !== undefined && me?.role !== "staff" && (
+          <Card>
+            <View className="flex-row items-center justify-between gap-3">
+              <View className="shrink">
+                <Text className="font-sans text-sm text-ink">Setup help by text</Text>
+                <Text className="font-sans text-[11px] text-faint">
+                  TradeSura can text you to help you finish setting up. Off, we&apos;ll email instead.
+                </Text>
+              </View>
+              <Toggle
+                value={Boolean(settings.setupTextConsent)}
+                onValueChange={setSetupTexts}
+                disabled={setupBusy}
+                accessibilityLabel="Setup help by text"
+              />
+            </View>
+            {setupError && <Text className="mt-1.5 font-sans text-xs text-danger">{setupError}</Text>}
           </Card>
         )}
 

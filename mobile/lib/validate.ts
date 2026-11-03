@@ -56,3 +56,26 @@ export function checkUkPostcode(v: string): string | null {
     ? null
     : "Enter a full UK postcode, like HD9 2TT.";
 }
+
+/**
+ * The expiry on a Gas Safe ID card as the API takes it (YYYY-MM-DD), from
+ * "31/03/2027" or, for a card showing only month and year, "03/2027" (the
+ * end of that month). An error when it's not a date, has passed, or is
+ * more than 5 years away (lib/gas-safe-card.ts cardExpiry).
+ */
+export function cardExpiryOf(v: string): { iso: string } | { error: string } {
+  const s = v.trim();
+  const full = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const month = s.match(/^(\d{1,2})\/(\d{4})$/);
+  if (!full && !month) return { error: "Enter the expiry date on your card, like 31/03/2027." };
+  const y = Number(full ? full[3] : month![2]);
+  const m = Number(full ? full[2] : month![1]);
+  const d = full ? Number(full[1]) : new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (m < 1 || m > 12 || date.getUTCDate() !== d) return { error: "That isn't a real date — check the card." };
+  const today = new Date().toISOString().slice(0, 10);
+  const iso = date.toISOString().slice(0, 10);
+  if (iso < today) return { error: "That date has passed. Add a photo of your current card." };
+  if (y > new Date().getUTCFullYear() + 5) return { error: "Check the year — cards last up to 5 years." };
+  return { iso };
+}

@@ -7,13 +7,14 @@ import { standingCopy, gasSafeStatus, paymentsStatus } from "@/lib/verification-
 
 import { smsAvailable } from "@/lib/contact-verification";
 import { whatsappConfigured } from "@/lib/whatsapp";
-import { formatAddress, sameAddress, tradingAddressOf } from "@/lib/addresses";
+import { formatAddress, parseAddress, sameAddress, tradingAddressOf } from "@/lib/addresses";
 import { companyProfile } from "@/lib/admin/companies";
 
 const Body = z.object({
   // Blank is allowed for a company with a Companies House name on file —
   // it then trades under that name (Build Review 3, section 2).
-  tradingName: z.string().trim().max(80),
+  // Left out (the Account switches), only the setting sent changes.
+  tradingName: z.string().trim().max(80).optional(),
   // Optional so older clients that only send the trading name keep working.
   // Accounts from older signup builds have no name at all — this is how the
   // engineer fills it in (greeting, avatar initials).
@@ -81,7 +82,13 @@ export async function GET() {
     addresses: {
       trading: trading && { lines: trading.lines, town: trading.town, postcode: trading.postcode },
       correspondence: engineer.packAddress,
+      // The same, split up for the Addresses screen's fields (null when it
+      // can't be: no postcode, or only one line).
+      correspondenceParts: parseAddress(engineer.packAddress),
       correspondenceSameAsTrading: !engineer.packAddress || (trading ? sameAddress(engineer.packAddress, formatAddress(trading)) : false),
+      // Saved by the engineer or an admin. Until then the member pack waits
+      // for them to confirm where it goes (lib/admin/member-packs.ts).
+      confirmed: tradingRow?.source === "engineer" || tradingRow?.source === "admin",
     },
     // Part 6.4/17.3 — the same truth source the dashboard strip and Payouts'
     // banner read. `standing` is the collapsed single-line ladder (used only
@@ -109,6 +116,15 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: messages[field] ?? "Check the form and try again." }, { status: 400 });
   }
 
+  if (parsed.data.tradingName === undefined) {
+    if (parsed.data.setupTextConsent !== undefined) {
+      await prisma.engineer.update({
+        where: { id: engineerId },
+        data: { setupTextConsentAt: parsed.data.setupTextConsent ? new Date() : null },
+      });
+    }
+    return NextResponse.json({ ok: true });
+  }
   let tradingName = parsed.data.tradingName;
   if (tradingName.length < 2) {
     const current = await prisma.engineer.findUnique({

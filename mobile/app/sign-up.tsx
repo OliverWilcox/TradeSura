@@ -37,8 +37,15 @@ import {
   checkRequired,
   checkUkMobile,
   checkUkPostcode,
+  cardExpiryOf,
   normaliseCompanyNumber,
 } from "@/lib/validate";
+
+// The card's expiry for the API, or nothing when it doesn't read as one.
+function expiryIso(v: string): string | undefined {
+  const r = cardExpiryOf(v);
+  return "iso" in r ? r.iso : undefined;
+}
 
 type ClaimResolved =
   | {
@@ -117,6 +124,7 @@ type FieldKey =
   | "email"
   | "gasSafeNo"
   | "gasSafeCard"
+  | "cardExpiry"
   | "tradingName"
   | "companyNumber"
   | "soleOwner"
@@ -131,6 +139,7 @@ const FIELD_STEP: Record<FieldKey, 1 | 2 | 3> = {
   email: 1,
   gasSafeNo: 2,
   gasSafeCard: 2,
+  cardExpiry: 2,
   tradingName: 3,
   companyNumber: 3,
   soleOwner: 3,
@@ -161,6 +170,8 @@ type Draft = {
   postElsewhere?: boolean;
   postAddress?: Office;
   marketingConsent: boolean;
+  setupTextConsent?: boolean;
+  cardExpiry?: string;
   phoneToken: string | null;
   phoneTexted?: boolean;
   emailToken?: string | null;
@@ -401,6 +412,8 @@ export default function SignUp() {
   const [gasSafeNo, setGasSafeNo] = useState("");
   const [card, setCard] = useState<IdCardState>({ phase: "empty" });
   const [cardToken, setCardToken] = useState<string | null>(null);
+  // The expiry printed on the card, typed as DD/MM/YYYY (or MM/YYYY).
+  const [cardExpiry, setCardExpiry] = useState("");
   const [step2Busy, setStep2Busy] = useState(false);
 
   // Step 3 — business
@@ -426,6 +439,9 @@ export default function SignUp() {
   // (limited companies only); yes lets Stripe skip the owner/director steps.
   const [soleOwner, setSoleOwner] = useState<boolean | null>(null);
   const [marketingConsent, setMarketingConsent] = useState(false);
+  // "TradeSura can text me to help me finish setting up" — opt-in, unticked.
+  // Without it the admin's setup chase goes by email only.
+  const [setupTextConsent, setSetupTextConsent] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -472,6 +488,8 @@ export default function SignUp() {
         if (d.postElsewhere) setPostElsewhere(true);
         if (d.postAddress) setPostAddress(d.postAddress);
         setMarketingConsent(d.marketingConsent);
+        setSetupTextConsent(Boolean(d.setupTextConsent));
+        if (d.cardExpiry) setCardExpiry(d.cardExpiry);
         if (tokenFresh) {
           setPhoneToken(d.phoneToken);
           setEmailToken(d.emailToken ?? null);
@@ -513,6 +531,8 @@ export default function SignUp() {
         postElsewhere,
         postAddress,
         marketingConsent,
+        setupTextConsent,
+        cardExpiry,
         phoneToken,
         phoneTexted,
         emailToken,
@@ -545,6 +565,8 @@ export default function SignUp() {
     postElsewhere,
     postAddress,
     marketingConsent,
+    setupTextConsent,
+    cardExpiry,
     phoneToken,
     phoneTexted,
     emailToken,
@@ -944,7 +966,10 @@ export default function SignUp() {
     } else if (card.phase === "failed") {
       cardErr = "Upload failed — tap the photo to try again.";
     }
-    if (fail({ gasSafeNo: noErr, gasSafeCard: cardErr })) return;
+    // The expiry goes with the photo, so it's asked for only when there is one.
+    const expiry = card.phase === "empty" || card.phase === "denied" ? null : cardExpiryOf(cardExpiry);
+    const expiryErr = expiry && "error" in expiry ? expiry.error : null;
+    if (fail({ gasSafeNo: noErr, gasSafeCard: cardErr, cardExpiry: expiryErr })) return;
     if (card.phase === "preview" || (card.phase === "added" && !cardToken)) {
       const photo = card.photo;
       setStep2Busy(true);
@@ -1031,7 +1056,9 @@ export default function SignUp() {
           : null,
       postcode:
         checkUkPostcode(postcode) ??
-        (addressLine1.trim() ? null : "Enter your trading address — or tap Find address and pick it."),
+        (addressLine1.trim() ? null : "Enter your trading address — or tap Find address and pick it.") ??
+        // No town, no town page — so it's required.
+        (town.trim() ? null : "Enter your town — it sets your town page."),
       postAddress: postElsewhere
         ? (checkUkPostcode(postAddress.postcode) ??
           (postAddress.line1.trim() ? null : "Enter the address for your post — or untick the box."))
@@ -1055,6 +1082,7 @@ export default function SignUp() {
             trades: [...interestTrades],
             gasSafeNo: gasSafeNo.replace(/\s/g, ""),
             gasSafeCardToken: cardToken ?? undefined,
+            gasSafeCardExpiresOn: cardToken ? expiryIso(cardExpiry) : undefined,
             tradingName: tradingName.trim(),
             businessType,
             companyNumber:
@@ -1074,6 +1102,7 @@ export default function SignUp() {
               : undefined,
             registeredOffice: businessType === "ltd" && company?.office ? company.office : undefined,
             marketingConsent,
+            setupTextConsent,
             claimCode: claimCodeParam || undefined,
             appleToken: appleToken ?? undefined,
             attribution: claim?.valid
@@ -1574,6 +1603,25 @@ export default function SignUp() {
                         customers.
                       </Hint>
                     </View>
+
+                    {card.phase !== "empty" && card.phase !== "denied" && (
+                      <View ref={fieldRef("cardExpiry")} collapsable={false}>
+                        <Text className={labelCls}>Expiry date on the card</Text>
+                        <Input
+                          value={cardExpiry}
+                          onChangeText={(v) => {
+                            setCardExpiry(v);
+                            clearError("cardExpiry");
+                          }}
+                          placeholder="DD/MM/YYYY"
+                          keyboardType="numbers-and-punctuation"
+                          maxLength={10}
+                          error={errors.cardExpiry}
+                        />
+                        <FieldError>{errors.cardExpiry}</FieldError>
+                        <Hint>We check your registration again before it runs out.</Hint>
+                      </View>
+                    )}
                   </View>
 
                   {/* Never implies a link with Gas Safe (30 Sept build notes). */}
@@ -1877,8 +1925,19 @@ export default function SignUp() {
 
                     {/* Opt-in, unticked by default — the legally correct shape. */}
                     <Pressable
-                      onPress={() => setMarketingConsent(!marketingConsent)}
+                      onPress={() => setSetupTextConsent(!setupTextConsent)}
                       className="mt-4 flex-row items-center gap-2.5 py-1"
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: setupTextConsent }}
+                    >
+                      <Checkbox checked={setupTextConsent} />
+                      <Text className="flex-1 text-[14px] leading-[19px] text-white">
+                        TradeSura can text me to help me finish setting up
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setMarketingConsent(!marketingConsent)}
+                      className="mt-1 flex-row items-center gap-2.5 py-1"
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked: marketingConsent }}
                     >

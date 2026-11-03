@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { View, Text, TextInput, ScrollView, KeyboardAvoidingView, Platform, Pressable, Image, type ImageSourcePropType } from "react-native";
-import { router } from "expo-router";
+import { useCallback, useState } from "react";
+import { View, Text, ScrollView, Pressable, Image, type ImageSourcePropType } from "react-native";
+import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -33,33 +33,62 @@ function longDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
 }
 
+type Parts = { lines: string[]; town: string; postcode: string };
+type Addresses = {
+  trading: Parts | null;
+  correspondence: string | null;
+  correspondenceParts: Parts | null;
+  correspondenceSameAsTrading: boolean;
+  confirmed: boolean;
+};
+
 export default function MemberPack() {
   const { me, refreshMe } = useAuth();
   const stage = stageOf(me);
-  const [address, setAddress] = useState(me?.packAddress ?? "");
-  const [editing, setEditing] = useState(false);
+  const [addresses, setAddresses] = useState<Addresses | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function save() {
-    if (address.trim().length < 10) {
-      setError("Enter your full postal address, including the postcode.");
+  useFocusEffect(
+    useCallback(() => {
+      api<{ addresses: Addresses }>("/api/settings")
+        .then((r) => setAddresses(r.addresses))
+        .catch(() => {});
+    }, []),
+  );
+
+  const postTo = addresses?.correspondence ?? me?.packAddress ?? null;
+
+  // Packs wait until the engineer confirms where post goes (or an admin
+  // checks it). Confirming saves the addresses as they are; one that can't
+  // be read as an address goes to the Addresses screen instead.
+  async function confirm() {
+    const correspondence = addresses?.correspondenceSameAsTrading ? "same" : addresses?.correspondenceParts;
+    if (!addresses?.trading || !correspondence || !postTo) {
+      router.push("/addresses");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      // First time asks for the pack; after that only the address moves.
-      const path = stage === "address" ? "/api/onboarding/pack" : "/api/settings/pack-address";
-      await api(path, { method: "POST", body: JSON.stringify({ address: address.trim() }) });
+      await api("/api/settings/addresses", {
+        method: "PUT",
+        body: JSON.stringify({ trading: addresses.trading, correspondence }),
+      });
+      // Not asked for yet (older accounts): this asks for it too.
+      if (stage === "address") {
+        await api("/api/onboarding/pack", { method: "POST", body: JSON.stringify({ address: postTo }) });
+      }
+      setAddresses({ ...addresses, confirmed: true });
       await refreshMe();
-      setEditing(false);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't save your address.");
+      setError(e instanceof ApiError ? e.message : "Couldn't confirm your address.");
     } finally {
       setBusy(false);
     }
   }
+
+  const needsConfirm = stage !== "posted" && addresses !== null && (!addresses.confirmed || stage === "address");
 
   const status: Record<Exclude<Stage, "address">, { title: string; body: string; amber: boolean }> = {
     waiting: {
@@ -80,103 +109,83 @@ export default function MemberPack() {
       <SafeAreaView edges={["top"]} className="bg-iron">
         <AppHeader title="Member pack" />
       </SafeAreaView>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
-        <ScrollView contentContainerClassName="gap-3 px-4 pb-10 pt-4" keyboardShouldPersistTaps="handled">
-          <View>
-            <Text className="text-[22px] font-bold text-ink">Your free member pack</Text>
-            <Text className="mt-1.5 text-[14.5px] leading-[21px] text-muted">
-              Everything you need to show customers you&apos;re a Verified Member. It posts when your Gas Safe badge
-              goes live.
-            </Text>
-          </View>
+      <ScrollView contentContainerClassName="gap-3 px-4 pb-10 pt-4">
+        <View>
+          <Text className="text-[22px] font-bold text-ink">Your free member pack</Text>
+          <Text className="mt-1.5 text-[14.5px] leading-[21px] text-muted">
+            Everything you need to show customers you&apos;re a Verified Member. It posts when your Gas Safe badge
+            goes live.
+          </Text>
+        </View>
 
-          {stage !== "address" && (
-            <Card className={status[stage].amber ? "border-warn bg-warn-tint" : undefined}>
-              <View className="flex-row items-center gap-2">
-                {stage === "waiting" ? <Icon name="pending" size={16} color="#F2B84B" /> : <Tick size={14} />}
-                <Text className={`text-[15px] font-semibold ${status[stage].amber ? "text-warn" : "text-ink"}`}>
-                  {status[stage].title}
-                </Text>
-              </View>
-              <Text className="mt-1.5 text-[14px] text-muted">{status[stage].body}</Text>
-            </Card>
-          )}
-
-          <Card>
-            <Text className="text-[13px] font-bold uppercase tracking-[0.1em] text-flame">What&apos;s in the pack</Text>
-            <View className="mt-3 flex-row flex-wrap justify-between gap-y-3">
-              {PACK_ITEMS.map((item) => (
-                <View key={item.label} className="w-[48%] overflow-hidden rounded-xl border border-line bg-bg">
-                  <View className="h-[88px] items-center justify-center bg-panel">
-                    {item.image ? (
-                      <Image source={item.image} className="h-full w-full" resizeMode="cover" accessibilityLabel={item.label} />
-                    ) : (
-                      <Icon name={item.icon} size={34} color="#5FA3F0" />
-                    )}
-                  </View>
-                  <View className="px-2.5 py-2">
-                    <Text className="text-[13.5px] font-semibold text-ink">{item.label}</Text>
-                    <Text className="mt-0.5 text-[11.5px] leading-[15px] text-faint">{item.detail}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </Card>
-
-          <Card>
-            <View className="flex-row items-center justify-between">
-              <Text className="text-[13px] font-bold uppercase tracking-[0.1em] text-flame">
-                {stage === "address" ? "Where should we post it?" : "Posting to"}
+        {stage !== "address" && (
+          <Card className={status[stage].amber ? "border-warn bg-warn-tint" : undefined}>
+            <View className="flex-row items-center gap-2">
+              {stage === "waiting" ? <Icon name="pending" size={16} color="#F2B84B" /> : <Tick size={14} />}
+              <Text className={`text-[15px] font-semibold ${status[stage].amber ? "text-warn" : "text-ink"}`}>
+                {status[stage].title}
               </Text>
-              {(stage === "waiting" || stage === "packing") && !editing && (
-                <Pressable onPress={() => setEditing(true)} hitSlop={10}>
-                  <Text className="text-[13px] font-semibold text-flame">Change</Text>
-                </Pressable>
-              )}
             </View>
-            {stage === "address" || editing ? (
-              <>
-                <TextInput
-                  value={address}
-                  onChangeText={(v) => {
-                    setAddress(v);
-                    setError(null);
-                  }}
-                  placeholder="Full postal address, including postcode"
-                  placeholderTextColor="#6e86a3"
-                  multiline
-                  textAlignVertical="top"
-                  className="mt-2 min-h-[96px] rounded-xl border border-line-strong bg-bg px-3.5 py-3 text-[16px] text-ink"
-                />
-                {error && <Text className="mt-1.5 text-[13px] text-danger">{error}</Text>}
-                <Button className="mt-3" onPress={save} disabled={busy}>
-                  {busy ? "Saving…" : stage === "address" ? "Send my pack" : "Save address"}
-                </Button>
-                {editing && (
-                  <Pressable
-                    onPress={() => {
-                      setEditing(false);
-                      setAddress(me?.packAddress ?? "");
-                      setError(null);
-                    }}
-                    className="mt-2 items-center py-1"
-                  >
-                    <Text className="text-[13px] text-muted">Cancel</Text>
-                  </Pressable>
-                )}
-              </>
-            ) : (
-              <Text className="mt-2 text-[15px] leading-[21px] text-ink">{me?.packAddress || "No address saved"}</Text>
-            )}
+            <Text className="mt-1.5 text-[14px] text-muted">{status[stage].body}</Text>
           </Card>
+        )}
 
-          {stage !== "address" && (
-            <Button variant="ghost" onPress={() => router.back()}>
-              Done
-            </Button>
+        <Card>
+          <Text className="text-[13px] font-bold uppercase tracking-[0.1em] text-flame">What&apos;s in the pack</Text>
+          <View className="mt-3 flex-row flex-wrap justify-between gap-y-3">
+            {PACK_ITEMS.map((item) => (
+              <View key={item.label} className="w-[48%] overflow-hidden rounded-xl border border-line bg-bg">
+                <View className="h-[88px] items-center justify-center bg-panel">
+                  {item.image ? (
+                    <Image source={item.image} className="h-full w-full" resizeMode="cover" accessibilityLabel={item.label} />
+                  ) : (
+                    <Icon name={item.icon} size={34} color="#5FA3F0" />
+                  )}
+                </View>
+                <View className="px-2.5 py-2">
+                  <Text className="text-[13.5px] font-semibold text-ink">{item.label}</Text>
+                  <Text className="mt-0.5 text-[11.5px] leading-[15px] text-faint">{item.detail}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </Card>
+
+        <Card className={needsConfirm ? "border-warn" : undefined}>
+          <View className="flex-row items-center justify-between">
+            <Text className="text-[13px] font-bold uppercase tracking-[0.1em] text-flame">
+              {stage === "address" ? "Where should we post it?" : "Posting to"}
+            </Text>
+            {stage !== "posted" && postTo && (
+              <Pressable onPress={() => router.push("/addresses")} hitSlop={10} accessibilityRole="button">
+                <Text className="text-[13px] font-semibold text-flame">Change</Text>
+              </Pressable>
+            )}
+          </View>
+          <Text className="mt-2 text-[15px] leading-[21px] text-ink">
+            {postTo ? postTo.replace(/\s*\n\s*/g, ", ") : "No address saved"}
+          </Text>
+          {needsConfirm && (
+            <>
+              <Text className="mt-2 text-[13.5px] leading-[19px] text-warn">
+                {postTo
+                  ? "Is this where your post should go? We hold your pack until you confirm."
+                  : "Add the address we should post it to."}
+              </Text>
+              {error && <Text className="mt-1.5 text-[13px] text-danger">{error}</Text>}
+              <Button className="mt-3" onPress={postTo ? confirm : () => router.push("/addresses")} disabled={busy}>
+                {busy ? "Saving…" : postTo ? (stage === "address" ? "Send my pack here" : "Yes, post it here") : "Add my address"}
+              </Button>
+            </>
           )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </Card>
+
+        {stage !== "address" && (
+          <Button variant="ghost" onPress={() => router.back()}>
+            Done
+          </Button>
+        )}
+      </ScrollView>
     </View>
   );
 }
