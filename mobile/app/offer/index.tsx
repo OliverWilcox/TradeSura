@@ -7,7 +7,8 @@ import {
   Pressable,
   Linking,
 } from "react-native";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-router";
+import * as Clipboard from "expo-clipboard";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -74,6 +75,22 @@ const inputCls = "min-h-[48px] rounded-[10px] border bg-paper px-3.5 font-sans t
 
 type FormErrors = Partial<Record<"firstName" | "lastName" | "phone" | "email" | "postcode" | "customer", string | null>>;
 
+// Opens WhatsApp with the message ready; false when it isn't installed.
+// openURL (not canOpenURL, which iOS answers "no" for undeclared schemes)
+// rejects when nothing on the phone handles whatsapp://.
+async function openWhatsApp(message: string): Promise<boolean> {
+  try {
+    await Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// An offer the customer didn't get: our text was refused, or WhatsApp isn't
+// on this phone. The plan exists; the link just needs to go another way.
+type Unsent = { planId: string; link: string; message: string; name: string; next: Href; why: "text" | "whatsapp" };
+
 function FieldError({ children }: { children?: string | null }) {
   return children ? <Text className="mt-1 font-sans text-[13px] text-danger">{children}</Text> : null;
 }
@@ -109,6 +126,8 @@ export default function OfferStart() {
   const [sendOpen, setSendOpen] = useState(false);
   const [showBusy, setShowBusy] = useState(false);
   const [queuedFor, setQueuedFor] = useState<string | null>(null);
+  const [unsent, setUnsent] = useState<Unsent | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -206,19 +225,22 @@ export default function OfferStart() {
         message: string;
         customerFirstName: string;
         sessionToken: string | null;
+        // Our text: "not_sent" when Twilio refused it or texts aren't set up.
+        text?: "sent" | "not_sent" | null;
       }>("/api/offer", { method: "POST", body: JSON.stringify({ ...base, tierId, channel, reason }) });
-      if (channel === "whatsapp") {
-        // Opens WhatsApp with the message ready; nothing is sent by us.
-        const wa = `whatsapp://send?text=${encodeURIComponent(data.message)}`;
-        const ok = await Linking.canOpenURL(wa);
-        await Linking.openURL(ok ? wa : `https://wa.me/?text=${encodeURIComponent(data.message)}`);
-      }
       // Plans first, then the review — every customer, joined or not.
-      router.push(
-        data.sessionToken
-          ? { pathname: "/offer/review", params: { token: data.sessionToken, planId: data.planId } }
-          : `/offer/${data.planId}`,
-      );
+      const next: Href = data.sessionToken
+        ? { pathname: "/offer/review", params: { token: data.sessionToken, planId: data.planId } }
+        : `/offer/${data.planId}`;
+      const missed = { planId: data.planId, link: data.link, message: data.message, name: data.customerFirstName, next };
+      if (channel === "whatsapp" && !(await openWhatsApp(data.message))) {
+        reportWhatsAppFailed(data.planId);
+        setUnsent({ ...missed, why: "whatsapp" });
+      } else if (data.text === "not_sent") {
+        setUnsent({ ...missed, why: "text" });
+      } else {
+        router.push(next);
+      }
     } catch (e) {
       if (isOffline(e) && reason) {
         // §6.7 — no signal: keep the details and text the link later. No error screen.
@@ -232,6 +254,24 @@ export default function OfferStart() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function reportWhatsAppFailed(planId: string) {
+    api(`/api/offer/${planId}/failed`, { method: "POST", body: JSON.stringify({ channel: "whatsapp" }) }).catch(() => {});
+  }
+
+  async function resendOnWhatsApp(u: Unsent) {
+    if (await openWhatsApp(u.message)) {
+      router.push(u.next);
+      return;
+    }
+    reportWhatsAppFailed(u.planId);
+    setUnsent({ ...u, why: "whatsapp" });
+  }
+
+  async function copyLink(link: string) {
+    await Clipboard.setStringAsync(link);
+    setCopied(true);
   }
 
   const previewName =
@@ -336,6 +376,33 @@ export default function OfferStart() {
                   </Button>
                 </>
               )}
+            </Card>
+          ) : unsent ? (
+            <Card>
+              <Micro className="text-warn">Not sent</Micro>
+              <Text className="mt-1.5 text-[19px] font-bold text-ink">
+                {unsent.why === "text" ? `Our text to ${unsent.name} didn't go` : "WhatsApp isn't on this phone"}
+              </Text>
+              <Text className="mt-1 text-[14px] leading-5 text-muted">
+                {unsent.why === "text"
+                  ? "Their plan is ready. Send them the link another way."
+                  : `Their plan is ready. Copy the link and send it to ${unsent.name} another way.`}
+              </Text>
+              {unsent.why === "text" && (
+                <Button className="mt-4" onPress={() => resendOnWhatsApp(unsent)}>
+                  Send on WhatsApp
+                </Button>
+              )}
+              <Button
+                variant={unsent.why === "text" ? "ghost" : "flame"}
+                className={unsent.why === "text" ? "mt-2" : "mt-4"}
+                onPress={() => copyLink(unsent.link)}
+              >
+                {copied ? "Link copied" : "Copy the link"}
+              </Button>
+              <Button variant="ghost" className="mt-2" onPress={() => router.push(unsent.next)}>
+                Continue
+              </Button>
             </Card>
           ) : queuedFor ? (
             // §6.7 — no signal: saved, sent automatically later. Not an error.
