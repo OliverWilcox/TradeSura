@@ -405,7 +405,8 @@ export async function getVerification(engineerId: string, opts: { withContact?: 
     },
   });
   if (!row) return null;
-  const typeMismatch = businessTypeMismatch(row);
+  // Before Companies House is asked: whether to look the name up there.
+  const nameMismatch = businessTypeMismatch(row);
   const [duplicates, records, decision, officers, claims, profile, search, copy, since] = await Promise.all([
     duplicatesFor([row]),
     registerRecords([row]),
@@ -414,10 +415,11 @@ export async function getVerification(engineerId: string, opts: { withContact?: 
     freshClaims([row.id]),
     row.companyNumber ? companyProfile(row.companyNumber) : Promise.resolve(null),
     // A name that says it's a company with no company number given: look it up by name.
-    typeMismatch === "name_says_company" && !row.companyNumber ? searchCompanies(row.legalName ?? row.tradingName ?? "") : Promise.resolve(null),
+    nameMismatch === "name_says_company" && !row.companyNumber ? searchCompanies(row.legalName ?? row.tradingName ?? "") : Promise.resolve(null),
     registerCopy(),
     waitingSince([row]),
   ]);
+  const typeMismatch = businessTypeMismatch(row, profile?.name ?? null);
   const status = verificationStatus(row);
   // Where it sits among the applications in the same tab (new or flagged duplicates).
   let tab: "new" | "duplicates" | "verified" | "rejected" | null = status === "verified" || status === "rejected" ? status : null;

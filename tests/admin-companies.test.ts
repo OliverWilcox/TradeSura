@@ -19,6 +19,19 @@ describe("a business's name and type", () => {
     // "Ltd" inside a word isn't the word.
     expect(businessTypeMismatch({ tradingName: "Saltdean Plumbing", legalName: null, businessType: "sole_trader" })).toBeNull();
   });
+
+  it("judge a limited company that gave its number on Companies House's name for it", () => {
+    // "TradeSura" is the trading name; Companies House has TRADESURA LTD.
+    const tradesura = { tradingName: "TradeSura", legalName: null, businessType: "ltd", companyNumber: "17325346" };
+    expect(businessTypeMismatch(tradesura, "TRADESURA LTD")).toBeNull();
+    // Not looked up yet (the queue): nothing to judge, so no false warning.
+    expect(businessTypeMismatch(tradesura)).toBeNull();
+    expect(businessTypeMismatch(tradesura, "TRADESURA SERVICES")).toBe("type_says_company");
+    // No number: the name they gave is all there is.
+    expect(businessTypeMismatch({ ...tradesura, companyNumber: null })).toBe("type_says_company");
+    // A company name on a sole trader is flagged whatever the number.
+    expect(businessTypeMismatch({ tradingName: "Test Trading LTD", legalName: null, businessType: "sole_trader", companyNumber: "123" }, "TEST TRADING LTD")).toBe("name_says_company");
+  });
 });
 
 describe("Companies House", () => {
