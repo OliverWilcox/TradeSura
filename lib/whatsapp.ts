@@ -2,12 +2,11 @@
 // automated number is a separate one from 0330 223 8456: a number on the API
 // can't also be used in the WhatsApp app, and support chat stays a human on
 // the app (mobile/lib/support.ts). Same Twilio account as lib/sms.ts.
+import { twilioAuth } from "@/lib/twilio-auth";
 import { cleanVar, renderTemplate, templateSids, WHATSAPP_TEMPLATES, type WhatsAppMessage } from "@/lib/whatsapp-templates";
 
 export function whatsappConfigured(): boolean {
-  return Boolean(
-    process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_WHATSAPP_FROM,
-  );
+  return Boolean(twilioAuth() && process.env.TWILIO_WHATSAPP_FROM);
 }
 
 // Twilio's WhatsApp sandbox only takes free text to numbers that joined it,
@@ -28,10 +27,9 @@ export function whatsappReady(template: WhatsAppMessage["template"]): boolean {
  * or Twilio refused it (e.g. the number isn't on WhatsApp).
  */
 export async function sendWhatsApp(to: string, message: WhatsAppMessage): Promise<boolean> {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const auth = twilioAuth();
   const from = process.env.TWILIO_WHATSAPP_FROM;
-  if (!accountSid || !authToken || !from) {
+  if (!auth || !from) {
     if (process.env.NODE_ENV === "development") {
       console.log(`[WhatsApp] to=${to} (${message.template})\n      ${renderTemplate(message)}`);
     }
@@ -53,10 +51,10 @@ export async function sendWhatsApp(to: string, message: WhatsAppMessage): Promis
   }
 
   try {
-    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${auth.accountSid}/Messages.json`, {
       method: "POST",
       headers: {
-        Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+        Authorization: auth.authorization,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: params,

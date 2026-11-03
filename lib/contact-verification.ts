@@ -3,11 +3,11 @@ import { prisma } from "@/lib/db";
 import { signToken, verifyToken } from "@/lib/auth";
 import { sendEmail, emailConfigured } from "@/lib/email";
 import { codeEmail } from "@/lib/code-email";
-import { sendVerificationCode } from "@/lib/sms";
+import { sendVerificationCode, smsConfigured } from "@/lib/sms";
 import { CODE_TTL_MS, RESEND_AFTER_MS, hashCode } from "@/lib/sign-in-code";
 
 export function smsAvailable() {
-  return Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_NUMBER);
+  return smsConfigured();
 }
 export const SUPERSEDED_MESSAGE = "We sent you a newer code — use the one in the latest email.";
 export class VerificationError extends Error {

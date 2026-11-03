@@ -10,6 +10,7 @@ import { isSuppressed } from "@/lib/suppression";
 import { sendPushNotification } from "@/lib/push";
 import { sendWhatsApp, whatsappReady } from "@/lib/whatsapp";
 import { templateForFixedText, type WhatsAppMessage } from "@/lib/whatsapp-templates";
+import { twilioAuth } from "@/lib/twilio-auth";
 
 // Alphanumeric sender IDs (used below for every engineer-branded send) are
 // one-way on real networks — Twilio's own STOP-keyword filtering doesn't
@@ -45,7 +46,7 @@ function alphanumericSenderId(name: string): string {
 
 /** Whether texts really go out (Twilio's keys are set); without them, sends only reach the dev driver. */
 export function smsConfigured(): boolean {
-  return Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_NUMBER);
+  return Boolean(twilioAuth() && (process.env.TWILIO_MESSAGING_SERVICE_SID || process.env.TWILIO_SMS_NUMBER));
 }
 
 /**
@@ -77,11 +78,11 @@ async function deliver(
   body: string,
   opts: { fromLongCode?: boolean; statusCallback?: string | null } = {},
 ): Promise<Delivery> {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const auth = twilioAuth();
   const fromNumber = process.env.TWILIO_SMS_NUMBER;
+  const service = process.env.TWILIO_MESSAGING_SERVICE_SID;
 
-  if (!accountSid || !authToken || !fromNumber) {
+  if (!auth || !smsConfigured()) {
     // Dev driver. Real provider keys are a human task.
     if (process.env.NODE_ENV === "development") {
       console.log(`[SMS] from="${senderName}" to=${to}\n      ${body}`);
@@ -89,13 +90,19 @@ async function deliver(
     return { ok: false, reason: "not_configured" };
   }
 
-  const from = opts.fromLongCode ? fromNumber : alphanumericSenderId(senderName);
-  const params = new URLSearchParams({ To: to, From: from, Body: body });
+  // With a Messaging Service (Matt, 3 Nov), TradeSura's own texts (codes,
+  // installer alerts) go through it: "TradeSura" as the sender on UK texts,
+  // the 07366 number behind it for STOP replies. Engineer-branded texts keep
+  // the engineer's trading name (CLAUDE.md compliance 5).
+  const platform = opts.fromLongCode || senderName === "TradeSura";
+  const params = new URLSearchParams({ To: to, Body: body });
+  if (service && (platform || !fromNumber)) params.set("MessagingServiceSid", service);
+  else params.set("From", opts.fromLongCode ? fromNumber! : alphanumericSenderId(senderName));
   if (opts.statusCallback) params.set("StatusCallback", opts.statusCallback);
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${auth.accountSid}/Messages.json`, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+      Authorization: auth.authorization,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: params,
