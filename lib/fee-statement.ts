@@ -146,7 +146,7 @@ export function statementHtml(s: Statement): string {
       <h1>Fee statement and invoice</h1>
       <div class="muted">${escapeHtml(monthLabel(s.month))} · No. ${escapeHtml(s.number)} · Issued ${escapeHtml(s.issuedOn)}</div>
     </div>
-    <div class="muted" style="text-align:right">From: TradeSura<br>info@tradesura.com</div>
+    <div class="muted" style="text-align:right">From: TradeSura Ltd<br>Company no. 17325346<br>Unit A3, Gateway Tower<br>32 Western Gateway, London E16 1YL<br>info@tradesura.com</div>
   </div>
   <div class="muted"><b style="color:#0B1A2E">To:</b> ${[s.engineer.name, ...s.engineer.address].map(escapeHtml).join("<br>")}</div>
   <h2>TradeSura's fee on your plan collections (20%)</h2>
