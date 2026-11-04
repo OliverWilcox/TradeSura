@@ -63,7 +63,7 @@ export function PassportSetup({
     e.preventDefault();
     setError(null);
     if (!make.trim() && !model.trim() && !year && files.length === 0) {
-      setError("Add at least one detail or a photo.");
+      setError("Add at least one detail.");
       return;
     }
     setBusy(true);
@@ -107,7 +107,7 @@ export function PassportSetup({
     <Card>
       <Micro>Set up your Home Passport</Micro>
       <p className="text-sm mt-1">
-        Add your boiler&apos;s details and a photo or two. It helps your engineer come prepared, and it stays with
+        Add your boiler&apos;s details. It helps your engineer come prepared, and it stays with
         your home.
       </p>
       <form onSubmit={save} className="mt-3 space-y-3">

@@ -149,6 +149,7 @@ export function PassportFiles({
           {f.contentType === "application/pdf" ? (
             <View className="h-16 w-16 items-center justify-center rounded-[10px] border border-line bg-bg">
               <Icon name="document" size={22} color="#5FA3F0" />
+              <Text className="mt-0.5 text-[10px] font-semibold text-flame">PDF</Text>
             </View>
           ) : (
             <Image source={{ uri: f.url }} style={{ width: 64, height: 64, borderRadius: 10 }} />
