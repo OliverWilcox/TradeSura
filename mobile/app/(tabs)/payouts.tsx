@@ -11,9 +11,13 @@ import { Skeleton, Bone, TextBone, RowBone } from "@/components/skeleton";
 
 // This month and the ones before it, as YYYY-MM (UK time) for the statements.
 function lastMonths(n: number) {
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/London" }));
+  // The month in London, read as numbers: parsing a locale string back into
+  // a Date works in browsers but gives Invalid Date on the phone (Hermes).
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "numeric" }).formatToParts(new Date());
+  const year = Number(parts.find((x) => x.type === "year")?.value);
+  const month = Number(parts.find((x) => x.type === "month")?.value) - 1;
   return Array.from({ length: n }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 15);
+    const d = new Date(year, month - i, 15);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     return { key, label: d.toLocaleDateString("en-GB", { month: "long", year: "numeric" }) };
   });
