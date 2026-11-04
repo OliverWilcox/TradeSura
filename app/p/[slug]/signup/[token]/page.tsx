@@ -11,6 +11,7 @@ import { serviceOrderForVisit } from "@/lib/yearly-service";
 import { TrustLine } from "@/components/verified-badge";
 import { isFoundingMember } from "@/lib/founding";
 import { signupPath } from "@/lib/public-url";
+import { ratingSummary } from "@/lib/ratings";
 
 export default async function SignupPage({
   params,
@@ -22,7 +23,7 @@ export default async function SignupPage({
     where: { signupToken: token },
     include: {
       engineer: true,
-      customer: true,
+      customer: { include: { properties: { take: 1 } } },
     },
   });
   // The business's address may have moved since the link was sent (Review 4:
@@ -48,6 +49,7 @@ export default async function SignupPage({
   });
 
   const brand = brandName(plan.engineer);
+  const home = plan.customer.properties[0] ?? null;
   // Build Guide v2 Part 9.2/15.1 — a personal offer link (route 2) pins the
   // offered plan first with "{Engineer first name} suggested {plan name}".
   // plan.tierId is set the moment the engineer picks a plan to offer
@@ -66,6 +68,7 @@ export default async function SignupPage({
         photoUrl={plan.engineer.logoUrl}
         verified={Boolean(plan.engineer.gasSafeVerifiedAt)}
         founding={(await isFoundingMember(plan.engineer.id)) ? <FoundingBadge /> : null}
+        rating={await ratingSummary(plan.engineer.id)}
       />
       <p className="text-sm">
         Hi {plan.customer.firstName} — pick the plan that suits you. The monthly price you see is
@@ -74,6 +77,7 @@ export default async function SignupPage({
       <SignupTiers
         token={token}
         engineerName={brand}
+        initialAddress={home && { line1: [home.addressLine1, home.addressLine2].filter(Boolean).join(", "), town: home.town ?? "", postcode: home.postcode }}
         vatRegistered={plan.engineer.vatRegistered}
         pinnedTierId={pinnedTier?.id}
         normalPrices={{

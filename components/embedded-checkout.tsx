@@ -47,6 +47,7 @@ function CheckoutForm({
   landlord,
   cp12AvailableFrom,
   firstPaymentAt,
+  initialAddress,
 }: {
   clientSecret: string;
   publishableKey: string;
@@ -59,10 +60,11 @@ function CheckoutForm({
   landlord?: boolean;
   cp12AvailableFrom?: string | null;
   firstPaymentAt?: string;
+  initialAddress?: AddressValue | null;
 }) {
   const stripePromise = useMemo(() => loadStripe(publishableKey), [publishableKey]);
   const [bankStep, setBankStep] = useState(false);
-  const [address, setAddress] = useState<AddressValue>({ line1: "", town: "", postcode: "" });
+  const [address, setAddress] = useState<AddressValue>(initialAddress ?? { line1: "", town: "", postcode: "" });
   const [agreed, setAgreed] = useState(false);
   const [propertyLet, setPropertyLet] = useState(false);
   // Review 4 — CP12 plans: when the current gas safety record is due, and a
@@ -261,6 +263,8 @@ export function EmbeddedCheckout(props: {
   cp12AvailableFrom?: string | null;
   billingInterval?: BillingInterval;
   firstPaymentAt?: string;
+  /** The address the engineer typed when sending the offer, so the customer only checks it. */
+  initialAddress?: AddressValue | null;
 }) {
   return <CheckoutForm {...props} />;
 }

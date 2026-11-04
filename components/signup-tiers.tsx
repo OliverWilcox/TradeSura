@@ -38,6 +38,7 @@ export function SignupTiers({
   token,
   tiers: rawTiers,
   engineerName,
+  initialAddress,
   vatRegistered = false,
   pinnedTierId,
   pinnedGreeting,
@@ -47,6 +48,8 @@ export function SignupTiers({
   token: string;
   tiers: Tier[];
   engineerName: string;
+  /** The service address the engineer typed with the offer, if any. */
+  initialAddress?: { line1: string; town: string; postcode: string } | null;
   /** R5 — prices shown including VAT. */
   vatRegistered?: boolean;
   /** Build Guide v2 Part 15.1 — the personal-link greeting: "{Engineer
@@ -116,6 +119,7 @@ export function SignupTiers({
           billingInterval={billingInterval}
           engineerName={engineerName}
           vatRegistered={vatRegistered}
+          initialAddress={initialAddress}
         />
       </>
     );

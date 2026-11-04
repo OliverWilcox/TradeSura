@@ -657,7 +657,7 @@ export default function OfferStart() {
                 </Button>
               </View>
               <Micro className="mt-2 text-center">
-                We&apos;ll follow up with {previewName}{" "}after 2 and 7 days if they haven&apos;t joined.
+                We&apos;ll follow up with {previewName === "there" ? "them" : previewName}{" "}after 2 and 7 days if they haven&apos;t joined.
               </Micro>
             </Card>
             )}
