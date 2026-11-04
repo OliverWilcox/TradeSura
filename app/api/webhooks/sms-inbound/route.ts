@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { suppress, unsuppress } from "@/lib/suppression";
-import { verifyTwilioSignature } from "@/lib/twilio-signature";
+import { twilioWebhookCheck } from "@/lib/twilio-signature";
 
-// Twilio signs each request (lib/twilio-signature.ts). The URL must match
-// byte-for-byte what's configured in the Twilio console, so this trusts
-// req.url as-is rather than reconstructing it.
+// Twilio's requests are checked by the address's secret key or Twilio's
+// signature (lib/twilio-signature.ts). The URL must match byte-for-byte
+// what's configured in the Twilio console, so this trusts req.url as-is
+// rather than reconstructing it.
 
 const STOP_KEYWORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
 const START_KEYWORDS = new Set(["START", "YES", "UNSTOP"]);
@@ -22,17 +23,10 @@ const twiml = (body?: string) =>
 // (see lib/sms.ts's STOP_SUFFIX). Configure this URL as the number's
 // "A message comes in" webhook in the Twilio console.
 export async function POST(req: Request) {
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const signature = req.headers.get("x-twilio-signature");
-  const rawBody = await req.text();
-
-  if (!authToken || !signature) {
-    return NextResponse.json({ error: "not configured" }, { status: 500 });
-  }
-  const params = new URLSearchParams(rawBody);
-  if (!verifyTwilioSignature(req.url, params, signature, authToken)) {
-    return NextResponse.json({ error: "invalid signature" }, { status: 403 });
-  }
+  const params = new URLSearchParams(await req.text());
+  const check = twilioWebhookCheck([req.url], params, req.headers.get("x-twilio-signature"));
+  if (check === "not_configured") return NextResponse.json({ error: "not configured" }, { status: 500 });
+  if (check === "forbidden") return NextResponse.json({ error: "invalid signature" }, { status: 403 });
 
   const from = params.get("From");
   const keyword = (params.get("Body") ?? "").trim().toUpperCase();

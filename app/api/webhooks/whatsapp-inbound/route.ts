@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
-import { verifyTwilioSignature } from "@/lib/twilio-signature";
+import { twilioWebhookCheck } from "@/lib/twilio-signature";
 
 // Replies to the automated WhatsApp number (lib/whatsapp.ts). Configure this
 // URL as the WhatsApp sender's "incoming message" webhook in Twilio. Nobody
@@ -17,14 +17,10 @@ const twiml = (body?: string) =>
   });
 
 export async function POST(req: Request) {
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const signature = req.headers.get("x-twilio-signature");
-  if (!authToken || !signature) return NextResponse.json({ error: "not configured" }, { status: 500 });
-
   const params = new URLSearchParams(await req.text());
-  if (!verifyTwilioSignature(req.url, params, signature, authToken)) {
-    return NextResponse.json({ error: "invalid signature" }, { status: 403 });
-  }
+  const check = twilioWebhookCheck([req.url], params, req.headers.get("x-twilio-signature"));
+  if (check === "not_configured") return NextResponse.json({ error: "not configured" }, { status: 500 });
+  if (check === "forbidden") return NextResponse.json({ error: "invalid signature" }, { status: 403 });
 
   // Twilio sends WhatsApp senders as "whatsapp:+447…".
   const phone = (params.get("From") ?? "").replace(/^whatsapp:/, "");

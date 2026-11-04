@@ -56,7 +56,11 @@ export function smsConfigured(): boolean {
  */
 export function smsStatusCallbackUrl(): string | null {
   const base = appUrl();
-  return base.startsWith("https://") ? `${base}/api/webhooks/sms-status` : null;
+  if (!base.startsWith("https://")) return null;
+  // Without the Auth Token, Twilio can't sign, so the address carries the
+  // secret key (lib/twilio-signature.ts).
+  const key = process.env.TWILIO_WEBHOOK_KEY;
+  return `${base}/api/webhooks/sms-status${key ? `?key=${encodeURIComponent(key)}` : ""}`;
 }
 
 /** What happened when a text was handed over: Twilio's message ID, or why it didn't go. */
