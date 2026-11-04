@@ -52,7 +52,7 @@ describe("welcome email (Build Review 3, P1)", () => {
   it("has the real logo and the company footer", async () => {
     m.engineer.mockResolvedValue(engineer);
     const { html } = await engineerWelcomeEmailHtml("e1");
-    expect(html).toMatch(/<img src="https:\/\/[^"]+\/brand\/lockup\.png"/);
+    expect(html).toMatch(/<img src="https:\/\/[^"]+\/brand\/lockup-dark\.png"/);
     expect(html).toContain("company no. 17325346");
   });
 

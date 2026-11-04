@@ -38,7 +38,7 @@ describe("company footer on every email", () => {
   it("emailShell already carries it, with an absolute logo URL", () => {
     const html = emailShell({ title: "t", preheader: "p", rows: "" });
     expect(html).toContain(COMPANY_LINE);
-    expect(html).toMatch(/<img src="https:\/\/[^"]+\/brand\/lockup\.png"/);
+    expect(html).toMatch(/<img src="https:\/\/[^"]+\/brand\/lockup-dark\.png"/);
     expect(withCompanyFooter(html)).toBe(html);
   });
 });

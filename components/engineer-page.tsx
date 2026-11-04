@@ -204,7 +204,7 @@ export async function EngineerPage({
   const registerMatch = engineer.gasSafeNo ? await verifyGasSafe(engineer.gasSafeNo) : null;
   // Verification is a human decision in the admin queue (29 Sept review):
   // an approved, standing engineer shows the badge even when their number
-  // isn't in our copy of the register.
+  // isn't in the imported Gas Safe data.
   const gasSafe =
     registerMatch ?? (engineer.gasSafeVerifiedAt && !engineer.pausedAt && !engineer.bannedAt ? true : null);
 
