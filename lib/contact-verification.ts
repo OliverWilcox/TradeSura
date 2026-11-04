@@ -15,7 +15,8 @@ export class VerificationError extends Error {
 }
 // review-* — a customer who didn't join confirms their mobile or email
 // before leaving the installer a review (30 Oct update §6).
-type Purpose = "signup-email" | "signup-sms" | "enable-sms" | "signin-sms" | "review-sms" | "review-email";
+// passport-sms — the homeowner opening their Home Passport link (Matt, 4 Nov).
+type Purpose = "signup-email" | "signup-sms" | "enable-sms" | "signin-sms" | "review-sms" | "review-email" | "passport-sms";
 // All attempts and resends for a destination share a lock, even across app instances.
 export async function requestContactCode(purpose: Purpose, destination: string, claims: Record<string, string>) {
   const sms = purpose !== "signup-email" && purpose !== "review-email";

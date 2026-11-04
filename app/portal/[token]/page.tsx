@@ -6,6 +6,7 @@ import { CustomerShell } from "@/components/shells";
 import { Card, NotIncluded, Pill, RowLine, btnClass } from "@/components/ui";
 import { annualServiceFrom, annualServiceUnlocked, priceLine } from "@/lib/plan-billing";
 import { resolvePlanTier } from "@/lib/plan-tier";
+import { passportPath } from "@/lib/passport-link";
 
 export default async function PortalPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -134,7 +135,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
       {/* Section 4 — the home's service history, kept even after a plan ends. */}
       {plan.passport && (
         <Card>
-          <Link href={`/passport/${plan.passport.viewToken}`} className="block">
+          <Link href={passportPath(plan.passport.viewToken)} className="block">
             <RowLine left="Your Home Passport" right={<Pill tone="info">VIEW</Pill>} />
           </Link>
         </Card>

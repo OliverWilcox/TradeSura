@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { brandName } from "@/lib/engineer";
 import { RECORD_KIND_LABEL, loadPassportView } from "@/lib/passport";
+import { hasPassportSession } from "@/lib/passport-session";
 import { PrintButton } from "@/components/print-button";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,8 @@ export default async function PassportRecordsPage({ params }: { params: Promise<
   const { token } = await params;
   const view = await loadPassportView({ viewToken: token });
   if (!view) notFound();
+  // Matt, 4 Nov — only after the texted code, like the passport itself.
+  if (!(await hasPassportSession(view.passport.id))) redirect(`/passport/${token}`);
   const { passport, state, boiler, lookedAfterBy, nextDueAt } = view;
   const address = [passport.addressLine1, passport.town, passport.postcode].filter(Boolean).join(", ");
 

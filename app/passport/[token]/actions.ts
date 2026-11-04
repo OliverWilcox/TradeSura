@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
+import { hasPassportSession } from "@/lib/passport-session";
 
 // Section 4 — the homeowner's consent to be contacted about their home
 // (replacement / repair suggestions from the passport). Off until ticked;
@@ -11,7 +12,8 @@ export async function setContactConsent(formData: FormData) {
   const token = String(formData.get("token") ?? "");
   const consent = formData.get("consent") === "on";
   const passport = await prisma.homePassport.findUnique({ where: { viewToken: token }, select: { id: true } });
-  if (!passport) return;
+  // Only the homeowner who entered the code can change it, not a forwarded link.
+  if (!passport || !(await hasPassportSession(passport.id))) return;
   await prisma.homePassport.update({
     where: { id: passport.id },
     data: { contactConsentAt: consent ? new Date() : null },

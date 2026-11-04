@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
+import { hasPassportSession } from "@/lib/passport-session";
 import { passportBoiler, passportState } from "@/lib/passport";
 import { storePassportPhoto } from "@/lib/passport-photo";
 import { MAX_BOILER_PHOTOS, MAX_SETUP_UPLOAD, fittedDate, homeownerBoilerPatch } from "@/lib/passport-setup";
@@ -18,12 +19,15 @@ const Body = z.object({
 });
 
 // Retention §9 — the homeowner sets up their Home Passport from the private
-// link (no account: holding the viewToken is the permission). Fills blanks
-// only; whatever an engineer entered stays as they entered it.
+// link, after the texted code (Matt, 4 Nov: holding the link isn't enough).
+// Fills blanks only; whatever an engineer entered stays as they entered it.
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const passport = await prisma.homePassport.findUnique({ where: { viewToken: token }, select: { id: true } });
   if (!passport) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  if (!(await hasPassportSession(passport.id))) {
+    return NextResponse.json({ error: "Open your Home Passport with the code we text you first." }, { status: 401 });
+  }
   if ((await passportState(passport.id)) !== "LIVE") {
     return NextResponse.json({ error: "There's no active plan on this home, so it can't be changed." }, { status: 409 });
   }

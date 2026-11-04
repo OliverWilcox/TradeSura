@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { prisma } from "@/lib/db";
 import { brandName, tradingNameOf } from "@/lib/engineer";
 import { RECORD_KIND_LABEL, loadPassportView } from "@/lib/passport";
+import { passportLinkState } from "@/lib/passport-link";
+import { hasPassportSession, maskedMobile, passportPhones } from "@/lib/passport-session";
 import { CustomerShell } from "@/components/shells";
 import { Card, Micro, Pill, btnClass } from "@/components/ui";
 import { PassportSetup } from "@/components/passport-setup";
-import { MAX_BOILER_PHOTOS, passportNeedsSetup } from "@/lib/passport-setup";
+import { PassportGate } from "@/components/passport-gate";
+import { passportNeedsSetup } from "@/lib/passport-setup";
 import { setContactConsent } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -16,9 +20,28 @@ const monthYear = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", ye
 const dayMonthYear = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London" });
 
 // Section 4 — the homeowner's view: the whole history of the home, from
-// every engineer, behind the private link only the homeowner holds.
-export default async function PassportPage({ params }: { params: Promise<{ token: string }> }) {
+// every engineer. Matt, 4 Nov: the link alone shows nothing personal; the
+// homeowner enters a code texted to the mobile on their plan first, and the
+// link itself expires (lib/passport-link.ts, lib/passport-session.ts).
+export default async function PassportPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ e?: string; s?: string }>;
+}) {
   const { token } = await params;
+  const { e, s } = await searchParams;
+  const found = await prisma.homePassport.findUnique({ where: { viewToken: token }, select: { id: true } });
+  if (!found) notFound();
+  if (!(await hasPassportSession(found.id))) {
+    const mobiles = (await passportPhones(found.id)).map(maskedMobile);
+    return (
+      <CustomerShell tradingName="TradeSura" sub="Home Passport">
+        <PassportGate token={token} e={e} s={s} expired={passportLinkState(token, e, s) !== "ok"} mobiles={mobiles} />
+      </CustomerShell>
+    );
+  }
   const view = await loadPassportView({ viewToken: token });
   if (!view) notFound();
   const { passport, state, lookedAfterBy, lead, boiler, nextDueAt } = view;
@@ -57,7 +80,9 @@ export default async function PassportPage({ params }: { params: Promise<{ token
           needMake={!boiler?.make?.trim()}
           needModel={!boiler?.model?.trim()}
           needFitted={!boiler?.installedAt}
-          photoRoom={MAX_BOILER_PHOTOS - (boiler?.photoUrls.length ?? 0)}
+          // Matt, 4 Nov: the engineer photographs the boiler at Register
+          // boiler; the homeowner is never asked for a photo.
+          photoRoom={0}
         />
       )}
 
