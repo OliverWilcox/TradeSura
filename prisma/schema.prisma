@@ -195,6 +195,7 @@ model Engineer {
   repairDiscountPercent      Int?
   ratings                    Rating[]
   serviceRecords             ServiceRecord[]
+  passportFiles              PassportFile[]
   stickers                   Sticker[]         @relation("StickerAllocated")
   // E10 — who brought this engineer in, and whether their £50 bounty is paid.
   referrerId                 String?
@@ -273,6 +274,7 @@ model Appliance {
   passportId     String?
   passport       HomePassport?   @relation(fields: [passportId], references: [id])
   records        ServiceRecord[]
+  files          PassportFile[]
 }
 
 // Solicitor-approved wording. Seeded; read-only in the app.
@@ -628,6 +630,7 @@ model HomePassport {
   records          ServiceRecord[]
   plans            Plan[]
   stickers         Sticker[]
+  files            PassportFile[]
 }
 
 // A dated entry on a passport: a service, certificate, install or note.
@@ -648,8 +651,33 @@ model ServiceRecord {
   nextDueAt   DateTime?
   createdAt   DateTime     @default(now())
   rating      Rating?
+  files       PassportFile[]
 
   @@index([passportId, doneAt])
+}
+
+// Matt, 4 Nov — photos and documents an engineer adds to a boiler or a
+// visit: the boiler, its data plate, repair work, parts fitted, invoices,
+// certificates. The homeowner sees them all on their passport; each
+// engineer (business) sees only their own.
+model PassportFile {
+  id              String         @id @default(cuid())
+  passportId      String
+  passport        HomePassport   @relation(fields: [passportId], references: [id])
+  applianceId     String?
+  appliance       Appliance?     @relation(fields: [applianceId], references: [id])
+  serviceRecordId String?
+  serviceRecord   ServiceRecord? @relation(fields: [serviceRecordId], references: [id])
+  engineerId      String
+  engineer        Engineer       @relation(fields: [engineerId], references: [id])
+  kind            String // boiler | data_plate | repair | parts | invoice | certificate | other
+  label           String?
+  url             String
+  contentType     String
+  createdAt       DateTime       @default(now())
+
+  @@index([passportId, createdAt])
+  @@index([engineerId])
 }
 
 // Pre-printed boiler stickers: unique code, no address. Allocated to an

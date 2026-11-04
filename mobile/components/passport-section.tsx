@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/api";
 import { Card, Micro, Pill, RowLine, Button, SectionHeading } from "@/components/ui";
 import { Icon } from "@/components/icon";
 import { PhotoStrip } from "@/components/passport-photos";
+import { PassportFiles, type PassportFile } from "@/components/passport-files";
 import { StickerScanner } from "@/components/sticker-scanner";
 
 type Lead = { kind: "replacement" | "repair"; text: string };
@@ -28,6 +29,8 @@ type Passport = {
   stickers: { code: string; linkedAt: string | null }[];
   consent: boolean;
   leads: Lead[];
+  /** This engineer's own photos and documents (Matt, 4 Nov). */
+  files?: PassportFile[];
   canAdd: boolean;
 };
 type Data = { passport: Passport | null; reason?: string; stock: Stock };
@@ -295,6 +298,12 @@ export function PassportSection({ customerId }: { customerId: string }) {
             )}
           </View>
           <PhotoStrip urls={p.boiler?.photoUrls ?? []} />
+          <PassportFiles
+            customerId={customerId}
+            files={(p.files ?? []).filter((f) => !f.recordId)}
+            canAdd={p.canAdd}
+            onChanged={load}
+          />
           {p.lastServicedAt && <RowLine left="Last service" right={day(p.lastServicedAt)} />}
           {p.nextDueAt && <RowLine left="Next due" right={day(p.nextDueAt)} />}
         </Card>
@@ -383,6 +392,13 @@ export function PassportSection({ customerId }: { customerId: string }) {
               </View>
               {r.notes ? <Text className="mt-0.5 text-xs text-muted">{r.notes}</Text> : null}
               <PhotoStrip urls={r.photoUrls} />
+              <PassportFiles
+                customerId={customerId}
+                files={(p.files ?? []).filter((f) => f.recordId === r.id)}
+                recordId={r.id}
+                canAdd={p.canAdd}
+                onChanged={load}
+              />
             </View>
           ))
         )}

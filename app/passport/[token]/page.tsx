@@ -10,6 +10,7 @@ import { CustomerShell } from "@/components/shells";
 import { Card, Micro, Pill, btnClass } from "@/components/ui";
 import { PassportSetup } from "@/components/passport-setup";
 import { PassportGate } from "@/components/passport-gate";
+import { PassportFiles } from "@/components/passport-files";
 import { passportNeedsSetup } from "@/lib/passport-setup";
 import { setContactConsent } from "./actions";
 
@@ -103,6 +104,7 @@ export default async function PassportPage({
             ))}
           </div>
         )}
+        <PassportFiles files={passport.files.filter((f) => !f.serviceRecordId)} />
         {nextDueAt && (
           <p className="text-sm mt-3">
             Next service due: <b>{monthYear(nextDueAt)}</b>
@@ -113,12 +115,16 @@ export default async function PassportPage({
           {passport.records.length === 0 ? (
             <p className="text-xs text-muted">No records yet — your first service will appear here.</p>
           ) : (
-            passport.records.map((r) => (
+            passport.records.map((r) => {
+              const files = passport.files.filter((f) => f.serviceRecordId === r.id);
+              return (
               <details key={r.id} className="border-b border-line-soft last:border-b-0 py-2">
                 <summary className="text-sm cursor-pointer list-none">
                   <span className="text-ink font-bold mr-1.5">✓</span>
                   {RECORD_KIND_LABEL[r.kind] ?? r.kind} · {dayMonthYear(r.doneAt)} ·{" "}
-                  <span className="text-muted">{r.photoUrls.length ? "record + photos" : "record"}</span>
+                  <span className="text-muted">
+                    {r.photoUrls.length || files.length ? "record + photos and documents" : "record"}
+                  </span>
                 </summary>
                 <div className="pl-5 pt-1.5 text-xs text-muted space-y-1.5">
                   <p>By {brandName(r.engineer)}</p>
@@ -134,9 +140,11 @@ export default async function PassportPage({
                       ))}
                     </div>
                   )}
+                  <PassportFiles files={files} />
                 </div>
               </details>
-            ))
+              );
+            })
           )}
         </div>
       </Card>

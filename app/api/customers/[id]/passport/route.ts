@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { addMonths, passportBoiler, passportLeads } from "@/lib/passport";
 import { stickerStock } from "@/lib/stickers";
+import { fileView } from "@/lib/passport-files";
 import { passportAccess } from "./access";
 
 // Section 4 — the Home Passport section on the engineer's customer page.
@@ -22,7 +23,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     });
   }
 
-  const [passport, boiler, records] = await Promise.all([
+  const [passport, boiler, records, files] = await Promise.all([
     prisma.homePassport.findUniqueOrThrow({
       where: { id: access.passportId },
       select: {
@@ -38,6 +39,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       where: { passportId: access.passportId, engineerId: businessId },
       orderBy: { doneAt: "desc" },
       include: { rating: { select: { stars: true, ratedAt: true } } },
+    }),
+    // Matt, 4 Nov — their own photos and documents only.
+    prisma.passportFile.findMany({
+      where: { passportId: access.passportId, engineerId: businessId },
+      orderBy: { createdAt: "asc" },
     }),
   ]);
 
@@ -78,6 +84,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         boilerInstalledAt: boiler?.installedAt ?? null,
         ownNotes: records.slice(0, 3).map((r) => r.notes),
       }),
+      files: files.map(fileView),
       canAdd: access.state === "LIVE",
     },
     stock,
