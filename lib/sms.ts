@@ -28,14 +28,35 @@ function ukNational(e164: string): string {
 export const QUIET_START_HOUR = 20; // inclusive
 export const QUIET_END_HOUR = 8; // exclusive
 
-// ponytail: server-local clock; pin to Europe/London when deployed off a UK machine
+// Matt, 4 Nov: automatic texts only go out 8am–8pm, London time (Vercel's
+// clock is UTC), and anything triggered outside that waits until 8am. Codes
+// someone has just asked for aren't held (sendVerificationCode,
+// sendPlatformText).
+function londonClock(d: Date) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/London",
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+      .formatToParts(d)
+      .map((x) => [x.type, Number(x.value)]),
+  ) as Record<"year" | "month" | "day" | "hour" | "minute" | "second", number>;
+  // London's offset from UTC right now (0 in winter, an hour in summer).
+  const offsetMs = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(d.getTime() / 1000) * 1000;
+  return { ...p, offsetMs };
+}
+
 export function nextAllowedSendTime(now: Date): Date {
-  const h = now.getHours();
-  if (h >= QUIET_END_HOUR && h < QUIET_START_HOUR) return now;
-  const next = new Date(now);
-  if (h >= QUIET_START_HOUR) next.setDate(next.getDate() + 1);
-  next.setHours(QUIET_END_HOUR, 0, 0, 0);
-  return next;
+  const l = londonClock(now);
+  if (l.hour >= QUIET_END_HOUR && l.hour < QUIET_START_HOUR) return now;
+  const day = l.hour >= QUIET_START_HOUR ? l.day + 1 : l.day;
+  return new Date(Date.UTC(l.year, l.month - 1, day, QUIET_END_HOUR, 0, 0) - l.offsetMs);
 }
 
 
@@ -167,6 +188,15 @@ export async function notifyEngineer(engineerId: string, body: string, whatsapp?
   if (!engineer?.phone) return false;
   const fixed = templateForFixedText(body);
   const message = whatsapp ?? (fixed ? { template: fixed, vars: [] } : null);
+  // Outside 8am–8pm the text waits on the queue until 8am (Matt, 4 Nov).
+  const now = new Date();
+  const sendAfter = nextAllowedSendTime(now);
+  if (sendAfter > now) {
+    await prisma.outboundSms.create({
+      data: { engineerId, toPhone: engineer.phone, senderName: "TradeSura", body, class: "TRANSACTIONAL", consentBasis: "engineer-account", sendAfter },
+    });
+    return false;
+  }
   if (engineer.whatsappOptInAt && message && whatsappReady(message.template)) {
     if (await sendWhatsApp(engineer.phone, message)) return true;
   }
@@ -210,12 +240,11 @@ export async function sendSms(opts: {
     opts.consentBasis ??
     (opts.messageClass === "MARKETING" ? "marketing" : "engineer-initiated");
 
+  // Quiet hours apply to every text here, not just marketing (Matt, 4 Nov).
   const now = new Date();
   let sendAfter = opts.sendAfter ?? now;
-  if (opts.messageClass === "MARKETING") {
-    const allowed = nextAllowedSendTime(sendAfter < now ? now : sendAfter);
-    if (allowed > sendAfter) sendAfter = allowed;
-  }
+  const allowed = nextAllowedSendTime(sendAfter < now ? now : sendAfter);
+  if (allowed > sendAfter) sendAfter = allowed;
 
   const row = await prisma.outboundSms.create({
     data: {

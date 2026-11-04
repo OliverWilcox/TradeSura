@@ -225,8 +225,9 @@ export default function OfferStart() {
         message: string;
         customerFirstName: string;
         sessionToken: string | null;
-        // Our text: "not_sent" when Twilio refused it or texts aren't set up.
-        text?: "sent" | "not_sent" | null;
+        // Our text: "not_sent" when Twilio refused it or texts aren't set up;
+        // "queued" when quiet hours hold it until 8am (carries on as sent).
+        text?: "sent" | "queued" | "not_sent" | null;
       }>("/api/offer", { method: "POST", body: JSON.stringify({ ...base, tierId, channel, reason }) });
       // Plans first, then the review — every customer, joined or not.
       const next: Href = data.sessionToken

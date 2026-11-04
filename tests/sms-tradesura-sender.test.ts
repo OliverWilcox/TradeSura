@@ -61,3 +61,21 @@ describe("engineer texts to customers", () => {
     expect(sentParams().get("From")).toBe("TradeSura");
   });
 });
+
+describe("quiet hours for every text (Matt, 4 Nov)", () => {
+  it("a transactional text at 2:35am is held until 8am, not sent", async () => {
+    vi.setSystemTime(new Date("2026-11-04T02:35:00Z"));
+    const { sendSms } = await load();
+    const res = await sendSms({ engineerId: "e1", to: "+447700900123", body: "Welcome to the plan", messageClass: "TRANSACTIONAL" });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(res.sent).toBe(false);
+    expect((m.create.mock.calls[0][0] as { data: { sendAfter: Date } }).data.sendAfter.toISOString()).toBe("2026-11-04T08:00:00.000Z");
+  });
+
+  it("a code someone just asked for still goes straight away", async () => {
+    vi.setSystemTime(new Date("2026-11-04T02:35:00Z"));
+    const { sendVerificationCode } = await load();
+    await sendVerificationCode("+447700900123", "123456");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

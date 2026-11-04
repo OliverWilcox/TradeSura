@@ -241,7 +241,8 @@ export async function POST(req: Request) {
     // QA-26: whether our text went ("not_sent": Twilio refused it, or texts
     // aren't set up), so the app can say so and offer the link another way.
     // Null on the WhatsApp path.
-    text: b.channel === "sms" ? (textWent ? "sent" : "not_sent") : null,
+    // "queued": held until 8am by quiet hours, not failed.
+    text: b.channel === "sms" ? (textWent ? "sent" : textWent === null ? "queued" : "not_sent") : null,
   });
 }
 
