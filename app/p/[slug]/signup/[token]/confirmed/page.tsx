@@ -6,6 +6,7 @@ import { CustomerShell } from "@/components/shells";
 import { SignupConfirmed } from "@/components/signup-confirmed";
 import { getStripe } from "@/lib/stripe";
 import { profileUrl } from "@/lib/public-url";
+import { passportPath } from "@/lib/passport-link";
 
 // The first collection: the subscription's trial end when Stripe has it (a
 // free month pushes it past cooling-off), otherwise the cooling-off end.
@@ -72,7 +73,7 @@ export default async function ConfirmedPage({
           annualService: Boolean(plan.tier?.clauses.some((c) => c.clause.code === "ANNUAL_SERVICE")),
           // §7.9 — a neighbour's link: the engineer's page with this plan's ref.
           referUrl: `${profileUrl(plan.engineer.slug)}?nref=${encodeURIComponent(plan.ref)}`,
-          passportUrl: plan.status === "ACTIVE" && plan.passport ? `/passport/${plan.passport.viewToken}` : null,
+          passportUrl: plan.status === "ACTIVE" && plan.passport ? passportPath(plan.passport.viewToken) : null,
         }}
       />
     </CustomerShell>

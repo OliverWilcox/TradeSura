@@ -1,11 +1,29 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { brandName } from "@/lib/engineer";
 import { RECORD_KIND_LABEL, loadPassportView } from "@/lib/passport";
+import { hasPassportSession } from "@/lib/passport-session";
+import { PASSPORT_FILE_KINDS, type PassportFileKind } from "@/lib/passport-files";
 import { PrintButton } from "@/components/print-button";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Home Passport records", robots: { index: false } };
+
+// Photos and documents as named links, so a printed copy says what exists.
+function FileLinks({ files }: { files: { id: string; kind: string; label: string | null; url: string }[] }) {
+  if (files.length === 0) return null;
+  return (
+    <ul className="mt-1">
+      {files.map((f) => (
+        <li key={f.id}>
+          <a href={f.url} target="_blank" rel="noreferrer" className="underline">
+            {f.label || PASSPORT_FILE_KINDS[(f.kind in PASSPORT_FILE_KINDS ? f.kind : "other") as PassportFileKind]}
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" });
 
@@ -16,6 +34,8 @@ export default async function PassportRecordsPage({ params }: { params: Promise<
   const { token } = await params;
   const view = await loadPassportView({ viewToken: token });
   if (!view) notFound();
+  // Matt, 4 Nov — only after the texted code, like the passport itself.
+  if (!(await hasPassportSession(view.passport.id))) redirect(`/passport/${token}`);
   const { passport, state, boiler, lookedAfterBy, nextDueAt } = view;
   const address = [passport.addressLine1, passport.town, passport.postcode].filter(Boolean).join(", ");
 
@@ -41,6 +61,7 @@ export default async function PassportRecordsPage({ params }: { params: Promise<
           {boiler?.installedAt && <p>Fitted {fmt(boiler.installedAt)}</p>}
           {lookedAfterBy.length > 0 && <p>Looked after by {lookedAfterBy.map((e) => brandName(e)).join(" and ")}</p>}
           {nextDueAt && <p>Next service due {fmt(nextDueAt)}</p>}
+          <FileLinks files={passport.files.filter((f) => !f.serviceRecordId)} />
         </section>
 
         <section>
@@ -56,6 +77,7 @@ export default async function PassportRecordsPage({ params }: { params: Promise<
               <p style={{ color: "#5B6B82" }}>By {brandName(r.engineer)}</p>
               {r.notes && <p className="mt-1 whitespace-pre-line">{r.notes}</p>}
               {r.nextDueAt && <p className="mt-1">Next due {fmt(r.nextDueAt)}</p>}
+              <FileLinks files={passport.files.filter((f) => f.serviceRecordId === r.id)} />
               {r.photoUrls.length > 0 && (
                 <div className="flex gap-2 mt-2 flex-wrap">
                   {r.photoUrls.map((u) => (

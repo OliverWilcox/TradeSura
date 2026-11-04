@@ -233,6 +233,8 @@ export async function loadPassportView(where: { viewToken: string } | { id: stri
         orderBy: { doneAt: "desc" },
         include: { engineer: { select: { id: true, slug: true, tradingName: true, legalName: true } } },
       },
+      // Matt, 4 Nov — every engineer's photos and documents, for the homeowner.
+      files: { orderBy: { createdAt: "asc" } },
     },
   });
   if (!passport) return null;

@@ -1,12 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { prisma } from "@/lib/db";
 import { brandName, tradingNameOf } from "@/lib/engineer";
 import { RECORD_KIND_LABEL, loadPassportView } from "@/lib/passport";
+import { passportLinkState } from "@/lib/passport-link";
+import { hasPassportSession, maskedMobile, passportPhones } from "@/lib/passport-session";
 import { CustomerShell } from "@/components/shells";
 import { Card, Micro, Pill, btnClass } from "@/components/ui";
 import { PassportSetup } from "@/components/passport-setup";
-import { MAX_BOILER_PHOTOS, passportNeedsSetup } from "@/lib/passport-setup";
+import { PassportGate } from "@/components/passport-gate";
+import { PassportFiles } from "@/components/passport-files";
+import { passportNeedsSetup } from "@/lib/passport-setup";
 import { setContactConsent } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -16,9 +21,28 @@ const monthYear = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", ye
 const dayMonthYear = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London" });
 
 // Section 4 — the homeowner's view: the whole history of the home, from
-// every engineer, behind the private link only the homeowner holds.
-export default async function PassportPage({ params }: { params: Promise<{ token: string }> }) {
+// every engineer. Matt, 4 Nov: the link alone shows nothing personal; the
+// homeowner enters a code texted to the mobile on their plan first, and the
+// link itself expires (lib/passport-link.ts, lib/passport-session.ts).
+export default async function PassportPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ e?: string; s?: string }>;
+}) {
   const { token } = await params;
+  const { e, s } = await searchParams;
+  const found = await prisma.homePassport.findUnique({ where: { viewToken: token }, select: { id: true } });
+  if (!found) notFound();
+  if (!(await hasPassportSession(found.id))) {
+    const mobiles = (await passportPhones(found.id)).map(maskedMobile);
+    return (
+      <CustomerShell tradingName="TradeSura" sub="Home Passport">
+        <PassportGate token={token} e={e} s={s} expired={passportLinkState(token, e, s) !== "ok"} mobiles={mobiles} />
+      </CustomerShell>
+    );
+  }
   const view = await loadPassportView({ viewToken: token });
   if (!view) notFound();
   const { passport, state, lookedAfterBy, lead, boiler, nextDueAt } = view;
@@ -57,7 +81,9 @@ export default async function PassportPage({ params }: { params: Promise<{ token
           needMake={!boiler?.make?.trim()}
           needModel={!boiler?.model?.trim()}
           needFitted={!boiler?.installedAt}
-          photoRoom={MAX_BOILER_PHOTOS - (boiler?.photoUrls.length ?? 0)}
+          // Matt, 4 Nov: the engineer photographs the boiler at Register
+          // boiler; the homeowner is never asked for a photo.
+          photoRoom={0}
         />
       )}
 
@@ -78,6 +104,7 @@ export default async function PassportPage({ params }: { params: Promise<{ token
             ))}
           </div>
         )}
+        <PassportFiles files={passport.files.filter((f) => !f.serviceRecordId)} />
         {nextDueAt && (
           <p className="text-sm mt-3">
             Next service due: <b>{monthYear(nextDueAt)}</b>
@@ -88,12 +115,16 @@ export default async function PassportPage({ params }: { params: Promise<{ token
           {passport.records.length === 0 ? (
             <p className="text-xs text-muted">No records yet — your first service will appear here.</p>
           ) : (
-            passport.records.map((r) => (
+            passport.records.map((r) => {
+              const files = passport.files.filter((f) => f.serviceRecordId === r.id);
+              return (
               <details key={r.id} className="border-b border-line-soft last:border-b-0 py-2">
                 <summary className="text-sm cursor-pointer list-none">
                   <span className="text-ink font-bold mr-1.5">✓</span>
                   {RECORD_KIND_LABEL[r.kind] ?? r.kind} · {dayMonthYear(r.doneAt)} ·{" "}
-                  <span className="text-muted">{r.photoUrls.length ? "record + photos" : "record"}</span>
+                  <span className="text-muted">
+                    {r.photoUrls.length || files.length ? "record + photos and documents" : "record"}
+                  </span>
                 </summary>
                 <div className="pl-5 pt-1.5 text-xs text-muted space-y-1.5">
                   <p>By {brandName(r.engineer)}</p>
@@ -109,9 +140,11 @@ export default async function PassportPage({ params }: { params: Promise<{ token
                       ))}
                     </div>
                   )}
+                  <PassportFiles files={files} />
                 </div>
               </details>
-            ))
+              );
+            })
           )}
         </div>
       </Card>
