@@ -76,7 +76,7 @@ export function AppHeader({ title, right, onBack }: { title?: string; right?: Re
   );
 }
 
-export function Lockup({ height = 26 }: { height?: number }) {
+export function Lockup({ height = 26, registered = false }: { height?: number; registered?: boolean }) {
   // Ring + live "Trade"/"Sura" text, sized off one prop the same way the
   // old flat image was — callers (AppHeader, sign-in, sign-up, welcome)
   // don't need to change. Proportions (text cap-height vs. ring diameter,
@@ -95,6 +95,12 @@ export function Lockup({ height = 26 }: { height?: number }) {
         <Text className="text-white">Trade</Text>
         <Text style={{ color: "#5FA3F0" }}>Sura</Text>
       </Text>
+      {/* Matt, 4 Nov: ® once per screen, on the opening and sign-in screens. */}
+      {registered && (
+        <Text style={{ fontSize: Math.round(fontSize * 0.42), alignSelf: "flex-start", marginLeft: -Math.round(height * 0.1) }} className="font-semibold text-white">
+          ®
+        </Text>
+      )}
     </View>
   );
 }

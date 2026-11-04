@@ -757,6 +757,10 @@ function OwnerAccount() {
         <Pressable onPress={() => router.push("/delete-account")} className="items-center py-2">
           <Text className="font-sans text-xs text-muted">Delete my account</Text>
         </Pressable>
+        {/* Matt, 4 Nov: the trade mark line in the app's legal section. */}
+        <Text className="px-4 pb-2 text-center font-sans text-[11px] text-faint">
+          TradeSura® is a UK registered trade mark of TradeSura Ltd.
+        </Text>
       </ScrollView>
     </View>
   );

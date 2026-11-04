@@ -13,6 +13,7 @@ export function SiteHeader() {
           <span className="text-lg font-extrabold">
             <span className="text-white">Trade</span>
             <span className="text-[#5FA3F0]">Sura</span>
+            <sup className="ml-0.5 text-[0.55em] font-semibold text-white">®</sup>
           </span>
         </Link>
         <div className="flex items-center gap-5 text-sm text-muted">

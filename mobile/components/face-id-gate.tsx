@@ -87,7 +87,7 @@ export function FaceIdGate() {
 
   return (
     <View style={StyleSheet.absoluteFill} className="items-center justify-center gap-6 bg-night px-8">
-      <Lockup height={52} />
+      <Lockup height={52} registered />
       <Text className="text-center text-[16px] text-white/85">
         {failed ? "That didn't unlock TradeSura." : `Unlock with ${method} to carry on.`}
       </Text>

@@ -3,6 +3,7 @@
 // Mail. Light body with a navy brand band — email clients can't carry the
 // app's dark theme reliably.
 import { appUrl } from "@/lib/app-url";
+import { TRADEMARK_LINE } from "@/lib/trademark";
 
 export const EMAIL = {
   navy: "#0B1A2E",
@@ -89,11 +90,14 @@ export function emailShell(opts: {
 <tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="${width}" cellpadding="0" cellspacing="0" border="0" style="width:${width}px;max-width:100%;background:#ffffff;border-radius:14px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:${EMAIL.ink};">
   <tr><td bgcolor="${EMAIL.navy}" style="background:${EMAIL.navy};padding:24px 30px;">
-    <img src="${assets}/brand/lockup.png" width="160" height="32" alt="TradeSura" style="display:block;border:0;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td><img src="${assets}/brand/lockup.png" width="160" height="32" alt="TradeSura" style="display:block;border:0;"></td>
+      <td valign="top" style="padding-left:2px;color:#ffffff;font-size:11px;line-height:11px;font-family:Arial,Helvetica,sans-serif;">&reg;</td>
+    </tr></table>
   </td></tr>
   ${opts.rows}
   <tr><td style="background:${EMAIL.wash};padding:18px 30px;font-size:11.5px;line-height:17px;color:${EMAIL.muted};">
-    ${opts.footerExtra ?? ""}${COMPANY_LINE}
+    ${opts.footerExtra ?? ""}${COMPANY_LINE}<br>${TRADEMARK_LINE}
   </td></tr>
 </table>
 </td></tr>
@@ -107,6 +111,6 @@ export function emailShell(opts: {
 // customer and staff notices) through this so no send can go out without it.
 export function withCompanyFooter(html: string): string {
   if (html.includes(COMPANY_LINE)) return html;
-  const footer = `<p style="margin:24px 0 0;padding-top:12px;border-top:1px solid ${EMAIL.line};font-family:Arial,Helvetica,sans-serif;font-size:11.5px;line-height:17px;color:${EMAIL.muted};">${COMPANY_LINE}</p>`;
+  const footer = `<p style="margin:24px 0 0;padding-top:12px;border-top:1px solid ${EMAIL.line};font-family:Arial,Helvetica,sans-serif;font-size:11.5px;line-height:17px;color:${EMAIL.muted};">${COMPANY_LINE}<br>${TRADEMARK_LINE}</p>`;
   return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${footer}</body>`) : `${html}\n${footer}`;
 }

@@ -7,6 +7,7 @@ import CursorGlow from "@/components/cursor-glow";
 import Link from "next/link";
 import { RingMark } from "@/components/ring-mark";
 import { SiteHeader } from "@/components/site-header";
+import { TRADEMARK_LINE } from "@/lib/trademark";
 
 // Same language law as the mobile app's welcome screen (app/assets/TradeSura_Welcome_Screen_W0.html
 // §1): never "insurance", "cover", "protection", "warranty", "doorstep" in customer-facing copy.
@@ -257,6 +258,7 @@ export default function HomePage() {
           TradeSura Ltd · Registered in England &amp; Wales, Company No. 17325346 · Registered
           office: Unit A3, Gateway Tower, 32 Western Gateway, London E16 1YL
         </p>
+        <p className="mt-1 text-center text-[11px] text-faint/80 sm:text-left">{TRADEMARK_LINE}</p>
       </footer>
     </div>
   );

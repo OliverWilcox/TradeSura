@@ -188,7 +188,7 @@ export default function SignIn() {
                 Care plan platform
               </Text>
               <View className="mt-2.5">
-                <Lockup height={61} />
+                <Lockup height={61} registered />
               </View>
               {/* Section 4.4 — returning engineers don't need the sell. */}
               <Text className="mt-3 text-[18px] font-semibold text-white">Welcome back.</Text>

@@ -226,7 +226,7 @@ export default function Welcome() {
               Care plan platform
             </Text>
             <View className="mt-2.5">
-              <Lockup height={52} />
+              <Lockup height={52} registered />
             </View>
             {/* 4 Oct notes 3.2 — white, it was getting lost in grey. */}
             <Text className="mt-2 text-[14px] font-medium text-white">

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { EMERGENCY_LINE } from "@/lib/compliance/interlock";
 import { RingMark } from "@/components/ring-mark";
+import { TRADEMARK_LINE } from "@/lib/trademark";
 
 // Customer surface: white-label pages wearing the engineer's brand.
 // Emergency line sits permanently in the footer (spec Screen 10).
@@ -47,6 +48,7 @@ export function CustomerShell({
             Terms &amp; privacy
           </Link>
         </p>
+        <p>{TRADEMARK_LINE}</p>
       </footer>
     </div>
   );
