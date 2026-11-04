@@ -12,15 +12,19 @@ import { sendWhatsApp, whatsappReady } from "@/lib/whatsapp";
 import { templateForFixedText, type WhatsAppMessage } from "@/lib/whatsapp-templates";
 import { twilioAuth } from "@/lib/twilio-auth";
 
-// Alphanumeric sender IDs (used below for every engineer-branded send) are
-// one-way on real networks — Twilio's own STOP-keyword filtering doesn't
-// apply to them, so "reply STOP" to a trading name is a dead end. The
-// platform's shared long code (also the inbound STOP webhook's target,
-// see app/api/webhooks/sms-inbound) is the only number that can actually
-// receive a reply, so the compliance line points there instead.
+// Texts come from the "TradeSura" sender name, which is one-way: a reply
+// to it goes nowhere. The platform's number (the inbound STOP webhook's
+// target, app/api/webhooks/sms-inbound) is the one that can take a reply,
+// so the compliance line names it, as Matt worded it (3 Nov).
 const STOP_SUFFIX = process.env.TWILIO_SMS_NUMBER
-  ? `Text STOP to ${process.env.TWILIO_SMS_NUMBER} to opt out`
+  ? `Reply STOP to ${ukNational(process.env.TWILIO_SMS_NUMBER)}`
   : "Reply STOP to opt out";
+
+// +447366234255 → 07366 234255, the way people write a UK mobile.
+function ukNational(e164: string): string {
+  const m = /^\+44(\d{4})(\d{6})$/.exec(e164.replace(/\s+/g, ""));
+  return m ? `0${m[1]} ${m[2]}` : e164;
+}
 export const QUIET_START_HOUR = 20; // inclusive
 export const QUIET_END_HOUR = 8; // exclusive
 
@@ -34,15 +38,6 @@ export function nextAllowedSendTime(now: Date): Date {
   return next;
 }
 
-// GSM alphanumeric sender IDs: letters/digits only, 11 characters max, at
-// least one letter. Engineer trading names routinely blow past that
-// ("Akhtar Heating & Plumbing"), so this is a display-name approximation,
-// not the real thing — good enough for a doorstep SMS, not for anything
-// that needs the full name to round-trip.
-function alphanumericSenderId(name: string): string {
-  const cleaned = name.replace(/[^a-zA-Z0-9]/g, "").slice(0, 11);
-  return /[a-zA-Z]/.test(cleaned) ? cleaned : "TradeSura";
-}
 
 /** Whether texts really go out (Twilio's keys are set); without them, sends only reach the dev driver. */
 export function smsConfigured(): boolean {
@@ -94,14 +89,14 @@ async function deliver(
     return { ok: false, reason: "not_configured" };
   }
 
-  // With a Messaging Service (Matt, 3 Nov), TradeSura's own texts (codes,
-  // installer alerts) go through it: "TradeSura" as the sender on UK texts,
-  // the 07366 number behind it for STOP replies. Engineer-branded texts keep
-  // the engineer's trading name (CLAUDE.md compliance 5).
-  const platform = opts.fromLongCode || senderName === "TradeSura";
+  // Matt, 3 Nov: every text goes through the Messaging Service, so it shows
+  // "TradeSura" as the sender, with the 07366 number behind it for STOP
+  // replies. Engineer texts name the engineer in the wording instead
+  // (CLAUDE.md compliance 5). Without a service: the number for TradeSura's
+  // own texts, the sender name for the rest.
   const params = new URLSearchParams({ To: to, Body: body });
-  if (service && (platform || !fromNumber)) params.set("MessagingServiceSid", service);
-  else params.set("From", opts.fromLongCode ? fromNumber! : alphanumericSenderId(senderName));
+  if (service) params.set("MessagingServiceSid", service);
+  else params.set("From", opts.fromLongCode && fromNumber ? fromNumber : "TradeSura");
   if (opts.statusCallback) params.set("StatusCallback", opts.statusCallback);
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${auth.accountSid}/Messages.json`, {
     method: "POST",

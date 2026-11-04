@@ -98,7 +98,7 @@ export default function Blast() {
                     care plan: annual service, priority call-outs, no call-out fees, from{" "}
                     {priceLabel}/mo. Have a look: {"{link}"}
                     {"\n"}
-                    <Text className="text-faint">Text STOP to opt out</Text>
+                    <Text className="text-faint">Reply STOP to 07366 234255</Text>
                   </Text>
                 </View>
               </Card>
