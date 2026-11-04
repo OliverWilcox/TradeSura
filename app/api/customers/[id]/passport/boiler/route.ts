@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { passportBoiler } from "@/lib/passport";
+import { textBoilerRegistered } from "@/lib/welcome-touches";
 import { isOwnPhotoUrl, passportAccess } from "../access";
 
 const Body = z.object({
@@ -53,5 +54,11 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     });
   }
   await track("passport_boiler_updated", { type: "ENGINEER", id: access.actor.actorId }, { customerId: id });
+  // Matt, 4 Nov — the homeowner hears their boiler is registered, once.
+  if (!boiler) {
+    await textBoilerRegistered(access.passportId, access.actor.businessId).catch((err) =>
+      console.error("[passport] boiler-registered text failed:", err),
+    );
+  }
   return NextResponse.json({ ok: true });
 }
