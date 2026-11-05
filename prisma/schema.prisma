@@ -905,3 +905,28 @@ model EngineerTradingAddress {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
+
+// Matt, 30 Oct §9.6 — a reversed Direct Debit payment (a Bacs indemnity
+// claim) or other dispute on a plan collection. Stripe takes it from
+// TradeSura's balance; the engineer's share of that collection is reversed
+// back from them, and returned if the claim is overturned.
+model PlanDispute {
+  id                 String    @id @default(cuid())
+  stripeDisputeId    String    @unique
+  chargeId           String
+  planId             String?
+  engineerId         String?
+  amountPence        Int
+  reason             String?
+  status             String
+  // The engineer's share taken back (a transfer reversal), and its id.
+  reversedPence      Int       @default(0)
+  reversalId         String?
+  // When a claim is overturned: the transfer giving the share back.
+  returnedTransferId String?
+  createdAt          DateTime  @default(now())
+  closedAt           DateTime?
+
+  @@index([planId])
+  @@index([engineerId])
+}

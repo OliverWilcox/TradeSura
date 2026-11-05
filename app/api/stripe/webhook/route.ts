@@ -26,6 +26,7 @@ import {
 } from "@/lib/stripe";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { markAccountComplete } from "@/lib/founding";
+import { handleDisputeClosed, handleDisputeCreated } from "@/lib/disputes";
 
 // One URL for both platform events (checkout, invoices, subscriptions) and
 // Connect events (account.updated) — but Stripe requires two separate
@@ -193,6 +194,18 @@ async function handleEvent(event: Stripe.Event) {
         engineerId: plan.engineerId,
         amountPaidPence: invoice.amount_paid,
       });
+      return;
+    }
+
+    // Matt, 30 Oct §9.6 — a reversed Direct Debit payment (Bacs indemnity
+    // claim) or dispute: the engineer's share comes back out of their
+    // balance, and goes back to them if it's overturned (lib/disputes.ts).
+    case "charge.dispute.created": {
+      await handleDisputeCreated(event.data.object as Stripe.Dispute);
+      return;
+    }
+    case "charge.dispute.closed": {
+      await handleDisputeClosed(event.data.object as Stripe.Dispute);
       return;
     }
 
