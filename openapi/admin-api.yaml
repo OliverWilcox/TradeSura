@@ -215,7 +215,7 @@ components:
             register: { $ref: "#/components/schemas/Register" }
             onRegister:
               type: [object, "null"]
-              description: Our copy's record for the number. Address, postcode and card expiry are null unless the imported register file had them.
+              description: The imported Gas Safe data's record for the number (not for comparing — the card is checked on the live register). Address, postcode and card expiry are null unless the imported register file had them.
               properties:
                 name: { type: string }
                 company: { type: string }
@@ -224,8 +224,8 @@ components:
                 postcode: { type: [string, "null"] }
                 cardExpiry: { type: [string, "null"], format: date }
             mismatchAtSignup: { type: boolean }
-            registerUrl: { type: string }
-            copy: { type: object, description: "Our copy of the register: records held, and when imported (AppSetting gas_safe_register_imported_at), if recorded", properties: { records: { type: integer }, importedAt: { type: [string, "null"], format: date-time } } }
+            registerUrl: { type: string, description: "The live Gas Safe Register, where the checker looks the number up beside the card" }
+            copy: { type: object, description: "The imported Gas Safe data: records held, and when imported (AppSetting gas_safe_register_imported_at), if recorded", properties: { records: { type: integer }, importedAt: { type: [string, "null"], format: date-time } } }
         submitted:
           type: object
           description: What the engineer gave, to set beside the register. cardExpiry (YYYY-MM-DD) is null until they give it with the photo.
