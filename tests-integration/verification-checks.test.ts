@@ -144,7 +144,7 @@ describe("3.7: approving over open warnings", () => {
     const withNote = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", reason: "Saw the card on a video call" } });
     expect(withNote.status).toBe(200);
     const event = await prisma.event.findFirstOrThrow({ where: { name: "gas_safe_verified" } });
-    expect(event.meta).toMatchObject({ reason: "Saw the card on a video call", warnings: ["no_card"] });
+    expect(event.meta).toMatchObject({ reason: "Saw the card on a video call", warnings: ["not_on_register", "no_card"] });
   });
 
   it("needs no note when nothing is open", async () => {

@@ -7,8 +7,8 @@ import { textStaff } from "@/lib/sms";
 import { track } from "@/lib/track";
 
 // 3.2: the instant alert to the team (Matt) when an engineer uploads their
-// Gas Safe ID card, at sign-up or later in Settings, so it's checked against
-// the Gas Safe Register the same day (Matt, 4 Nov). By email to
+// Gas Safe ID card, at sign-up or later in Settings, so the check happens
+// within the hour the chase email promises. By email to
 // VERIFICATION_ALERT_EMAIL and by text to VERIFICATION_ALERT_SMS (each may
 // list several, comma-separated); either unset is skipped. The check page
 // link needs ADMIN_APP_URL. Nothing about the engineer beyond their business

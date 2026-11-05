@@ -19,7 +19,6 @@ import { likeTerm } from "@/lib/admin-api/db";
 import { AdminApiError, conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
 import { formatUkDate, ukDay } from "@/lib/admin/time";
-import { gasSafeRegisterLink } from "@/lib/gas-safe-register-link";
 
 // The Gas Safe verification queue for the admin API: the same queue, rules
 // and messages as app/admin/verifications (29 Sept review — verification is
@@ -458,7 +457,7 @@ export async function getVerification(engineerId: string, opts: { withContact?: 
       register: register.result,
       onRegister: register.record,
       mismatchAtSignup: Boolean(row.gasSafeReviewRequestedAt),
-      registerUrl: gasSafeRegisterLink(),
+      registerUrl: "https://www.gassaferegister.co.uk/",
       copy,
     },
     /** What the engineer gave, to set beside the register. The card's expiry is null until they give it with the photo. */
@@ -507,9 +506,10 @@ export function caseWarnings(d: {
 }): CaseWarning[] {
   const w: CaseWarning[] = [];
   if (d.duplicates.length) w.push({ code: "duplicate", message: "Another account shares this company number, or this name and postcode." });
-  // Matt, 4 Nov: the checker compares the card with the live Gas Safe
-  // Register (gasSafe.registerUrl), not with our stored list, so nothing
-  // here warns from that list.
+  if (d.gasSafe.register === "not_found") w.push({ code: "not_on_register", message: "The Gas Safe number isn't in our copy of the register." });
+  if (d.gasSafe.register === "name_mismatch") w.push({ code: "register_name", message: "The name on the Gas Safe register doesn't match the applicant." });
+  if (d.gasSafe.register === "likely_match") w.push({ code: "register_name_likely", message: "The name on the Gas Safe register is only a likely match." });
+  if (d.gasSafe.mismatchAtSignup) w.push({ code: "mismatch_at_signup", message: "Their number didn't match the register when they signed up." });
   if (!d.card.available) w.push({ code: "no_card", message: "There's no photo of their Gas Safe ID card." });
   if (d.submitted.cardExpiry && d.submitted.cardExpiry < ukDay(new Date())) {
     w.push({ code: "card_expired", message: `Their Gas Safe ID card expired on ${formatUkDate(new Date(`${d.submitted.cardExpiry}T12:00:00Z`))}.` });
@@ -690,7 +690,7 @@ const CHASE_TEXT: Record<ChaseWhat, { sms: string; subject: string; html: string
   photo: {
     sms: "TradeSura here: to finish your Gas Safe check we need a photo of your Gas Safe ID card. Add it in the app under Settings, Gas Safe card.",
     subject: "Add your Gas Safe ID card to finish your check",
-    html: "<p>To finish checking your Gas Safe registration we need a photo of your Gas Safe ID card. Open the TradeSura app and add it under Settings, Gas Safe card. We'll check it against the Gas Safe Register, usually within 24 hours.</p>",
+    html: "<p>To finish checking your Gas Safe registration we need a photo of your Gas Safe ID card. Open the TradeSura app and add it under Settings, Gas Safe card. We check every upload within the hour.</p>",
   },
   details: {
     sms: "TradeSura here: we couldn't match some of your details to the Gas Safe Register. Open the app to check your name and Gas Safe number.",

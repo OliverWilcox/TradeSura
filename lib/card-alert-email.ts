@@ -3,7 +3,6 @@
 // VERIFICATION_ALERT_EMAIL, never to an engineer, and says nothing about the
 // engineer beyond their business and Gas Safe number.
 import { EMAIL, emailButton, emailShell, escapeHtml } from "@/lib/email-layout";
-import { gasSafeRegisterLink } from "@/lib/gas-safe-register-link";
 
 /** "Mon 2 Nov, 14:05": the upload time, UK time. */
 function ukTime(at: Date): string {
@@ -48,7 +47,7 @@ export function cardAlertEmail(opts: {
   <tr><td style="padding:28px 32px 6px;">
     <div style="font-size:22px;line-height:28px;font-weight:700;color:${EMAIL.ink};padding-bottom:14px;">Gas Safe card to check</div>
     <p style="margin:0 0 14px;font-size:15px;line-height:22px;color:${EMAIL.body};">${what}</p>
-    <p style="margin:0 0 6px;font-size:15px;line-height:22px;color:${EMAIL.body};">Please check the card against the Gas Safe Register today.</p>
+    <p style="margin:0 0 6px;font-size:15px;line-height:22px;color:${EMAIL.body};">We tell engineers their card is checked within the hour, so please take a look now.</p>
   </td></tr>
   <tr><td style="padding:12px 32px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${EMAIL.wash};border:1px solid ${EMAIL.line};border-radius:12px;border-collapse:separate;">
@@ -57,7 +56,7 @@ export function cardAlertEmail(opts: {
   </td></tr>
   ${action}
   <tr><td style="padding:16px 32px 26px;font-size:13px;line-height:20px;color:${EMAIL.muted};">
-    ${opts.gasSafeNo ? `Gas Safe number ${escapeHtml(opts.gasSafeNo)}: ` : ""}<a href="${gasSafeRegisterLink()}" style="color:${EMAIL.link};">check it on the Gas Safe Register</a>.
+    The check page puts the card and their details beside our copy of the Gas Safe Register.
   </td></tr>`;
   const footerExtra = "You're getting this because your address is on TradeSura's card-upload alerts.<br>";
   const subject = `Gas Safe card to check: ${opts.business}`;
@@ -65,7 +64,7 @@ export function cardAlertEmail(opts: {
     subject,
     html: emailShell({
       title: subject,
-      preheader: `${opts.business}${opts.gasSafeNo ? `, Gas Safe ${opts.gasSafeNo}` : ""}. Please check it against the Gas Safe Register today.`,
+      preheader: `${opts.business}${opts.gasSafeNo ? `, Gas Safe ${opts.gasSafeNo}` : ""}. Engineers are told it's checked within the hour.`,
       rows,
       footerExtra,
     }),
