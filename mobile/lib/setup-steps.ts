@@ -227,6 +227,7 @@ export function growSteps(me: Me | null): SetupStep[] {
       href: "/customers/import-contacts",
       next: "bring in your customers",
     },
+    ...matt6NovSteps(me),
     {
       key: "invite",
       title: "Invite engineers you know",
@@ -240,6 +241,74 @@ export function growSteps(me: Me | null): SetupStep[] {
       // Opened as a setup step: no tab bar (Review 3 §3).
       href: { pathname: "/referral", params: { from: "setup" } },
       next: "invite engineers you know",
+    },
+  ];
+}
+
+// Matt, 6 Nov — the four new Grow cards. Real statuses only: first 10 counts
+// offers sent from it, the goal ticks when it's met this month, the video
+// once watched, commission once the owner has set it.
+function matt6NovSteps(me: Me | null): SetupStep[] {
+  const g = me?.grow;
+  const sent = g?.firstTenSent ?? 0;
+  const goal = g?.goal;
+  const target = goal?.target ?? null;
+  const signed = goal?.signed ?? 0;
+  const met = target !== null && signed >= target;
+  const video = g?.howToVideo;
+  const staffCount = g?.staff.count ?? 0;
+  const commission = g?.staff.commission ?? null;
+  return [
+    {
+      key: "firstTen",
+      title: "Pick your first 10",
+      sub: me?.hasPlan ? "Your 10 most likely customers, one tap each" : "Opens once your first plan is live",
+      done: sent >= 10,
+      status: `${sent}/10 offered`,
+      tone: sent >= 10 ? "done" : sent > 0 ? "amber" : "grey",
+      locked: !me?.hasPlan,
+      cta: sent > 0 ? "Carry on" : "Pick",
+      href: "/grow/first-ten",
+      next: "pick your first 10 customers",
+    },
+    {
+      key: "goal",
+      title: "First month goal",
+      sub: target ? `${signed} of ${target} plans this month` : "Set how many plans you'll sign this month",
+      done: met,
+      status: target === null ? "Not set" : met ? "Goal met" : goal?.behind ? "Behind, offer one today" : `${signed} of ${target}`,
+      tone: met ? "done" : goal?.behind ? "amber" : "grey",
+      cta: target === null ? "Set" : "View",
+      href: "/grow/goal",
+      next: "set your first month goal",
+    },
+    {
+      key: "video",
+      title: "60-second video",
+      sub: video?.url ? "How to offer a plan in 60 seconds" : "Coming soon",
+      done: Boolean(video?.watchedAt),
+      status: video?.watchedAt ? "Watched" : "Not watched",
+      tone: video?.watchedAt ? "done" : "grey",
+      locked: !video?.url,
+      cta: "Watch",
+      href: "/grow/video",
+      next: "watch how to offer a plan in 60 seconds",
+    },
+    {
+      key: "commission",
+      title: "Staff commission",
+      sub: staffCount > 0 ? "Reward your team for every plan they sell" : "For firms with staff",
+      done: Boolean(commission),
+      status: commission
+        ? commission.type === "signup"
+          ? `${pounds(commission.pence)} per sign-up`
+          : `${pounds(commission.pence)} a month per plan`
+        : "Not set",
+      tone: commission ? "done" : "grey",
+      locked: staffCount === 0,
+      cta: commission ? "View" : "Set",
+      href: "/grow/commission",
+      next: "set your staff commission",
     },
   ];
 }

@@ -107,6 +107,10 @@ const GROW_ICON: Record<string, IconName> = {
   website: "code",
   customers: "customers",
   invite: "share",
+  firstTen: "customers",
+  goal: "growth",
+  video: "howItWorks",
+  commission: "coin",
 };
 
 function GrowRow({ step }: { step: SetupStep }) {
@@ -116,7 +120,7 @@ function GrowRow({ step }: { step: SetupStep }) {
       onPress={open}
       disabled={step.locked}
       accessibilityRole="button"
-      accessibilityLabel={`${step.title}: ${step.locked ? "opens once your first plan is live" : step.status}`}
+      accessibilityLabel={`${step.title}: ${step.locked ? step.sub : step.status}`}
       className={`flex-row items-center gap-3 rounded-2xl border border-line-strong px-3.5 py-3 ${step.locked ? "opacity-60" : ""}`}
     >
       <View className="h-9 w-9 items-center justify-center rounded-lg bg-white/5">

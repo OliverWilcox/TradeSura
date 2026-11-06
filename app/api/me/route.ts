@@ -4,6 +4,7 @@ import { getActor } from "@/lib/auth";
 import { brandName } from "@/lib/engineer";
 import { deleteOwnerAccount, deleteStaffAccount } from "@/lib/delete-account";
 import { markAccountComplete } from "@/lib/founding";
+import { growSummary } from "@/lib/grow";
 import {
   getConnectAccountStatus,
   stripeConfigured,
@@ -125,6 +126,8 @@ export async function GET() {
     referralCount,
     firstPlan,
     draftPlan,
+    // Matt, 6 Nov — the Grow cards' progress (lib/grow.ts).
+    grow: await growSummary(engineerId),
   });
 }
 
