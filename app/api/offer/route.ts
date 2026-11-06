@@ -32,6 +32,8 @@ const Body = z.object({
   // 30 Oct update §6 — why the installer was there (lib/visit-reasons.ts).
   // Required in the app; optional here so older builds still send.
   reason: z.string().min(1).max(40).optional(),
+  // Matt, 6 Nov — "first10" when sent from Pick your first 10 (its progress).
+  source: z.enum(["first10"]).optional(),
 });
 
 // Mobile counterpart to the customer-picker query in app/offer/page.tsx.
@@ -165,6 +167,7 @@ export async function POST(req: Request) {
       soldById: staffId,
       customerId: customer.id,
       tierId: tier.id,
+      offerSource: b.source ?? null,
       signupToken: newToken(),
       portalToken: newToken(),
     },

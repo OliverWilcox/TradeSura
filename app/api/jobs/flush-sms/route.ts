@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { getEngineerId } from "@/lib/auth";
 import { flushSmsQueue } from "@/lib/sms";
+import { nudgeBehindGoals } from "@/lib/grow";
 import { queueServiceReminders } from "@/lib/reminders";
 import { applyDuePriceReviews } from "@/lib/price-review";
 import { endUnpaidPlans, resumeDuePausedPlans } from "@/lib/plan-billing";
@@ -39,8 +40,10 @@ async function run() {
   const verifiedEmails = await sendMissedVerifiedEmails();
   // 30 Oct §10 — town requests past their Founding-first window: alert the rest of the town.
   const townLeadsOpened = await openDueTownLeads();
+  // Matt, 6 Nov — a weekly push to owners behind their first month goal.
+  const goalNudges = await nudgeBehindGoals();
   const sent = await flushSmsQueue();
-  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves, setupNudges, renewalNotices, founding, finishSetupChasers, verifiedEmails, townLeadsOpened });
+  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves, setupNudges, renewalNotices, founding, finishSetupChasers, verifiedEmails, townLeadsOpened, goalNudges });
 }
 
 // Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.

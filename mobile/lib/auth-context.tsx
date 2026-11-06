@@ -65,6 +65,13 @@ export type Me = {
   referralCount: number;
   firstPlan: { name: string; priceMonthlyPence: number } | null;
   draftPlan?: { id: string; name: string } | null;
+  /** Matt, 6 Nov — the Grow cards' progress (owners only, lib/grow.ts). */
+  grow?: {
+    firstTenSent: number;
+    goal: { target: number | null; signed: number; worthPence: number; pace: number; behind: boolean };
+    howToVideo: { url: string | null; watchedAt: string | null };
+    staff: { count: number; commission: { type: "signup" | "monthly"; pence: number } | null };
+  };
 };
 
 type AuthState = {
