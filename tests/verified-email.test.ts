@@ -41,4 +41,14 @@ describe("You're verified email", () => {
     expect(verifiedEmail({ ...base, groupUrl: "https://chat.whatsapp.com/abc" }).html).toContain("Join the group");
     expect(verifiedEmail({ ...base, plan: null }).html).not.toContain("a year to you");
   });
+
+  // Matt, 6 Nov — Founding members set their tag in the one installer group.
+  it("Founding versions ask them to set their member tag in the group; others don't", () => {
+    const top = verifiedEmail({ ...base, founding: { kind: "top", town: "Holmfirth", keepDays: 60 }, groupUrl: "https://chat.whatsapp.com/x" }).html;
+    expect(top).toContain("set your member tag to <b>“🏅 Founding Member · Holmfirth”</b>");
+    expect(top).toContain("https://chat.whatsapp.com/x");
+    const noTown = verifiedEmail({ ...base, founding: { kind: "badge", town: null } }).html;
+    expect(noTown).toContain("“🏅 Founding Member”");
+    expect(verifiedEmail({ ...base }).html).not.toContain("member tag");
+  });
 });

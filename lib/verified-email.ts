@@ -49,6 +49,13 @@ export function verifiedEmail(v: VerifiedEmailInput): { subject: string; html: s
       : v.founding?.kind === "badge"
         ? `<b>FOUNDING MEMBER${v.founding.town ? ` · ${escapeHtml(v.founding.town.toUpperCase())}` : ""}</b><br>You claimed your account in time, so your <b>Founding Member badge</b> shows on your page, your plans and the town page for good.`
         : "";
+  // Matt, 6 Nov: one installer WhatsApp group for everyone; Founding
+  // members set their member tag there so the others can see it.
+  const tagTown = v.founding?.town?.trim();
+  const tag = `🏅 Founding Member${tagTown ? ` · ${escapeHtml(tagTown)}` : ""}`;
+  const foundingTag = v.founding
+    ? `<br><br>In the TradeSura installer WhatsApp group, please set your member tag to <b>“${tag}”</b>.${v.groupUrl ? ` <a href="${escapeHtml(v.groupUrl)}" style="color:#5FA3F0;font-weight:700;">Open the group</a>` : ""}`
+    : "";
 
   const sell = v.plan
     ? `<tr><td style="padding:4px 32px 6px;"><div style="background:#E8F6EF;border-radius:12px;padding:16px 18px;">
@@ -69,7 +76,7 @@ export function verifiedEmail(v: VerifiedEmailInput): { subject: string; html: s
     <div style="margin-top:6px;font-size:24px;line-height:30px;font-weight:700;color:${EMAIL.ink};">${escapeHtml(title)}</div>
     ${p("Your <b>Verified Member</b> badge is now live on your page and on every plan you send. Homeowners can see it from today.", "margin-top:10px;")}
   </td></tr>
-  ${founding ? `<tr><td style="padding:18px 32px 4px;"><div style="background:${EMAIL.navy};border-radius:12px;padding:16px 18px;font-size:14px;line-height:21px;color:#ffffff;">${founding.replace("<b>FOUNDING", '<b style="font-size:11px;letter-spacing:1.2px;color:#3DD68C;">FOUNDING')}</div></td></tr>` : ""}
+  ${founding ? `<tr><td style="padding:18px 32px 4px;"><div style="background:${EMAIL.navy};border-radius:12px;padding:16px 18px;font-size:14px;line-height:21px;color:#ffffff;">${founding.replace("<b>FOUNDING", '<b style="font-size:11px;letter-spacing:1.2px;color:#3DD68C;">FOUNDING')}${foundingTag}</div></td></tr>` : ""}
   <tr><td align="center" style="padding:20px 32px 10px;">${p("The fastest way to your first customer: <b>you're already sat on them.</b>")}</td></tr>
   <tr><td style="padding:0 32px 4px;">${emailButton(open("customers"), "Send your plans to your last 10 customers", { color: EMAIL.money })}</td></tr>
   <tr><td align="center" style="padding:0 32px 14px;font-size:12px;color:${EMAIL.muted};">Takes about a minute. We send them for you.</td></tr>
