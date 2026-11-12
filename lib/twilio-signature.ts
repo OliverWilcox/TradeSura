@@ -25,15 +25,22 @@ export function webhookKeyMatches(url: string): boolean {
   return given.length === expected.length && timingSafeEqual(given, expected);
 }
 
-/** Whether a webhook request came from Twilio: the URL's secret key, or Twilio's signature. */
+/**
+ * Whether a webhook request came from Twilio: the secret key on the address
+ * the request actually arrived at, or Twilio's signature over that address or
+ * one we gave Twilio (signedUrls). The key is never taken from signedUrls:
+ * those are our own addresses and always carry it.
+ */
 export function twilioWebhookCheck(
-  urls: string[],
+  requestUrl: string,
+  signedUrls: string[],
   params: URLSearchParams,
   signature: string | null,
 ): "ok" | "not_configured" | "forbidden" {
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (!authToken && !process.env.TWILIO_WEBHOOK_KEY) return "not_configured";
-  if (urls.some(webhookKeyMatches)) return "ok";
+  if (webhookKeyMatches(requestUrl)) return "ok";
+  const urls = [requestUrl, ...signedUrls];
   if (authToken && signature && urls.some((url) => verifyTwilioSignature(url, params, signature, authToken))) return "ok";
   return "forbidden";
 }

@@ -15,8 +15,8 @@ const FAILED = new Set(["undelivered", "failed"]);
 
 export async function POST(req: Request) {
   const params = new URLSearchParams(await req.text());
-  const signedUrls = [smsStatusCallbackUrl(), req.url].filter((u): u is string => !!u);
-  const check = twilioWebhookCheck(signedUrls, params, req.headers.get("x-twilio-signature"));
+  const signedUrls = [smsStatusCallbackUrl()].filter((u): u is string => !!u);
+  const check = twilioWebhookCheck(req.url, signedUrls, params, req.headers.get("x-twilio-signature"));
   if (check === "not_configured") return NextResponse.json({ error: "not configured" }, { status: 500 });
   if (check === "forbidden") return NextResponse.json({ error: "invalid signature" }, { status: 403 });
 

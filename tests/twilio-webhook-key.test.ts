@@ -68,6 +68,12 @@ describe("without the Auth Token", () => {
     expect(m.smsUpdate).toHaveBeenCalled();
   });
 
+  it("delivery reports without the key are refused", async () => {
+    const body = "MessageSid=SM1&MessageStatus=failed";
+    expect((await status(req("https://tradesura.com/api/webhooks/sms-status", body))).status).toBe(403);
+    expect((await status(req("https://tradesura.com/api/webhooks/sms-status?key=nope", body))).status).toBe(403);
+  });
+
   it("WhatsApp replies are checked the same way", async () => {
     expect((await whatsapp(req("https://tradesura.com/api/webhooks/whatsapp-inbound?key=nope", "From=whatsapp%3A%2B447700900123&Body=STOP"))).status).toBe(403);
     expect((await whatsapp(req(`https://tradesura.com/api/webhooks/whatsapp-inbound?key=${KEY}`, "From=whatsapp%3A%2B447700900123&Body=STOP"))).status).toBe(200);

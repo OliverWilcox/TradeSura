@@ -18,7 +18,7 @@ const twiml = (body?: string) =>
 
 export async function POST(req: Request) {
   const params = new URLSearchParams(await req.text());
-  const check = twilioWebhookCheck([req.url], params, req.headers.get("x-twilio-signature"));
+  const check = twilioWebhookCheck(req.url, [], params, req.headers.get("x-twilio-signature"));
   if (check === "not_configured") return NextResponse.json({ error: "not configured" }, { status: 500 });
   if (check === "forbidden") return NextResponse.json({ error: "invalid signature" }, { status: 403 });
 
