@@ -9,9 +9,8 @@ import { postcodeDistrict } from "@/lib/retention";
 import { LISTED_ENGINEER_WHERE } from "@/lib/town";
 import { foundingMemberIds } from "@/lib/founding";
 
-// 30 Oct update §10 — "first pick of homeowner leads in their town
-// (enquiries offered to that town's Founding Members first for about 2
-// hours)". Every other enquiry is addressed to one engineer and is never
+// 30 Oct update §10 — "first pick of homeowner leads in their town";
+// the window is 24 hours (Matt, 12 Nov: "We agreed 24 hours"). Every other enquiry is addressed to one engineer and is never
 // redirected; this is the only kind of lead that isn't: a homeowner on a
 // town page asking for "a gas engineer near you". Founding Members in the
 // town see it first; after the window it opens to every listed engineer in
@@ -19,7 +18,7 @@ import { foundingMemberIds } from "@/lib/founding";
 
 /** Admin setting (AppSetting) for the Founding-first window, in minutes. */
 export const FOUNDING_FIRST_MINUTES_KEY = "town_lead_founding_minutes";
-export const DEFAULT_FOUNDING_FIRST_MINUTES = 120;
+export const DEFAULT_FOUNDING_FIRST_MINUTES = 24 * 60;
 /** Unclaimed requests stop showing after this, so the list never fills with stale ones. */
 export const LEAD_SHOWN_DAYS = 14;
 

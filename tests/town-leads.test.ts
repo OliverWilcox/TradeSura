@@ -100,10 +100,10 @@ describe("who can see a request", () => {
     expect(leadTeaser({ name: "Pat Hughes", postcode: "HD9 2AB" })).toBe("Pat in HD9");
   });
 
-  it("reads the admin window, falling back to 2 hours", () => {
+  it("reads the admin window, falling back to 24 hours", () => {
     expect(foundingFirstMinutesFrom("90")).toBe(90);
     expect(foundingFirstMinutesFrom("nonsense")).toBe(DEFAULT_FOUNDING_FIRST_MINUTES);
-    expect(foundingFirstMinutesFrom(undefined)).toBe(120);
+    expect(foundingFirstMinutesFrom(undefined)).toBe(1440);
   });
 });
 
@@ -111,9 +111,9 @@ describe("a new request", () => {
   it("goes to the town's Founding Members first, for the window", async () => {
     await createTownLead(input, now);
     expect(m.created?.openedAt).toBeNull();
-    expect(m.created?.foundingUntil).toEqual(mins(120));
+    expect(m.created?.foundingUntil).toEqual(mins(1440));
     expect(m.notify.mock.calls.map((c) => c[0])).toEqual(["f1"]);
-    expect(m.notify.mock.calls[0][2]).toEqual({ template: "town_lead_founding", vars: ["Holmfirth", "Pat in HD9", "2 hours"] });
+    expect(m.notify.mock.calls[0][2]).toEqual({ template: "town_lead_founding", vars: ["Holmfirth", "Pat in HD9", "24 hours"] });
   });
 
   it("opens to everyone at once when the town has no Founding Members", async () => {

@@ -82,7 +82,7 @@ export const WHATSAPP_TEMPLATES = {
   },
   town_lead_founding: {
     text: "TradeSura: new homeowner request in {{1}} ({{2}}). As a Founding Member you get first pick for {{3}}. Open the app to claim it.",
-    example: ["Holmfirth", "Pat in HD9", "2 hours"],
+    example: ["Holmfirth", "Pat in HD9", "24 hours"],
   },
   town_lead_open: {
     text: "TradeSura: new homeowner request in {{1}} ({{2}}). The first engineer to claim it gets it. Open the app to claim it.",
