@@ -1,5 +1,5 @@
-// Stripe integration. Engineer = Connect account (Custom for new engineers, see customAccountsOn; older ones Express), the settlement
-// merchant, via on_behalf_of). Customer plans are monthly subscriptions
+// Stripe integration. Engineer = Connect account (Custom for new engineers, see customAccountsOn; older ones Express) as the settlement
+// merchant, via on_behalf_of. Customer plans are monthly subscriptions
 // created on the platform as destination charges, with TradeSura's 20% taken
 // as an application fee and the balance transferred to the engineer's
 // connected account. Funds only ever pass through the platform to the
