@@ -19,8 +19,11 @@ import { pounds } from "@/lib/retention";
 // A destination charge transfers the whole collection to the engineer and
 // Stripe takes our 20% back from them as the application fee, so reversing
 // the transfer takes the whole claim from the engineer while TradeSura keeps
-// its fee, as Matt's rule says. Stripe's own dispute fee still lands on
-// TradeSura's balance until the Stripe set-up (section 12) says otherwise.
+// its fee, as Matt's rule says. Stripe's own dispute fee (£5 for Bacs) is
+// the engineer's too (Matt, 12 Nov): it's pulled from their Stripe balance
+// with an account debit. That can't come off the transfer, which only ever
+// held the collection itself. Stripe keeps the fee even when a claim is
+// overturned, so it isn't handed back.
 
 function chargeIdOf(dispute: Stripe.Dispute): string {
   return typeof dispute.charge === "string" ? dispute.charge : dispute.charge.id;
@@ -45,11 +48,16 @@ async function planForCharge(charge: Stripe.Charge) {
   });
 }
 
+/** Stripe's fee for this dispute, from the balance transactions it raised. */
+export function disputeFeePence(dispute: Stripe.Dispute): number {
+  return (dispute.balance_transactions ?? []).reduce((sum, bt) => sum + Math.max(0, bt.fee ?? 0), 0);
+}
+
 async function tellTeam(subject: string, lines: string[]) {
   await sendEmail({
     to: process.env.DISPUTE_ALERT_EMAIL || SUPPORT_EMAIL,
     subject,
-    html: lines.map((l) => `<p>${escapeHtml(l)}</p>`).join(""),
+    html: lines.filter(Boolean).map((l) => `<p>${escapeHtml(l)}</p>`).join(""),
   }).catch((err) => console.error("[disputes] team email failed:", err));
 }
 
@@ -63,9 +71,11 @@ export async function handleDisputeCreated(dispute: Stripe.Dispute) {
   // still on the transfer (never more than the claim).
   let reversedPence = 0;
   let reversalId: string | null = null;
+  let engineerAccount: string | null = null;
   const transferId = typeof charge.transfer === "string" ? charge.transfer : charge.transfer?.id;
   if (transferId) {
     const transfer = await stripe.transfers.retrieve(transferId);
+    engineerAccount = typeof transfer.destination === "string" ? transfer.destination : (transfer.destination?.id ?? null);
     const amount = Math.min(dispute.amount, transfer.amount - transfer.amount_reversed);
     if (amount > 0) {
       const reversal = await stripe.transfers.createReversal(
@@ -78,6 +88,27 @@ export async function handleDisputeCreated(dispute: Stripe.Dispute) {
     }
   }
 
+  // Stripe's dispute fee, debited from the engineer's balance. A refusal
+  // (usually not enough available yet) mustn't fail the webhook: the team is
+  // asked to recover it instead.
+  const feePence = disputeFeePence(dispute);
+  let feeDebitId: string | null = null;
+  let feeDebitFailed = false;
+  if (feePence > 0 && engineerAccount) {
+    try {
+      const platform = await stripe.accounts.retrieveCurrent();
+      const debit = await stripe.transfers.create(
+        { amount: feePence, currency: dispute.currency, destination: platform.id, metadata: { disputeId: dispute.id, kind: "dispute_fee" } },
+        { stripeAccount: engineerAccount, idempotencyKey: `dispute-fee:${dispute.id}` },
+      );
+      feeDebitId = debit.id;
+    } catch (err) {
+      console.error(`[disputes] fee debit for ${dispute.id} failed:`, err);
+      feeDebitFailed = true;
+    }
+  }
+  const takenPence = reversedPence + (feeDebitId ? feePence : 0);
+
   await prisma.planDispute.create({
     data: {
       stripeDisputeId: dispute.id,
@@ -89,6 +120,8 @@ export async function handleDisputeCreated(dispute: Stripe.Dispute) {
       status: dispute.status,
       reversedPence,
       reversalId,
+      feePence,
+      feeDebitId,
     },
   });
   await track("payment_disputed", { type: "SYSTEM" }, {
@@ -97,12 +130,13 @@ export async function handleDisputeCreated(dispute: Stripe.Dispute) {
     disputeId: dispute.id,
     amountPence: dispute.amount,
     reversedPence,
+    feePence: feeDebitId ? feePence : 0,
     reason: dispute.reason,
   });
 
   const customer = plan ? `${plan.customer.firstName} ${plan.customer.lastName}` : null;
   if (plan) {
-    const line = `${plan.customer.firstName} ${plan.customer.lastName} has claimed back a ${pounds(dispute.amount)} Direct Debit payment through their bank. ${reversedPence > 0 ? `The ${pounds(reversedPence)} comes back out of your next payout. ` : ""}If the claim is overturned, it comes back to you.`;
+    const line = `${plan.customer.firstName} ${plan.customer.lastName} has claimed back a ${pounds(dispute.amount)} Direct Debit payment through their bank. ${takenPence > 0 ? `The ${pounds(takenPence)}${feeDebitId ? ` (including Stripe's ${pounds(feePence)} claim fee)` : ""} comes back out of your next payout. ` : ""}If the claim is overturned, the payment comes back to you.`;
     await sendPushNotification(plan.engineerId, "A payment was claimed back", line, { planId: plan.id }).catch(() => {});
     await notifyEngineer(plan.engineerId, `TradeSura: ${line}`).catch(() => {});
   }
@@ -110,6 +144,13 @@ export async function handleDisputeCreated(dispute: Stripe.Dispute) {
     `A ${pounds(dispute.amount)} collection was claimed back or disputed (${dispute.reason ?? "no reason given"}).`,
     plan ? `Plan ${plan.ref ?? plan.id}, ${customer}.` : `No plan found for charge ${charge.id}.`,
     reversedPence > 0 ? `${pounds(reversedPence)} has been taken back from the engineer (our fee is kept).` : "Nothing was reversed from the engineer.",
+    feeDebitId
+      ? `Stripe's ${pounds(feePence)} dispute fee was taken from the engineer's Stripe balance.`
+      : feeDebitFailed
+        ? `ACTION: Stripe refused taking the ${pounds(feePence)} dispute fee from the engineer's balance (usually not enough available yet). Recover it from them by hand.`
+        : feePence > 0
+          ? `Stripe's ${pounds(feePence)} dispute fee couldn't be matched to an engineer account.`
+          : "",
     `Stripe dispute ${dispute.id}.`,
   ]);
 }

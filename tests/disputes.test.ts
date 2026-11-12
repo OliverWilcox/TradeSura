@@ -11,6 +11,7 @@ const m = vi.hoisted(() => ({
     invoicePayments: { list: vi.fn() },
     invoices: { retrieve: vi.fn() },
     transfers: { retrieve: vi.fn(), createReversal: vi.fn(), create: vi.fn() },
+    accounts: { retrieveCurrent: vi.fn(async () => ({ id: "acct_platform" })) },
   },
   notify: vi.fn(async () => true),
   push: vi.fn(async () => {}),
@@ -123,5 +124,34 @@ describe("a won claim Stripe won't pay back yet", () => {
     expect(m.rows.get("dp_1")).toMatchObject({ status: "won", returnedTransferId: null });
     const html = (m.email.mock.calls.at(-1) as unknown as [{ html: string }])[0].html;
     expect(html).toContain("Send it to them from the Stripe dashboard");
+  });
+});
+
+describe("Stripe's dispute fee (Matt, 12 Nov)", () => {
+  const withFee = () => dispute({ balance_transactions: [{ fee: 500 } as Stripe.BalanceTransaction] });
+
+  it("is debited from the engineer's Stripe balance and included in what they're told", async () => {
+    await handleDisputeCreated(withFee());
+    expect(m.stripe.transfers.create).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 500, destination: "acct_platform" }),
+      { stripeAccount: "acct_e1", idempotencyKey: "dispute-fee:dp_1" },
+    );
+    expect(m.rows.get("dp_1")).toMatchObject({ feePence: 500, feeDebitId: "tr_back" });
+    expect(m.notify).toHaveBeenCalledWith("e1", expect.stringContaining("£18"));
+  });
+
+  it("asks the team to recover it if Stripe refuses, without failing the webhook", async () => {
+    m.stripe.transfers.create.mockRejectedValueOnce(new Error("insufficient funds"));
+    await expect(handleDisputeCreated(withFee())).resolves.toBeUndefined();
+    expect(m.rows.get("dp_1")).toMatchObject({ feePence: 500, feeDebitId: null });
+    expect(m.email).toHaveBeenCalledWith(expect.objectContaining({ html: expect.stringContaining("Recover it from them by hand") }));
+  });
+
+  it("isn't handed back when the claim is overturned", async () => {
+    await handleDisputeCreated(withFee());
+    m.stripe.transfers.create.mockClear();
+    await handleDisputeClosed({ ...withFee(), status: "won" } as Stripe.Dispute);
+    expect(m.stripe.transfers.create).toHaveBeenCalledTimes(1);
+    expect(m.stripe.transfers.create).toHaveBeenCalledWith(expect.objectContaining({ amount: 1300 }), expect.anything());
   });
 });

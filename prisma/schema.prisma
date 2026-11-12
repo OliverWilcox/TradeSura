@@ -935,6 +935,9 @@ model PlanDispute {
   // The engineer's share taken back (a transfer reversal), and its id.
   reversedPence      Int       @default(0)
   reversalId         String?
+  // Stripe's dispute fee, debited from the engineer's balance (Matt, 12 Nov).
+  feePence           Int       @default(0)
+  feeDebitId         String?
   // When a claim is overturned: the transfer giving the share back.
   returnedTransferId String?
   createdAt          DateTime  @default(now())
