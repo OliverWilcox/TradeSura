@@ -11,6 +11,7 @@ import { Icon, type IconName } from "@/components/icon";
 import { StripeBadge } from "@/components/stripe-badge";
 import { PayoutTimeline } from "@/components/payout-timeline";
 import { useSetupExit } from "@/lib/setup-exit";
+import { StripeOnboarding, embeddedOnboardingAvailable } from "@/components/stripe-onboarding";
 
 // 2026 Build Guide TARGET_pre_stripe — "Get paid every Friday". Sets
 // expectations before handing over to Stripe's hosted onboarding: how the
@@ -49,11 +50,37 @@ export default function GetPaid() {
   const [error, setError] = useState<string | null>(null);
   // Set after coming back from Stripe without payments switched on.
   const [returned, setReturned] = useState(false);
+  // Matt, 12 Nov — Stripe's form inside this screen (web build, Custom accounts).
+  const [embedded, setEmbedded] = useState<{ clientSecret: string; publishableKey: string } | null>(null);
+
+  // Same as coming back from the hosted form: read the account's status, never reset.
+  async function afterForm(finished: boolean, recheck = false) {
+    let fresh = await refreshMe();
+    // Stripe switches payments on a few seconds after the in-app form's
+    // final submit, so look once more before showing "In review".
+    if (recheck && fresh?.stripeState !== "ready") {
+      await new Promise((r) => setTimeout(r, 5000));
+      fresh = await refreshMe();
+    }
+    if (fresh?.stripeState === "ready") router.replace("/payments-ready");
+    else if (finished || fresh?.stripeState === "needs_more") setReturned(true);
+  }
 
   async function connectStripe() {
     setBusy(true);
     setError(null);
     try {
+      if (embeddedOnboardingAvailable) {
+        await prepared.current;
+        const s = await api<{ mode: "embedded" | "hosted"; clientSecret?: string; publishableKey?: string }>(
+          "/api/stripe/onboarding-session",
+          { method: "POST" },
+        );
+        if (s.mode === "embedded" && s.clientSecret && s.publishableKey) {
+          setEmbedded({ clientSecret: s.clientSecret, publishableKey: s.publishableKey });
+          return;
+        }
+      }
       // Build Guide v2 review 17 Sept, B3 — see lib/stripe.ts's
       // getConnectLinkWithRetry for why a single retry belongs here.
       // Never race the background set-up into a second account.
@@ -66,13 +93,9 @@ export default function GetPaid() {
       });
       const err = stripeResultError(result);
       if (err) setError(err);
-      else {
-        // Build Review 3 — read the account's status on every way back
-        // (finished, "Return to TradeSura", or closing the sheet), never reset.
-        const fresh = await refreshMe();
-        if (fresh?.stripeState === "ready") router.replace("/payments-ready");
-        else if (result.type === "success" || fresh?.stripeState === "needs_more") setReturned(true);
-      }
+      // Build Review 3 — read the account's status on every way back
+      // (finished, "Return to TradeSura", or closing the sheet), never reset.
+      else await afterForm(result.type === "success");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't start payment setup.");
     } finally {
@@ -85,8 +108,13 @@ export default function GetPaid() {
   // no checklist, no "Finish with Stripe", just the way back to setup.
   const reviewing =
     state === "checking" || Boolean(me?.stripeConnected && !me?.stripePayoutsEnabled && state !== "needs_more");
-  const cta =
-    state === "needs_more"
+  const cta = embeddedOnboardingAvailable
+    ? state === "needs_more"
+      ? "Add the missing detail"
+      : me?.stripeDetailsSubmitted || state === "half"
+        ? "Finish setting up payments"
+        : "Set up payments"
+    : state === "needs_more"
       ? "Go back to Stripe"
       : me?.stripeDetailsSubmitted || state === "half"
         ? "Finish with Stripe"
@@ -195,7 +223,18 @@ export default function GetPaid() {
           </Text>
         )}
 
-        {reviewing ? (
+        {embedded ? (
+          <View className="overflow-hidden rounded-2xl border border-line-strong bg-panel p-3">
+            <StripeOnboarding
+              clientSecret={embedded.clientSecret}
+              publishableKey={embedded.publishableKey}
+              onExit={() => {
+                setEmbedded(null);
+                afterForm(true, true).catch(() => {});
+              }}
+            />
+          </View>
+        ) : reviewing ? (
           <Button onPress={() => exit(() => router.navigate("/onboarding"))}>Back to setup</Button>
         ) : (
           <>

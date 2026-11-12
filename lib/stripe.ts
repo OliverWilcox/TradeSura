@@ -1,4 +1,4 @@
-// Stripe integration. Engineer = Connect Express account (the settlement
+// Stripe integration. Engineer = Connect account (Custom for new engineers, see customAccountsOn; older ones Express), the settlement
 // merchant, via on_behalf_of). Customer plans are monthly subscriptions
 // created on the platform as destination charges, with TradeSura's 20% taken
 // as an application fee and the balance transferred to the engineer's
@@ -275,11 +275,23 @@ function prefillParams(e: ConnectEngineer) {
   };
 }
 
+// Matt, 12 Nov — "the engineer never sees Stripe". New engineers get accounts
+// with no Stripe Dashboard, so TradeSura (not Stripe) collects their details:
+// the Custom configuration in Accounts v2 terms (dashboard "none" plus
+// losses on the platform). No Stripe login, no Stripe emails to the engineer,
+// and the onboarding form sits inside the app (createOnboardingSession).
+// Nothing to switch on in Stripe; checked in test mode 12 Nov. Existing
+// Express accounts stay as they are: an account's dashboard can't change.
+// STRIPE_CUSTOM_ACCOUNTS=0 goes back to Express for new accounts.
+export function customAccountsOn(): boolean {
+  return process.env.STRIPE_CUSTOM_ACCOUNTS !== "0";
+}
+
 function baseCreateParams(e: ConnectEngineer): Stripe.V2.Core.AccountCreateParams {
   return {
     contact_email: e.email,
     display_name: e.tradingName?.trim() || undefined,
-    dashboard: "express",
+    dashboard: customAccountsOn() ? "none" : "express",
     identity: {
       country: "gb",
       entity_type: e.businessType ? IDENTITY_ENTITY_TYPE[e.businessType] : undefined,
@@ -481,6 +493,29 @@ export async function createAccountOnboardingLink(
     },
   });
   return link.url;
+}
+
+/** Whether TradeSura collects this account's details (a Custom account), so its form can sit in the app. */
+export async function platformCollectsDetails(accountId: string): Promise<boolean> {
+  const a = await getStripe().v2.core.accounts.retrieve(accountId, { include: ["defaults"] });
+  return a.defaults?.responsibilities?.requirements_collector === "application";
+}
+
+// The client secret for Stripe's onboarding form embedded in the app. Only
+// for accounts TradeSura collects for: there Stripe's own sign-in step can be
+// switched off (Stripe refuses it for Express accounts), so the engineer
+// never logs in to Stripe. Same "only what's due now" as the hosted link.
+export async function createOnboardingSession(accountId: string): Promise<string> {
+  const session = await getStripe().accountSessions.create({
+    account: accountId,
+    components: {
+      account_onboarding: {
+        enabled: true,
+        features: { disable_stripe_user_authentication: true, external_account_collection: true },
+      },
+    },
+  });
+  return session.client_secret;
 }
 
 export type ConnectAccountStatus = {
