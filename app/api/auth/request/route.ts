@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { findReferrer } from "@/lib/referral-code";
 import { verifyToken } from "@/lib/auth";
 import { issueSignInCode, maskEmail, sessionToken, signInCodesEnabled } from "@/lib/sign-in-code";
 import { uniqueSlug } from "@/lib/slug";
 import { track } from "@/lib/track";
-import { normaliseClaimCode, resolveClaimCode } from "@/lib/claim";
+import { claimCodeWhere, resolveClaimCode } from "@/lib/claim";
 import { sendEmail } from "@/lib/email";
 import { engineerWelcomeEmailHtml } from "@/lib/engineer-welcome-email";
 import { notifyEngineer } from "@/lib/sms";
@@ -15,7 +16,9 @@ import { queueCardAlert } from "@/lib/card-alert";
 import { sendPushNotification } from "@/lib/push";
 import {
   COMPANY_NUMBER,
+  GAS_SAFE_LICENCE_NO,
   GAS_SAFE_NO,
+  GAS_SAFE_REGISTRATION_NO,
   UK_POSTCODE,
   normaliseCompanyNumber,
   normalisePostcode,
@@ -29,8 +32,9 @@ const AddressInput = z.object({
 
 // Everything the sign-up wizard (steps 1-3) collects.
 const SignupData = z.object({
-  firstName: z.string().min(2).max(60),
-  lastName: z.string().min(2).max(60),
+  // Trimmed, so a name of spaces can't make a "Name not given" account (Matt, 4 Nov).
+  firstName: z.string().trim().min(2).max(60),
+  lastName: z.string().trim().min(2).max(60),
   emailToken: z.string().min(1),
   smsSignInEnabled: z.boolean().default(false),
   phoneToken: z.string().min(1), // from /api/onboarding/phone/verify
@@ -47,6 +51,15 @@ const SignupData = z.object({
     .max(20)
     .transform((v) => v.replace(/\s/g, ""))
     .pipe(z.string().regex(GAS_SAFE_NO)),
+  // The business's Gas Safe registration number, beside the engineer's own
+  // licence number above (Matt, 4 Nov). Builds that send it send a 7-digit
+  // licence; older builds send one number and leave this out.
+  gasSafeRegistrationNo: z
+    .string()
+    .max(20)
+    .transform((v) => v.replace(/\s/g, ""))
+    .pipe(z.string().regex(GAS_SAFE_REGISTRATION_NO))
+    .optional(),
   gasSafeCardToken: z.string().max(2000).optional(),
   // The ID card's expiry, given with the photo (YYYY-MM-DD, not yet passed).
   gasSafeCardExpiresOn: cardExpiry.optional(),
@@ -97,6 +110,9 @@ const SignupData = z.object({
 const Body = z.object({
   email: z.string().email().max(200),
   signup: SignupData.superRefine((d, ctx) => {
+    if (d.gasSafeRegistrationNo && !GAS_SAFE_LICENCE_NO.test(d.gasSafeNo)) {
+      ctx.addIssue({ code: "custom", path: ["gasSafeNo"], message: "licence" });
+    }
     if (d.tradingName.length < 2 && !(d.businessType !== "sole_trader" && (d.legalName?.length ?? 0) >= 2)) {
       ctx.addIssue({ code: "custom", path: ["tradingName"], message: "required" });
     }
@@ -141,7 +157,8 @@ const FIELD_ERRORS: Record<string, FieldError> = {
     error: "Choose how you'd like to sign in on step 1, then try again.",
     field: "phone",
   },
-  gasSafeNo: { error: "Gas Safe numbers are 1 to 7 digits.", field: "gasSafeNo" },
+  gasSafeNo: { error: "Your licence number is the 7 digits on the front of your Gas Safe ID card.", field: "gasSafeNo" },
+  gasSafeRegistrationNo: { error: "Enter the business's Gas Safe registration number, as it's shown on your ID card.", field: "gasSafeRegistrationNo" },
   gasSafeCardToken: {
     error: "Your ID card photo didn't come through — add it again on step 2.",
     field: "gasSafeCard",
@@ -438,6 +455,7 @@ export async function POST(req: Request) {
           marketingConsent: rest.marketingConsent,
           setupTextConsentAt: rest.setupTextConsent ? new Date() : null,
           gasSafeNo: rest.gasSafeNo,
+          gasSafeRegistrationNo: rest.gasSafeRegistrationNo ?? null,
           gasSafeCardUrl,
           gasSafeCardExpiresOn: gasSafeCardUrl && rest.gasSafeCardExpiresOn ? rest.gasSafeCardExpiresOn : null,
           // Into the admin queue — the badge is granted by a person
@@ -515,8 +533,8 @@ export async function POST(req: Request) {
 
     if (rest.claimCode && claim?.valid) {
       await prisma.claimCode
-        .update({
-          where: { code: normaliseClaimCode(rest.claimCode) },
+        .updateMany({
+          where: claimCodeWhere(rest.claimCode),
           data: { redeemedByEngineerId: engineer.id, redeemedAt: new Date() },
         })
         .catch(() => {
@@ -526,11 +544,10 @@ export async function POST(req: Request) {
     }
 
     try {
-    // E10 — link the referrer by slug (self-referral is ignored).
+    // E10 — link the referrer by their code (SMITH25), or the slug older
+    // links carry (self-referral is ignored).
     if (attribution.referralCode) {
-      const referrer = await prisma.engineer.findUnique({
-        where: { slug: attribution.referralCode.toLowerCase() },
-      });
+      const referrer = await findReferrer(attribution.referralCode);
       if (referrer && referrer.id !== engineer.id) {
         engineer = await prisma.engineer.update({
           where: { id: engineer.id },

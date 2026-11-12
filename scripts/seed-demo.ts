@@ -8,11 +8,8 @@
 // Refuses to run against anything but a database on this machine.
 import "dotenv/config";
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { parse } from "csv-parse/sync";
 import { fakerEN_GB as faker } from "@faker-js/faker";
 import { prisma } from "../lib/db";
-import { normaliseRegNo } from "../lib/gas-safe";
 import { CLAUSE_TEMPLATES, TRADESURA_FEE_RATE } from "../lib/clauses";
 import { snapshotTier } from "../lib/plan-tier";
 import { EDITABLE_SETTINGS } from "../lib/admin-metrics";
@@ -74,19 +71,7 @@ async function reset() {
   await prisma.$executeRawUnsafe(`TRUNCATE ${rows.map((r) => `"public"."${r.tablename}"`).join(", ")} RESTART IDENTITY CASCADE`);
 }
 
-/** The sample register (data/gas_safe.csv), as `npm run import:gas-safe` loads it. Some tests read it. */
-async function seedSampleRegister() {
-  const rows: Record<string, string>[] = parse(readFileSync("data/gas_safe.csv", "utf8"), { columns: true, skip_empty_lines: true, trim: true });
-  for (const row of rows) {
-    const regNo = normaliseRegNo(row.reg_no ?? "");
-    if (!regNo) continue;
-    const data = { name: row.name ?? "", company: row.company ?? "", categories: row.categories ?? "" };
-    await prisma.gasSafeRecord.upsert({ where: { regNo }, update: data, create: { regNo, ...data } });
-  }
-}
-
 async function seedLibrary() {
-  await seedSampleRegister();
   for (const [i, c] of CLAUSE_TEMPLATES.entries()) {
     const row = {
       title: c.title,
@@ -131,13 +116,12 @@ async function main() {
 
   const library = await seedLibrary();
   const engineers: Prisma.EngineerCreateManyInput[] = [];
-  const gasSafe: Prisma.GasSafeRecordCreateManyInput[] = [];
   const events: Prisma.EventCreateManyInput[] = [];
   const claimCodes: Prisma.ClaimCodeCreateManyInput[] = [];
   const active: EngineerPlan[] = [];
   const verifiedSoFar: { id: string; createdAt: Date }[] = [];
   let phone = 0;
-  // Seven digits, clear of the six-digit sample register in data/gas_safe.csv.
+  // Seven digits, like a Gas Safe licence number.
   let regNo = 3_100_000;
 
   // --- Engineers: ~150 owners, faster growth recently ---------------------
@@ -170,25 +154,12 @@ async function main() {
       if (batch) {
         const code = `TS-${faker.string.numeric(5)}`;
         attribution.letterBatch = batch;
-        attribution.referralCode = code;
         claimCodes.push({ code, firstName, businessName: trading, letterBatch: batch, variantCell: pick(["A", "B", "C", "D"]), redeemedByEngineerId: id, redeemedAt: createdAt });
       }
     }
     if (channel === "engineer") {
       const earlier = verifiedSoFar.filter((v) => v.createdAt < createdAt);
       if (earlier.length) referrerId = pick(earlier).id;
-    }
-    if (number) {
-      const onRegister = chance(0.9);
-      if (onRegister) {
-        const mismatch = chance(0.06);
-        gasSafe.push({
-          regNo: number,
-          name: `${(mismatch ? faker.person.firstName() : firstName)[0]}. ${mismatch ? faker.person.lastName() : lastName}`,
-          company: trading,
-          categories: chance(0.3) ? "Domestic: boilers, gas fires, cookers" : "Domestic: boilers",
-        });
-      }
     }
     const packRequested = verified && chance(0.65);
     engineers.push({
@@ -258,12 +229,25 @@ async function main() {
   Object.assign(toBan, { bannedAt: daysAgo(20), banReason: "Signed up customers without their agreement" });
   Object.assign(toLeave, { leftAt: daysAgo(12) });
 
+  // The checks behind going live (Matt, 4 Nov): most live engineers passed
+  // the register check a day after the card; the newest eight are still due,
+  // one is due a re-check and one was suspended. Every other one gave the
+  // business's registration number. By position, not faker, so the rest of
+  // the seed stays as it was.
+  for (const [n, e] of verifiedRows.entries()) {
+    if (n % 2 === 0) e.gasSafeRegistrationNo = String(500_000 + n);
+    const checked = after(e.gasSafeVerifiedAt as Date, 1);
+    if (n < verifiedRows.length - 8 && checked.getTime() < NOW) e.gasSafeRegisterCheckedAt = checked;
+  }
+  const [toRecheck, toSuspend] = verifiedRows.filter((e) => e.gasSafeRegisterCheckedAt && !e.pausedAt && !e.bannedAt && !e.leftAt);
+  Object.assign(toRecheck, { gasSafeRecheckRequestedAt: daysAgo(1), gasSafeRecheckReason: "New card uploaded" });
+  Object.assign(toSuspend, { gasSafeVerifiedAt: null, gasSafeRejectedAt: daysAgo(3), gasSafeSuspendedAt: daysAgo(3), gasSafeRejectReason: "Not on the Gas Safe Register" });
+
   // Referrers are linked once every row exists (the column points at Engineer).
   await prisma.engineer.createMany({ data: engineers.map((e) => ({ ...e, referrerId: null })) });
   for (const e of engineers.filter((x) => x.referrerId)) {
     await prisma.engineer.update({ where: { id: e.id! }, data: { referrerId: e.referrerId } });
   }
-  await prisma.gasSafeRecord.createMany({ data: gasSafe, skipDuplicates: true });
 
   // Staff on some company accounts (Build Review 2, section 8).
   const staffRows: Prisma.EngineerCreateManyInput[] = [];
@@ -282,6 +266,7 @@ async function main() {
       ownerId: owner.id,
       gasSafeNo: String(regNo++),
       gasSafeVerifiedAt: after(createdAt, 1),
+      gasSafeRegisterCheckedAt: after(createdAt, 2).getTime() < NOW ? after(createdAt, 2) : null,
       createdAt,
     });
   }

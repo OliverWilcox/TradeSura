@@ -1,14 +1,14 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/db";
 import { displayName } from "@/lib/engineer";
-import { cardAlertEmail } from "@/lib/card-alert-email";
+import { cardAlertEmail, type CardFrom } from "@/lib/card-alert-email";
 import { emailConfigured, sendEmail } from "@/lib/email";
 import { textStaff } from "@/lib/sms";
 import { track } from "@/lib/track";
 
 // 3.2: the instant alert to the team (Matt) when an engineer uploads their
-// Gas Safe ID card, at sign-up or later in Settings, so the check happens
-// within the hour the chase email promises. By email to
+// Gas Safe ID card, at sign-up or later in Settings, so it's checked against
+// the Gas Safe Register the same day (Matt, 4 Nov). By email to
 // VERIFICATION_ALERT_EMAIL and by text to VERIFICATION_ALERT_SMS (each may
 // list several, comma-separated); either unset is skipped. The check page
 // link needs ADMIN_APP_URL. Nothing about the engineer beyond their business
@@ -21,7 +21,7 @@ export function cardAlertRecipients() {
   return { emails: list(process.env.VERIFICATION_ALERT_EMAIL), mobiles: list(process.env.VERIFICATION_ALERT_SMS) };
 }
 
-export async function alertCardUpload(engineerId: string, from: "signup" | "settings") {
+export async function alertCardUpload(engineerId: string, from: CardFrom) {
   const { emails, mobiles } = cardAlertRecipients();
   if (!emails.length && !mobiles.length) return;
   const e = await prisma.engineer.findUnique({ where: { id: engineerId }, select: { tradingName: true, legalName: true, slug: true, gasSafeNo: true } });
@@ -51,7 +51,7 @@ export async function alertCardUpload(engineerId: string, from: "signup" | "sett
 }
 
 /** Sends the alert once the upload has been answered (Next's after()), or straight away outside a request (scripts, tests). */
-export function queueCardAlert(engineerId: string, from: "signup" | "settings"): Promise<void> | void {
+export function queueCardAlert(engineerId: string, from: CardFrom): Promise<void> | void {
   const task = () => alertCardUpload(engineerId, from).catch((err) => console.error("[card-alert] failed:", err));
   try {
     after(task);

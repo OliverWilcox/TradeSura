@@ -18,7 +18,7 @@ beforeEach(async () => {
   await resetDb();
 });
 
-const ltd = { businessType: "ltd", companyNumber: "12345678", gasSafeVerifiedAt: new Date(), packRequestedAt: new Date() };
+const ltd = { businessType: "ltd", companyNumber: "12345678", gasSafeVerifiedAt: new Date(), gasSafeRegisterCheckedAt: new Date(), packRequestedAt: new Date() };
 const checks = async () => Object.fromEntries((await call(list)).body.items.map((i: { id: string; addressCheck: string }) => [i.id, i.addressCheck]));
 
 it("blocks a limited company's pack addressed to its registered office", async () => {
@@ -49,11 +49,16 @@ it("counts the packs matching the search that won't print, past the page, only w
   companies.answers = false;
   await makeEngineer({ ...ltd, tradingName: "Holme Heating", packAddress: "Unit 2, Station Road\nHolmfirth\nHD9 2TT" });
   await makeEngineer({ ...ltd, tradingName: "Holme Gas", packAddress: null });
-  await makeEngineer({ ...ltd, tradingName: "Holme Boilers", businessType: "sole_trader", companyNumber: null, packAddress: "3 Mill Lane\nLeeds\nLS1 4AB" });
+  const printable = await makeEngineer({ ...ltd, tradingName: "Holme Boilers", businessType: "sole_trader", companyNumber: null, packAddress: "3 Mill Lane\nLeeds\nLS1 4AB" });
+  const plan = await prisma.planTier.create({ data: { engineerId: printable.id, name: "Boiler Care", priceMonthlyPence: 1250, sortOrder: 0, status: "LIVE" } });
   await makeEngineer({ ...ltd, tradingName: "Leeds Plumbing", packAddress: null });
 
   const asked = await call(list, { query: { count: "wont_print", q: "Holme", size: "1" } });
   expect(asked.body).toMatchObject({ total: 3, wontPrint: 2 });
+  // No live plan for the cover letter's lines: that won't print either (Matt, 4 Nov).
+  await prisma.planTier.update({ where: { id: plan.id }, data: { status: "STOPPED" } });
+  expect((await call(list, { query: { count: "wont_print", q: "Holme" } })).body.wontPrint).toBe(3);
+  await prisma.planTier.update({ where: { id: plan.id }, data: { status: "LIVE" } });
   expect(asked.body.items).toHaveLength(1);
   expect((await call(list, { query: { count: "wont_print" } })).body.wontPrint).toBe(3);
   expect((await call(list)).body.wontPrint).toBeNull();

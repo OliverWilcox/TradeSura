@@ -15,6 +15,7 @@ const engineer = {
   tradingName: "MW Heating",
   legalName: "TRADESURA LTD",
   slug: "mw-heating",
+  referralCode: "WOOD25",
   packRequestedAt: null,
   stripeChargesEnabled: false,
   profilePublishedAt: null,

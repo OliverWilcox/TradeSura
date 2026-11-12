@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { GET as statsRoute } from "@/app/api/admin/v1/dashboard/stats/route";
 import { GET as signupsRoute } from "@/app/api/admin/v1/dashboard/signups/route";
@@ -53,7 +53,7 @@ describe("the client's dashboard", () => {
     // 2.3: a cohort, in the spec's order, each step inside the one before.
     expect(steps(funnel.body)).toEqual([
       ["Signed up", 4],
-      ["Verified", 3],
+      ["Gone live", 3],
       ["First plan live", 3],
       ["Payments set up", 2],
       ["First payment", 1],
@@ -192,6 +192,11 @@ describe("an offer's delivery and a customer's status", () => {
 
 describe("the client's lists", () => {
   it("agree with the dashboard on customers, payments and who's active", async () => {
+    // The fixture is the client's data on 31 October 2026: "the last 7 days" is counted from then.
+    vi.useFakeTimers({ now: new Date("2026-10-31T12:00:00Z"), toFake: ["Date"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const f = await clientFixture();
     const customers = (await call(customersRoute, { query: { engineerId: f.md.id, size: "50" } })).body.items;
     const byName = Object.fromEntries(customers.map((c: { name: string }) => [c.name, c]));
@@ -238,7 +243,8 @@ describe("a customer's record", () => {
     expect(sam.firstPaymentAt).toBeNull();
     const oliver = (await call(customerRoute, { params: { customerId: f.oliver.id } })).body;
     expect(oliver.payments.map((p: { amountPence: number }) => p.amountPence)).toEqual([1200]);
-    expect(oliver).toMatchObject({ status: "active", source: "doorstep", firstPaymentAt: "2026-10-29T09:00:00.000Z" });
+    // Added at the door, but joined from the engineer's offer link (Matt, 4 Nov: Matthew Wood).
+    expect(oliver).toMatchObject({ status: "active", source: "offer_link", firstPaymentAt: "2026-10-29T09:00:00.000Z" });
   });
 
   // 5.5: built from the events, not "Nothing yet".
@@ -255,10 +261,11 @@ describe("a customer's record", () => {
     await prisma.cancelRequest.create({ data: { planId: f.oliverPlan.id, engineerId: f.md.id, reason: "too_expensive", offer: "cheaper_plan", outcome: "cancelled", createdAt: new Date("2026-10-29T12:00:00Z") } });
     const items = (await call(customerActivityRoute, { params: { customerId: f.oliver.id } })).body.items;
     // The payment is the invoice (the £0 trial left out); "plan started" comes from the plan.
-    expect(items.map((i: { name: string }) => i.name)).toEqual(["plan_cancelled", "cancel_requested", "payment_confirmed", "mandate_active", "plan_live", "signup_opened", "offer_sent"]);
-    expect(items[1].detail).toMatchObject({ reason: "too_expensive", offer: "cheaper_plan", outcome: "cancelled" });
-    expect(items[2]).toMatchObject({ id: "invoice:in_oliver_1", detail: { amountPence: 1200 } });
-    expect(items[6].detail.channel).toBe("sms");
+    // The engineer is alerted the moment a customer starts to cancel (Matt, 4 Nov).
+    expect(items.map((i: { name: string }) => i.name)).toEqual(["plan_cancelled", "engineer_alerted", "cancel_requested", "payment_confirmed", "mandate_active", "plan_live", "signup_opened", "offer_sent"]);
+    expect(items[2].detail).toMatchObject({ reason: "too_expensive", offer: "cheaper_plan", outcome: "cancelled" });
+    expect(items[3]).toMatchObject({ id: "invoice:in_oliver_1", detail: { amountPence: 1200 } });
+    expect(items[7].detail.channel).toBe("sms");
   });
 
   // QA-04: the app records only the first payment as an event; the timeline lists what the payment history lists.

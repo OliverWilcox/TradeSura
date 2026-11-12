@@ -6,6 +6,7 @@ import { appUrl } from "@/lib/app-url";
 import { sendSms, smsConfigured } from "@/lib/sms";
 import type { NotSent } from "@/lib/admin/verifications";
 import { parseWinbackOffer, winbackBody, winbackSettingKey } from "@/lib/retention";
+import { reasonList } from "@/lib/visit-reasons";
 import { adminEvent } from "@/lib/admin-api/audit";
 import { bounded, likeTerm } from "@/lib/admin-api/db";
 import { conflict, notFound } from "@/lib/admin-api/route";
@@ -104,13 +105,29 @@ const PLAN_SELECT = {
   paymentFailedAt: true,
   paymentRecoveredAt: true,
   tier: { select: { name: true, priceMonthlyPence: true } },
+  visitReason: true,
   cancellations: { orderBy: { createdAt: "desc" as const }, take: 1, select: { reason: true } },
 } satisfies Prisma.PlanSelect;
+
+/**
+ * How the customer came to TradeSura (Matt, 4 Nov): from the engineer's
+ * offer link when an offer went to them, whatever page they finished on;
+ * otherwise as they were added: at the job (doorstep), the engineer's
+ * website, or added to the engineer's book (contacts, an import, by hand).
+ */
+export type CustomerSource = "offer_link" | "at_the_job" | "website" | "added";
+export function customerSource(source: string, offered: boolean): CustomerSource {
+  if (offered) return "offer_link";
+  return source === "doorstep" ? "at_the_job" : source === "web" ? "website" : "added";
+}
+
+/** Visit reasons by code, with the labels the app shows. */
+const visitReasonLabels = () => reasonList().then((list) => new Map(list.map((r) => [r.reason, r.label])));
 
 const LIST_INCLUDE = {
   engineer: { select: { id: true, tradingName: true, legalName: true, slug: true } },
   // The first home added; the postcode sort uses the same one.
-  properties: { select: { town: true, postcode: true }, orderBy: { id: "asc" }, take: 1 },
+  properties: { select: { town: true, postcode: true, _count: { select: { appliances: true } }, passport: { select: { _count: { select: { appliances: true } } } } }, orderBy: { id: "asc" }, take: 1 },
   plans: { select: PLAN_SELECT },
 } satisfies Prisma.CustomerInclude;
 
@@ -122,12 +139,13 @@ const EVERYONE: TestMarks = { engineers: [], customers: [] };
 /** What a list answer needs for its rows: who's test data, and each current plan's offer and payments. */
 async function rowFacts(rows: ListRow[]) {
   const planIds = rows.flatMap((r) => r.plans.map((p) => p.id));
-  const [marks, sent, paid] = await Promise.all([
+  const [marks, sent, paid, reasons] = await Promise.all([
     testMarks(),
     planIds.length ? offers(EVERYONE, { planIds }) : [],
     planIds.length ? payments(EVERYONE, { planIds }) : [],
+    visitReasonLabels(),
   ]);
-  return { marks, offerByPlan: new Map(sent.map((o) => [o.planId, o])), firstPaid: firstPaidByPlan(paid) };
+  return { marks, offerByPlan: new Map(sent.map((o) => [o.planId, o])), firstPaid: firstPaidByPlan(paid), reasons };
 }
 type RowFacts = Awaited<ReturnType<typeof rowFacts>>;
 
@@ -234,7 +252,10 @@ function listItem(c: ListRow, facts: RowFacts) {
     status: statusOf(plan, facts),
     firstPaymentAt: firstPaid?.toISOString() ?? null,
     isTest: facts.marks.customers.includes(c.id) || facts.marks.engineers.includes(c.engineerId),
-    source: c.source,
+    source: customerSource(c.source, c.plans.some((p) => facts.offerByPlan.has(p.id))),
+    visitReason: plan?.visitReason ? (facts.reasons.get(plan.visitReason) ?? plan.visitReason) : null,
+    /** A boiler on their home, registered by the engineer or on the Home Passport. */
+    boilerRegistered: c.properties.some((p) => p._count.appliances > 0 || (p.passport?._count.appliances ?? 0) > 0),
     addedAt: c.createdAt.toISOString(),
   };
 }
@@ -268,7 +289,14 @@ export async function getCustomer(id: string) {
       properties: {
         include: {
           appliances: { select: { id: true, make: true, model: true, type: true, installedAt: true, lastServicedAt: true } },
-          passport: { select: { id: true } },
+          passport: {
+            select: {
+              id: true,
+              appliances: { select: { id: true, make: true, model: true, type: true, installedAt: true, lastServicedAt: true } },
+              files: { orderBy: { createdAt: "desc" }, select: { id: true, kind: true, label: true, contentType: true, createdAt: true } },
+              _count: { select: { records: true } },
+            },
+          },
         },
       },
       plans: {
@@ -284,13 +312,22 @@ export async function getCustomer(id: string) {
   if (!c) return null;
   const iso = (d: Date | null) => d?.toISOString() ?? null;
   const planIds = c.plans.map((p) => p.id);
-  const [history, marks, sent, paid, suppressed, test] = await Promise.all([
+  const [history, marks, sent, paid, suppressed, test, reasons, winBackTexts] = await Promise.all([
     customerPayments(c.plans.map((p) => p.stripeSubscriptionId).filter((s): s is string => !!s)),
     testMarks(),
     planIds.length ? offers(EVERYONE, { planIds }) : [],
     planIds.length ? payments(EVERYONE, { planIds }) : [],
     isSuppressed("sms", c.phone),
     testMarkOf("customer", id),
+    visitReasonLabels(),
+    // The automatic win-backs (30 days after cancelling, and before winter) and any an admin sent.
+    planIds.length
+      ? prisma.outboundSms.findMany({
+          where: { OR: planIds.flatMap((pid) => [{ cancelKey: { startsWith: `winback:${pid}` } }, { cancelKey: `winback:admin:${pid}` }]) },
+          orderBy: { sendAfter: "asc" },
+          select: { id: true, cancelKey: true, status: true, sendAfter: true, sentAt: true, deliveredAt: true, failedAt: true },
+        })
+      : [],
   ]);
   const offerByPlan = new Map(sent.map((o) => [o.planId, o]));
   const firstPaid = firstPaidByPlan(paid);
@@ -308,7 +345,7 @@ export async function getCustomer(id: string) {
     test: { ...test, viaEngineer: marks.engineers.includes(c.engineerId) },
     winBack: winBackFor({ optedOut: c.smsOptOut || suppressed, plan: current, engineer: c.engineer }),
     stripeCustomerId: c.plans.find((p) => p.stripeCustomerId)?.stripeCustomerId ?? c.stripeCustomerId,
-    source: c.source,
+    source: customerSource(c.source, c.plans.some((p) => offerByPlan.has(p.id))),
     addedAt: c.createdAt.toISOString(),
     addedBy: c.addedBy ? { id: c.addedBy.id, name: [c.addedBy.firstName, c.addedBy.lastName].filter(Boolean).join(" ") } : null,
     engineer: { id: c.engineer.id, business: displayName(c.engineer) },
@@ -319,13 +356,35 @@ export async function getCustomer(id: string) {
       town: p.town,
       postcode: p.postcode,
       hasPassport: Boolean(p.passport),
-      appliances: p.appliances.map((a) => ({ ...a, installedAt: iso(a.installedAt), lastServicedAt: iso(a.lastServicedAt) })),
+      appliances: [...p.appliances, ...(p.passport?.appliances.filter((a) => !p.appliances.some((b) => b.id === a.id)) ?? [])].map((a) => ({
+        ...a,
+        installedAt: iso(a.installedAt),
+        lastServicedAt: iso(a.lastServicedAt),
+      })),
+      /** The Home Passport: photos and documents engineers added, and service records. Frozen, not removed, once the plan ends. */
+      passport: p.passport
+        ? {
+            files: p.passport.files.map((f) => ({ ...f, createdAt: f.createdAt.toISOString() })),
+            records: p.passport._count.records,
+            frozen: !!current && current.status === "CANCELLED",
+          }
+        : null,
+    })),
+    winBacks: winBackTexts.map((t) => ({
+      id: t.id,
+      kind: t.cancelKey?.startsWith("winback:admin:") ? ("admin" as const) : t.cancelKey?.endsWith(":winter") ? ("winter" as const) : ("30_days" as const),
+      status: t.status,
+      due: t.sendAfter.toISOString(),
+      sentAt: iso(t.sentAt),
+      deliveredAt: iso(t.deliveredAt),
+      failedAt: iso(t.failedAt),
     })),
     plans: c.plans.map((p) => ({
       id: p.id,
       ref: p.ref,
       status: p.status,
       tier: p.tier?.name ?? null,
+      visitReason: p.visitReason ? (reasons.get(p.visitReason) ?? p.visitReason) : null,
       options: agreedOptions(p.agreedTier),
       priceMonthlyPence: planPrice(p),
       offer: offerByPlan.has(p.id) ? { channel: offerByPlan.get(p.id)!.channel, sentAt: offerByPlan.get(p.id)!.sentAt.toISOString(), delivery: offerByPlan.get(p.id)!.delivery } : null,
@@ -478,13 +537,19 @@ export async function customerActivity(id: string, q: { page: number; size: numb
     ),
     // The retention screen: what they were offered and what they chose.
     ...plans.flatMap((p) =>
-      p.cancellations.map((x) => ({
-        id: x.id,
-        name: "cancel_requested",
-        at: x.createdAt,
-        actor: { type: x.source === "engineer_logged" ? ("ENGINEER" as const) : ("CUSTOMER" as const), id: null, name: null },
-        detail: detail({ reason: x.reason, offer: x.offer, outcome: x.outcome }),
-      })),
+      p.cancellations.flatMap((x) => [
+        {
+          id: x.id,
+          name: "cancel_requested",
+          at: x.createdAt,
+          actor: { type: x.source === "engineer_logged" ? ("ENGINEER" as const) : ("CUSTOMER" as const), id: null, name: null },
+          detail: detail({ reason: x.reason, offer: x.offer, outcome: x.outcome }),
+        },
+        // The app texts and pushes the engineer the moment a customer starts to cancel (lib/cancel-plan.ts).
+        ...(x.source === "engineer_logged"
+          ? []
+          : [{ id: `${x.id}:alerted`, name: "engineer_alerted", at: new Date(x.createdAt.getTime() + 1), actor: { type: "SYSTEM" as const, id: null, name: null }, detail: detail({ reason: x.reason }) }]),
+      ]),
     ),
   ].sort((a, b) => b.at.getTime() - a.at.getTime());
   const page = items.slice((q.page - 1) * q.size, q.page * q.size).map((i) => ({ ...i, at: i.at.toISOString() }));

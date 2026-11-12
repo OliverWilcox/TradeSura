@@ -69,10 +69,13 @@ describe("setup-texts switch", () => {
     const data = (m.engineerUpdate.mock.calls[0] as unknown as [{ data: Record<string, unknown> }])[0].data;
     expect(Object.keys(data)).toEqual(["setupTextConsentAt"]);
     expect(data.setupTextConsentAt).toBeInstanceOf(Date);
+    // The change of mind goes on the Activity tab (Matt, 4 Nov).
+    expect(m.track).toHaveBeenCalledWith("setup_texts_opted_in", { type: "ENGINEER", id: "e1" }, { via: "account" });
   });
 
-  it("turning it off clears it", async () => {
+  it("turning it off clears it; the same answer again records nothing", async () => {
     await patchSettings(new Request("http://x", { method: "PATCH", body: JSON.stringify({ setupTextConsent: false }) }));
     expect((m.engineerUpdate.mock.calls[0] as unknown as [{ data: Record<string, unknown> }])[0].data).toEqual({ setupTextConsentAt: null });
+    expect(m.track).not.toHaveBeenCalled();
   });
 });

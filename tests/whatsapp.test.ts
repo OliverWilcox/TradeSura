@@ -68,8 +68,12 @@ describe("notifyEngineer channel", () => {
     vi.stubEnv("TWILIO_SMS_NUMBER", "+447700900000");
     vi.stubEnv("TWILIO_WHATSAPP_FROM", "+447700900111");
     vi.stubEnv("TWILIO_WHATSAPP_TEMPLATES", JSON.stringify({ plan_kept: SID, gas_safe_verified: SID }));
+    // Midday today, outside quiet hours, so a message goes now whenever the tests run.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(new Date().setUTCHours(12, 0, 0, 0)));
   });
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });

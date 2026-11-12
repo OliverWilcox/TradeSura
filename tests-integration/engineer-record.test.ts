@@ -3,7 +3,8 @@ import { prisma } from "@/lib/db";
 import { GET as detail } from "@/app/api/admin/v1/engineers/[engineerId]/route";
 import { PUT as putAddresses } from "@/app/api/admin/v1/engineers/[engineerId]/addresses/route";
 import { GET as packs } from "@/app/api/admin/v1/member-packs/route";
-import { GET as settings } from "@/app/api/settings/route";
+import { GET as activity } from "@/app/api/admin/v1/engineers/[engineerId]/activity/route";
+import { GET as settings, PATCH as patchSettings } from "@/app/api/settings/route";
 import { PUT as putOwnAddresses } from "@/app/api/settings/addresses/route";
 import { saveAddresses } from "@/lib/addresses";
 import { applyAddressCopy, planAddressCopy } from "@/lib/admin/address-copy";
@@ -44,6 +45,7 @@ const md302 = (data: Parameters<typeof makeEngineer>[0] = {}) =>
     serviceArea: "Holmfirth, Huddersfield, HD9",
     town: null,
     gasSafeVerifiedAt: daysAgo(2),
+    gasSafeRegisterCheckedAt: daysAgo(2),
     ...data,
   });
 
@@ -109,7 +111,7 @@ describe("ER.1: three addresses", () => {
     expect(res.status).toBe(200);
     expect((await prisma.engineerTradingAddress.findUniqueOrThrow({ where: { engineerId: e.id } })).source).toBe("engineer");
     const mine = (await call(settings, { token: null })).body;
-    expect(mine.addresses).toEqual({
+    expect(mine.addresses).toMatchObject({
       trading: { lines: HOLMFIRTH.lines, town: "Holmfirth", postcode: "HD9 2TT" },
       correspondence: "Unit 4, Holmfirth Mill\nHuddersfield Road\nHolmfirth\nHD9 2TT",
       correspondenceSameAsTrading: true,
@@ -165,16 +167,33 @@ describe("ER.2: contact and source", () => {
     const e = await makeEngineer();
     expect((await call(detail, { params: { engineerId: e.id } })).body.contact.setupTextConsentAt).toBeNull();
   });
+
+  it("puts a change of mind about setup texts on the Activity tab, once per change", async () => {
+    const e = await makeEngineer();
+    session.engineerId = e.id;
+    for (const setupTextConsent of [true, true, false]) {
+      expect((await call(patchSettings, { method: "PATCH", token: null, body: { setupTextConsent } })).status).toBe(200);
+    }
+    expect((await call(patchSettings, { method: "PATCH", token: null, body: { tradingName: "Hartley Heating", setupTextConsent: true } })).status).toBe(200);
+    const rows = (await call(activity, { params: { engineerId: e.id } })).body.items as { name: string; actor: { name: string | null } }[];
+    expect(rows.filter((r) => r.name.startsWith("setup_texts")).map((r) => r.name)).toEqual(["setup_texts_opted_in", "setup_texts_opted_out", "setup_texts_opted_in"]);
+    expect(rows.find((r) => r.name === "setup_texts_opted_in")!.actor.name).toMatch(/\(engineer\)$/);
+  });
 });
 
-describe("ER.3: Founding, the chase and the cancel rate", () => {
-  it("works them out from the same offers and plans as everything else", async () => {
+describe("ER.3: Founding, the follow-up ladder and the cancel rate", () => {
+  it("reads Founding from the app's own record, and works the rest out from the same offers and plans as everything else", async () => {
     await prisma.townPage.create({ data: { slug: "holmfirth", name: "Holmfirth" } });
-    const inHolmfirth = { town: "Holmfirth", townSlug: "holmfirth", packRequestedAt: daysAgo(1) };
+    const inHolmfirth = { town: "Holmfirth", townSlug: "holmfirth", packRequestedAt: daysAgo(1), gasSafeRegisterCheckedAt: daysAgo(100) };
     const first = await makeEngineer({ ...inHolmfirth, gasSafeVerifiedAt: daysAgo(100) });
     const lapsed = await makeEngineer({ ...inHolmfirth, gasSafeVerifiedAt: daysAgo(90) });
-    const newest = await makeEngineer({ ...inHolmfirth, gasSafeVerifiedAt: daysAgo(20) });
-    await prisma.event.create({ data: { name: "plan_live", actorType: "ENGINEER", actorId: first.id, ts: daysAgo(95) } });
+    const newest = await makeEngineer({ ...inHolmfirth, gasSafeVerifiedAt: daysAgo(40) });
+    await prisma.topSpot.create({ data: { townSlug: "holmfirth", engineerId: first.id, heldFrom: daysAgo(95) } });
+    await prisma.topSpot.create({ data: { townSlug: "holmfirth", engineerId: lapsed.id, heldFrom: daysAgo(90), releasedAt: daysAgo(30), releaseReason: "no_customer" } });
+    const spot = await prisma.topSpot.create({ data: { townSlug: "holmfirth", engineerId: newest.id, heldFrom: daysAgo(35) } });
+    await prisma.event.create({ data: { name: "top_spot_reminder", actorType: "SYSTEM", meta: { spotId: spot.id, engineerId: newest.id, days: 30 } } });
+    // The lapsed engineer claimed their letter in time: still a Founding Member.
+    await prisma.claimCode.create({ data: { code: "TS-11111", firstName: "Dave", businessName: "Lapsed", letterBatch: "B1", variantCell: "A", redeemedByEngineerId: lapsed.id, redeemedAt: daysAgo(91), claimedAt: daysAgo(91), createdAt: daysAgo(92) } });
 
     // The first engineer: an offer by text three days ago (delivered), an
     // unopened WhatsApp one yesterday (not confirmed), and a cancellation.
@@ -190,49 +209,63 @@ describe("ER.3: Founding, the chase and the cancel rate", () => {
     });
 
     const [a, b, c] = await Promise.all([first, lapsed, newest].map(async (e) => (await call(detail, { params: { engineerId: e.id } })).body));
-    expect(a.founding).toMatchObject({ state: "top_spot", town: "Holmfirth", position: 1, kept: true, spotsPerTown: 3, clockDays: 60 });
-    expect(b.founding).toMatchObject({ state: "released", town: "Holmfirth" });
-    expect(c.founding).toMatchObject({ state: "badge", position: 2, kept: false });
+    expect(a.founding).toMatchObject({ member: true, label: "Founding · top spot", town: "Holmfirth", spot: { state: "holding", position: 1, kept: true }, rules: { spotsPerTown: 3, spotDays: 60, reminderDays: [30, 14, 7, 2] } });
+    expect(b.founding).toMatchObject({ member: true, label: "Founding", spot: { state: "released", reason: "no_customer" } });
+    expect(c.founding).toMatchObject({ label: "Founding · top spot", spot: { state: "holding", position: 2, daysLeft: 25, kept: false, remindersSent: [30] } });
 
     expect(a.offersLast7Days).toBe(1);
-    expect(a.chase).toMatchObject({ countingFrom: "last_offer", days: 3, step: null });
-    expect(c.chase).toMatchObject({ countingFrom: "verified", lastDeliveredOfferAt: null, days: 20, step: { step: 2, label: "First call" } });
-    expect(a.cancelRate).toMatchObject({ cancelled: 1, live: 1, percent: 50, windowDays: 90, flagAbovePercent: 6, flagged: true });
+    expect(a.chase).toMatchObject({ countingFrom: "last_offer", days: 3, step: { step: 1, label: "Push" } });
+    expect(c.chase).toMatchObject({ countingFrom: "live", lastDeliveredOfferAt: null, days: 40, step: { step: 4, label: "Call list" } });
+    // 50% is the average here, and 2 customers is under the 10 the flag needs.
+    expect(a.cancelRate).toMatchObject({ cancelled: 1, live: 1, percent: 50, windowDays: 90, averagePercent: 50, flagged: false });
 
     const versions = Object.fromEntries((await call(packs)).body.items.map((i: { id: string; version: unknown }) => [i.id, i.version]));
-    expect(versions[first.id]).toEqual({ kind: "founding", town: "Holmfirth" });
-    expect(versions[lapsed.id]).toEqual({ kind: "standard", town: null });
+    expect(versions[first.id]).toBe("Founding · top spot");
+    expect(versions[lapsed.id]).toBe("Founding");
   });
 
-  it("has no Founding spot without a town, and no chase while paused", async () => {
+  it("flags a cancel rate only past the 4 Nov rule: 10 customers, 2 cancellations, double the average", async () => {
+    const steady = await makeEngineer({ gasSafeVerifiedAt: daysAgo(200) });
+    for (let i = 0; i < 18; i++) await makePlan(steady.id, (await makeCustomer(steady.id)).id);
+    await makePlan(steady.id, (await makeCustomer(steady.id)).id, { status: "CANCELLED", activatedAt: daysAgo(60), cancelledAt: daysAgo(5) });
+    const leaky = await makeEngineer({ gasSafeVerifiedAt: daysAgo(200) });
+    for (let i = 0; i < 7; i++) await makePlan(leaky.id, (await makeCustomer(leaky.id)).id);
+    for (let i = 0; i < 3; i++) await makePlan(leaky.id, (await makeCustomer(leaky.id)).id, { status: "CANCELLED", activatedAt: daysAgo(60), cancelledAt: daysAgo(5) });
+    const rate = async (id: string) => (await call(detail, { params: { engineerId: id } })).body.cancelRate;
+    // 4 of 29 overall (13.8%); leaky is 3 of 10 (30%), more than double.
+    expect(await rate(leaky.id)).toMatchObject({ percent: 30, averagePercent: 13.8, flagged: true });
+    expect(await rate(steady.id)).toMatchObject({ percent: 5.3, flagged: false });
+  });
+
+  it("has no Founding without a spot or a letter, and no follow-up while paused", async () => {
     const e = await makeEngineer({ gasSafeVerifiedAt: daysAgo(30), pausedAt: daysAgo(1), town: null });
     const r = (await call(detail, { params: { engineerId: e.id } })).body;
-    expect(r.founding).toMatchObject({ state: "no_town" });
+    expect(r.founding).toMatchObject({ member: false, label: "Standard", spot: null });
     expect(r.chase).toBeNull();
   });
 });
 
 describe("ER.4: the Gas Safe card", () => {
-  it("shows the register's details, the card, qualifications and the next register check", async () => {
+  it("shows both numbers, the card, qualifications and the next register check", async () => {
     const e = await makeEngineer({
-      gasSafeName: "Dave Smith",
-      gasSafeCompany: "Smith Heating",
+      gasSafeNo: "1234567",
+      gasSafeRegistrationNo: "584123",
       gasSafeCategories: "Domestic natural gas",
       gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/card.png",
       gasSafeCardExpiresOn: new Date("2027-01-31"),
       gasSafeVerifiedAt: new Date("2026-06-01T10:00:00Z"),
+      gasSafeRegisterCheckedAt: new Date("2026-06-01T15:00:00Z"),
       qualificationConfirmations: { GAS_FIRE_SERVICE: "2026-06-02" },
     });
     const r = (await call(detail, { params: { engineerId: e.id } })).body;
     expect(r.gasSafe).toEqual({
-      number: e.gasSafeNo,
-      registerName: "Dave Smith",
-      registerCompany: "Smith Heating",
+      licenceNo: "1234567",
+      registrationNo: "584123",
       categories: "Domestic natural gas",
       cardOnFile: true,
       cardExpiresOn: "2027-01-31",
       qualifications: [{ code: "GAS_FIRE_SERVICE", title: expect.any(String), confirmedAt: "2026-06-02" }],
-      nextRegisterCheck: "2027-01-31",
+      nextRegisterCheck: "2027-02-14",
     });
   });
 });

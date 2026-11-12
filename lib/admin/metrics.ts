@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { computeApplicationFeePence } from "@/lib/stripe";
 import { bounded } from "@/lib/admin-api/db";
-import { CANCEL_RATE_FLAG_KEY, DEFAULT_CANCEL_RATE_FLAG, cancelRatePercent } from "@/lib/admin-metrics";
+import { cancelRatePercent } from "@/lib/admin-metrics";
 
 // The admin's numbers, each defined once. Every count and status the admin
 // app shows (dashboard cards, the funnel, lists, record pages) comes from
@@ -245,21 +245,20 @@ export async function lastDeliveredOffers(marks: TestMarks, engineerIds: string[
 }
 
 /**
- * The call ladder: how TradeSura chases a verified engineer who's stopped
- * sending offers, by whole days since their last delivered offer (or since
- * they were verified, if they've never sent one). The first step comes when
- * they stop being active. A default until the client's spec gives the steps.
+ * The follow-up ladder (Matt, 4 Nov): how TradeSura follows up an engineer
+ * who's stopped sending offers, by whole days since their last delivered
+ * offer (or since they went live, if they've never sent one).
  */
 export const CALL_LADDER = [
-  { step: 1, label: "Reminder text", fromDays: ACTIVE_WINDOW_DAYS },
-  { step: 2, label: "First call", fromDays: 14 },
-  { step: 3, label: "Second call", fromDays: 21 },
-  { step: 4, label: "Final call", fromDays: 30 },
+  { step: 1, label: "Push", channel: "push", fromDays: 3 },
+  { step: 2, label: "WhatsApp", channel: "whatsapp", fromDays: 5 },
+  { step: 3, label: "Email", channel: "email", fromDays: 7 },
+  { step: 4, label: "Call list", channel: "call", fromDays: 10 },
 ] as const;
 
 export type LadderStep = (typeof CALL_LADDER)[number];
 
-/** The ladder step for so many days without a delivered offer; null while they're active. */
+/** The ladder step for so many days without a delivered offer; null before the first step. */
 export function ladderStep(days: number): LadderStep | null {
   return [...CALL_LADDER].reverse().find((s) => days >= s.fromDays) ?? null;
 }
@@ -271,22 +270,67 @@ export const daysBetween = (from: Date, to: Date) => Math.floor((to.getTime() - 
 export const CANCEL_RATE_WINDOW_DAYS = 90;
 
 /**
- * An engineer's cancel rate, by the app's own cancelRatePercent
- * (lib/admin-metrics.ts): real plans that had gone live and were cancelled in
- * the window, over those plus the plans live now. Flagged above the app's
- * "Flag cancel rate above (%)" setting.
+ * When a cancel rate is flagged (decided 4 Nov): over the window, at least
+ * minCustomers on a plan (live now, or cancelled in the window), at least
+ * minCancelled cancellations, and a rate more than timesAverage the average
+ * across all engineers. Replaces the fixed "above 6%".
  */
-export async function cancelRateOf(marks: TestMarks, engineerId: string, at = new Date()) {
+export const CANCEL_FLAG_RULE = { minCustomers: 10, minCancelled: 2, timesAverage: 2 } as const;
+
+/** Real plans that had gone live and were cancelled in the window, and plans live now, per engineer (or for everyone with no ids). */
+async function cancelCounts(marks: TestMarks, at: Date, engineerIds?: string[]) {
   const since = new Date(at.getTime() - CANCEL_RATE_WINDOW_DAYS * DAY_MS);
   const real = realPlanWhere(marks);
-  const [cancelled, live, setting] = await Promise.all([
-    prisma.plan.count({ where: { AND: [real, { engineerId, activatedAt: { not: null }, cancelledAt: { gte: since, lt: at } }] } }),
-    prisma.plan.count({ where: { AND: [real, { engineerId, status: { in: ["ACTIVE", "PAUSED"] } }] } }),
-    prisma.appSetting.findUnique({ where: { key: CANCEL_RATE_FLAG_KEY } }),
+  const only = engineerIds ? { engineerId: { in: engineerIds } } : {};
+  const [cancelled, live] = await Promise.all([
+    prisma.plan.groupBy({ by: ["engineerId"], where: { AND: [real, only, { activatedAt: { not: null }, cancelledAt: { gte: since, lt: at } }] }, _count: { _all: true } }),
+    prisma.plan.groupBy({ by: ["engineerId"], where: { AND: [real, only, { status: { in: ["ACTIVE", "PAUSED"] } }] }, _count: { _all: true } }),
   ]);
-  const flagAbove = setting && /^\d+$/.test(setting.value) ? Number(setting.value) : DEFAULT_CANCEL_RATE_FLAG;
-  const percent = cancelRatePercent(cancelled, live);
-  return { percent, cancelled, live, windowDays: CANCEL_RATE_WINDOW_DAYS, flagAbovePercent: flagAbove, flagged: percent !== null && percent > flagAbove };
+  return { cancelled: new Map(cancelled.map((c) => [c.engineerId, c._count._all])), live: new Map(live.map((l) => [l.engineerId, l._count._all])) };
+}
+
+/** The average cancel rate across all engineers: every real plan, pooled. */
+async function averageCancelRate(marks: TestMarks, at: Date) {
+  const all = await cancelCounts(marks, at);
+  const sum = (m: Map<string, number>) => [...m.values()].reduce((n, v) => n + v, 0);
+  return cancelRatePercent(sum(all.cancelled), sum(all.live));
+}
+
+export type CancelRate = {
+  percent: number | null;
+  cancelled: number;
+  live: number;
+  windowDays: number;
+  averagePercent: number | null;
+  rule: typeof CANCEL_FLAG_RULE;
+  flagged: boolean;
+};
+
+/**
+ * Engineers' cancel rates, by the app's own cancelRatePercent
+ * (lib/admin-metrics.ts): real plans that had gone live and were cancelled in
+ * the window, over those plus the plans live now. Flagged by CANCEL_FLAG_RULE.
+ */
+export async function cancelRates(marks: TestMarks, engineerIds: string[], at = new Date()): Promise<Map<string, CancelRate>> {
+  const [counts, averagePercent] = await Promise.all([cancelCounts(marks, at, engineerIds), averageCancelRate(marks, at)]);
+  return new Map(
+    engineerIds.map((id) => {
+      const cancelled = counts.cancelled.get(id) ?? 0;
+      const live = counts.live.get(id) ?? 0;
+      const percent = cancelRatePercent(cancelled, live);
+      const flagged =
+        percent !== null &&
+        averagePercent !== null &&
+        live + cancelled >= CANCEL_FLAG_RULE.minCustomers &&
+        cancelled >= CANCEL_FLAG_RULE.minCancelled &&
+        percent > CANCEL_FLAG_RULE.timesAverage * averagePercent;
+      return [id, { percent, cancelled, live, windowDays: CANCEL_RATE_WINDOW_DAYS, averagePercent, rule: CANCEL_FLAG_RULE, flagged }];
+    }),
+  );
+}
+
+export async function cancelRateOf(marks: TestMarks, engineerId: string, at = new Date()) {
+  return (await cancelRates(marks, [engineerId], at)).get(engineerId)!;
 }
 
 // --- The activation steps -------------------------------------------------------
@@ -302,7 +346,7 @@ export const FUNNEL_STEPS: readonly FunnelStep[] = ["signed_up", "verified", "pl
 
 export const STEP_LABELS: Record<FunnelStep, string> = {
   signed_up: "Signed up",
-  verified: "Verified",
+  verified: "Gone live",
   plan_live: "First plan live",
   payments_set_up: "Payments set up",
   first_payment: "First payment",

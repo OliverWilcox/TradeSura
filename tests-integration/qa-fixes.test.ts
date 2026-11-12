@@ -113,7 +113,7 @@ describe("M3: telling the engineer", () => {
       throw new Error("Expo is down");
     });
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    const e = await makeEngineer();
+    const e = await makeEngineer({ gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/card.png" });
     const res = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", reason: CHECKED } });
     log.mockRestore();
     expect(res.status).toBe(200);
@@ -183,14 +183,14 @@ describe("M4: sorting the customer list", () => {
 
 describe("M4: sorting the verification queue", () => {
   it("sorts by the business name as shown, waiting or decided", async () => {
-    const b = await makeEngineer({ tradingName: "Beta Gas" });
-    const a = await makeEngineer({ tradingName: null, legalName: "Alpha Ltd" });
+    const b = await makeEngineer({ tradingName: "Beta Gas", gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/card.png" });
+    const a = await makeEngineer({ tradingName: null, legalName: "Alpha Ltd", gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/card.png" });
     expect(ids(await call(verifications, { as: CHECKER, query: { tab: "pending", sort: "business" } }))).toEqual([a.id, b.id]);
     expect(ids(await call(verifications, { as: CHECKER, query: { tab: "pending", sort: "business", dir: "desc" } }))).toEqual([b.id, a.id]);
-    const d1 = await makeEngineer({ tradingName: "Delta", gasSafeVerifiedAt: new Date() });
+    const d1 = await makeEngineer({ tradingName: "Delta", gasSafeVerifiedAt: new Date(), gasSafeRegisterCheckedAt: new Date() });
     const c1 = await makeEngineer({ tradingName: "Charlie", gasSafeRejectedAt: new Date(), gasSafeRejectReason: "x" });
     expect(ids(await call(verifications, { as: CHECKER, query: { tab: "decided", sort: "business" } }))).toEqual([c1.id, d1.id]);
-    expect(ids(await call(verifications, { as: CHECKER, query: { tab: "verified", sort: "business" } }))).toEqual([d1.id]);
+    expect(ids(await call(verifications, { as: CHECKER, query: { tab: "decided", sort: "business", dir: "desc" } }))).toEqual([d1.id, c1.id]);
   });
 });
 
@@ -210,7 +210,7 @@ describe("M6: a stale view", () => {
   });
 
   it("still says it's already decided, rather than changed", async () => {
-    const e = await makeEngineer();
+    const e = await makeEngineer({ gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/card.png" });
     const { revision } = (await call(verification, { as: CHECKER, params: { engineerId: e.id } })).body;
     await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", reason: CHECKED } });
     const again = await call(decide, { as: other, params: { engineerId: e.id }, body: { decision: "approve", revision, reason: CHECKED } });
@@ -313,20 +313,20 @@ describe("member packs, for the admin's backend mode", () => {
   const requested = { packAddress: "1 High Street\nLeeds\nLS1 4AB", packRequestedAt: new Date("2026-10-01") };
 
   it("can be searched", async () => {
-    const a = await makeEngineer({ ...requested, gasSafeVerifiedAt: new Date(), tradingName: "Leeds Gas" });
-    await makeEngineer({ ...requested, packAddress: "2 Low Road\nYork\nYO1 1AA", gasSafeVerifiedAt: new Date() });
+    const a = await makeEngineer({ ...requested, gasSafeVerifiedAt: new Date(), gasSafeRegisterCheckedAt: new Date(), tradingName: "Leeds Gas" });
+    await makeEngineer({ ...requested, packAddress: "2 Low Road\nYork\nYO1 1AA", gasSafeVerifiedAt: new Date(), gasSafeRegisterCheckedAt: new Date() });
     expect(ids(await call(packs, { query: { q: "LS1" } }))).toEqual([a.id]);
     expect((await call(packs, { query: { q: "leeds gas" } })).body.items[0]).toMatchObject({ id: a.id, businessType: null });
   });
 
   it("can be marked posted together on a day, with the ones that can't go listed", async () => {
-    const ready = await makeEngineer({ ...requested, gasSafeVerifiedAt: new Date() });
+    const ready = await makeEngineer({ ...requested, gasSafeVerifiedAt: new Date(), gasSafeRegisterCheckedAt: new Date() });
     const unverified = await makeEngineer(requested);
     const res = await call(packsPosted, { body: { engineerIds: [ready.id, unverified.id, "nope"], postedOn: "2026-10-20" } });
     expect(res.status).toBe(200);
     expect(res.body.posted).toEqual([ready.id]);
     expect(res.body.skipped).toEqual([
-      { id: unverified.id, reason: "This pack can't go out until the engineer is Gas Safe verified." },
+      { id: unverified.id, reason: "This pack can't go out until the engineer is live." },
       { id: "nope", reason: "There's no engineer with that ID." },
     ]);
     expect((await prisma.engineer.findUniqueOrThrow({ where: { id: ready.id } })).packShippedAt?.toISOString()).toBe("2026-10-20T12:00:00.000Z");
@@ -336,7 +336,7 @@ describe("member packs, for the admin's backend mode", () => {
   });
 
   it("can't be posted on a day in the future", async () => {
-    const ready = await makeEngineer({ ...requested, gasSafeVerifiedAt: new Date() });
+    const ready = await makeEngineer({ ...requested, gasSafeVerifiedAt: new Date(), gasSafeRegisterCheckedAt: new Date() });
     expect((await call(packsPosted, { body: { engineerIds: [ready.id], postedOn: "2099-01-01" } })).status).toBe(400);
   });
 });

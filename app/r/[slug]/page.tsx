@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db";
+import { findReferrer } from "@/lib/referral-code";
 import { track } from "@/lib/track";
 import { btnClass } from "@/components/ui";
 
@@ -33,14 +33,16 @@ export default async function ReferralLanding({
   // lands here with src=profile; the sign-up is credited to that installer
   // through the same ref code as any invite.
   const src = (await searchParams)?.src === "profile" ? "profile" : undefined;
-  const referrer = await prisma.engineer.findUnique({ where: { slug } });
+  // tradesura.com/r/SMITH25 (Matt, 4 Nov), or a slug link shared before codes.
+  const referrer = await findReferrer(slug);
   if (!referrer || !referrer.tradingName) notFound();
+  const ref = referrer.referralCode ?? referrer.slug;
 
   await track("referral_link_opened", { type: "SYSTEM" }, { referrerId: referrer.id, ...(src ? { src } : {}) });
   // W0 — lands on the welcome screen first (personalised sub-line), not
   // straight on sign-up; it carries ref (and the real trading name, so the
   // screen doesn't have to guess one from the slug) through when continuing.
-  const appHref = `tradesura://welcome?ref=${encodeURIComponent(slug)}&name=${encodeURIComponent(referrer.tradingName)}${src ? `&src=${src}` : ""}`;
+  const appHref = `tradesura://welcome?ref=${encodeURIComponent(ref)}&name=${encodeURIComponent(referrer.tradingName)}${src ? `&src=${src}` : ""}`;
 
   return (
     <div className="flex flex-col max-w-md w-full mx-auto min-h-screen bg-panel">

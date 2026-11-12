@@ -59,7 +59,10 @@ components:
     engineerId: { name: engineerId, in: path, required: true, schema: { type: string } }
     customerId: { name: customerId, in: path, required: true, schema: { type: string } }
     noteId: { name: noteId, in: path, required: true, schema: { type: string } }
+    slug: { name: slug, in: path, required: true, schema: { type: string }, description: "The town's slug (holmfirth)" }
   schemas:
+    TownPageState: { type: string, enum: [public, held, not_public], description: "Public: on the web. Held: an admin is holding it back. Not public: nobody listed there yet." }
+    TownPerson: { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string } } }
     Error:
       type: object
       required: [error]
@@ -131,7 +134,6 @@ components:
         holderId: { type: string }
         holderName: { type: string }
         until: { type: string, format: date-time }
-    Register: { type: string, enum: [match, likely_match, name_mismatch, not_found], description: "The register's name against the applicant's (lib/admin/names.ts): likely_match is a short form, middle name or shared start." }
     NameMatch: { type: string, enum: [match, likely, none] }
     TypeMismatch: { type: string, enum: [name_says_company, type_says_company], description: "The name says Ltd, Limited, PLC or LLP and the type isn't a company, or the reverse." }
     CustomerStatus:
@@ -143,33 +145,43 @@ components:
     EngineerStatus: { type: string, enum: [active, inactive, paused, banned, left], description: "Banned, left or paused by standing; otherwise active with a delivered offer in the last 7 days (lib/admin/metrics.ts), else inactive." }
     EngineerStanding: { type: string, enum: [active, paused, banned, left] }
     PlanStatus: { type: string, enum: [PENDING, ACTIVE, PAUSED, CANCELLED] }
+    CheckStage: { type: string, enum: [not_submitted, no_card, card, register, recheck, passed, card_failed, suspended], description: "Live first (Matt, 4 Nov): no_card, card (card check waiting), register (live, register check due), recheck, passed, card_failed, suspended" }
+    CardCheck: { type: [string, "null"], enum: [waiting, passed, failed, no_card, null], description: passed means live }
+    RegisterCheck: { type: [string, "null"], enum: [due, recheck_due, passed, suspended, null], description: On the live Gas Safe Register, behind the card check }
     VerificationRow:
       type: object
-      required: [id, name, business, businessType, gasSafeNo, town, cardExpiry, submittedAt, waitingSince, status, decidedAt, rejectReason, claimedBy, signals]
+      required: [id, name, business, businessType, teamOf, licenceNo, registrationNo, town, cardExpiry, submittedAt, waitingSince, stage, cardCheck, registerCheck, liveSince, nextRecheck, recheckReason, decidedAt, rejectReason, claimedBy, canTextChase, signals]
       properties:
-        id: { type: string, description: The engineer's ID (an application is the engineer's) }
+        id: { type: string, description: The engineer's ID (a case is the engineer's) }
         name: { type: string }
         business: { type: string }
         businessType: { type: [string, "null"], description: sole_trader, ltd or partnership }
-        gasSafeNo: { type: [string, "null"] }
+        teamOf: { type: [string, "null"], description: The business a staff engineer works for }
+        licenceNo: { type: [string, "null"], description: "The engineer's 7-digit licence number" }
+        registrationNo: { type: [string, "null"], description: "The business's Gas Safe registration number (staff: the owner's). Before sign-up asked for both, a single number that isn't 7 digits is read as this." }
         town: { type: [string, "null"] }
         cardExpiry: { type: [string, "null"], format: date, description: "The ID card's expiry, given with the photo; null when not given" }
         submittedAt: { type: string, format: date-time }
-        waitingSince: { type: string, format: date-time, description: "Their latest card upload, or signing up" }
-        status: { $ref: "#/components/schemas/VerificationStatus" }
+        waitingSince: { type: [string, "null"], format: date-time, description: "What the waiting time runs from: the latest card upload (card), going live (register), the re-check falling due or being asked for (recheck)" }
+        stage: { $ref: "#/components/schemas/CheckStage" }
+        cardCheck: { $ref: "#/components/schemas/CardCheck" }
+        registerCheck: { $ref: "#/components/schemas/RegisterCheck" }
+        liveSince: { type: [string, "null"], format: date-time }
+        nextRecheck: { type: [string, "null"], format: date }
+        recheckReason: { type: [string, "null"] }
         decidedAt: { type: [string, "null"], format: date-time }
         rejectReason: { type: [string, "null"] }
         claimedBy: { type: [string, "null"], description: Who is checking it now }
+        canTextChase: { type: boolean }
         signals:
           type: object
-          required: [hasCard, register, companyNotActive, typeMismatch, duplicates, registerMismatchAtSignup]
+          required: [hasCard, cardExpiryFar, companyNotActive, typeMismatch, duplicates]
           properties:
             hasCard: { type: boolean }
-            register: { $ref: "#/components/schemas/Register" }
+            cardExpiryFar: { type: boolean, description: The card's expiry is more than 13 months away }
             companyNotActive: { type: boolean }
             typeMismatch: { oneOf: [{ $ref: "#/components/schemas/TypeMismatch" }, { type: "null" }] }
             duplicates: { type: integer }
-            registerMismatchAtSignup: { type: boolean }
     VerificationPage:
       allOf:
         - $ref: "#/components/schemas/Page"
@@ -179,17 +191,18 @@ components:
             items: { type: array, items: { $ref: "#/components/schemas/VerificationRow" } }
             counts:
               type: object
-              required: [new, duplicates, pending, verified, rejected, decided]
+              required: [card, register, no_card, recheck, duplicates, pending, decided]
               properties:
-                new: { type: integer }
+                card: { type: integer }
+                register: { type: integer }
+                no_card: { type: integer }
+                recheck: { type: integer }
                 duplicates: { type: integer }
                 pending: { type: integer }
-                verified: { type: integer }
-                rejected: { type: integer }
                 decided: { type: integer }
     VerificationDetail:
       type: object
-      required: [id, name, firstName, lastName, business, businessType, submittedAt, waitingSince, status, tab, revision, lock, gasSafe, submitted, contact, canTextChase, card, company, typeMismatch, duplicates, decision, queue, warnings]
+      required: [id, name, firstName, lastName, business, businessType, submittedAt, waitingSince, stage, tab, revision, lock, checks, history, gasSafe, submitted, contact, canTextChase, customersOnPlans, card, company, typeMismatch, duplicates, queue, warnings]
       properties:
         id: { type: string }
         name: { type: string }
@@ -201,34 +214,38 @@ components:
         businessType: { type: [string, "null"] }
         teamOf: { type: [object, "null"], properties: { id: { type: string }, business: { type: string } } }
         submittedAt: { type: string, format: date-time }
-        waitingSince: { type: string, format: date-time }
-        status: { $ref: "#/components/schemas/VerificationStatus" }
-        tab: { type: [string, "null"], enum: [new, duplicates, verified, rejected, null] }
-        revision: { type: string, description: "Changes whenever anything the check looks at changes. Send it with a decision: if it no longer matches, the decision is refused (409)." }
+        waitingSince: { type: [string, "null"], format: date-time }
+        stage: { $ref: "#/components/schemas/CheckStage" }
+        tab: { type: [string, "null"], enum: [card, register, no_card, recheck, decided, null] }
+        revision: { type: string, description: "Changes whenever anything the check looks at changes. Send it with a step: if it no longer matches, the step is refused (409)." }
         standing: { type: string }
         lock: { $ref: "#/components/schemas/Lock" }
+        checks:
+          type: object
+          properties:
+            card: { $ref: "#/components/schemas/CardCheck" }
+            register: { $ref: "#/components/schemas/RegisterCheck" }
+            liveSince: { type: [string, "null"], format: date-time }
+            registerCheckedAt: { type: [string, "null"], format: date-time }
+            nextRecheck: { type: [string, "null"], format: date, description: "Card expiry + 14 days, else a year after the last register check" }
+            recheckRequested: { type: [object, "null"], properties: { at: { type: string }, reason: { type: [string, "null"] } } }
+            suspended: { type: [object, "null"], properties: { at: { type: string }, reason: { type: [string, "null"] } } }
+            failedReason: { type: [string, "null"] }
+        history:
+          type: array
+          description: The check's steps, newest first
+          items: { type: object, properties: { kind: { type: string, enum: [card_passed, card_failed, register_passed, suspended, recheck_requested] }, at: { type: string }, byName: { type: [string, "null"] }, note: { type: [string, "null"] } } }
         gasSafe:
           type: object
-          required: [number, register, onRegister, registerUrl]
+          required: [licenceNo, registrationNo, registerUrl]
           properties:
-            number: { type: [string, "null"] }
-            register: { $ref: "#/components/schemas/Register" }
-            onRegister:
-              type: [object, "null"]
-              description: Our copy's record for the number. Address, postcode and card expiry are null unless the imported register file had them.
-              properties:
-                name: { type: string }
-                company: { type: string }
-                categories: { type: string }
-                address: { type: [string, "null"] }
-                postcode: { type: [string, "null"] }
-                cardExpiry: { type: [string, "null"], format: date }
-            mismatchAtSignup: { type: boolean }
-            registerUrl: { type: string }
-            copy: { type: object, description: "Our copy of the register: records held, and when imported (AppSetting gas_safe_register_imported_at), if recorded", properties: { records: { type: integer }, importedAt: { type: [string, "null"], format: date-time } } }
+            licenceNo: { type: [string, "null"] }
+            registrationNo: { type: [string, "null"] }
+            registerUrl: { type: string, description: The live Gas Safe Register }
+        customersOnPlans: { type: integer, description: Customers on a live plan, who can be told if the engineer is suspended }
         submitted:
           type: object
-          description: What the engineer gave, to set beside the register. cardExpiry (YYYY-MM-DD) is null until they give it with the photo.
+          description: What the engineer gave, to check against the card and the live register. cardExpiry (YYYY-MM-DD) is null until they give it with the photo.
           properties: { name: { type: string }, business: { type: string }, categories: { type: [string, "null"] }, postcode: { type: [string, "null"] }, town: { type: [string, "null"] }, cardExpiry: { type: [string, "null"] } }
         contact: { type: [object, "null"], description: "Masked; only for an admin with pii:reveal", properties: { email: { type: string }, phone: { type: [string, "null"] } } }
         canTextChase: { type: boolean, description: "A chase can go by text: they have a mobile and agreed to texts about finishing setting up" }
@@ -255,17 +272,10 @@ components:
             required: [engineerId, reason, name, business, status]
             properties:
               engineerId: { type: string }
-              reason: { type: string, enum: [company_number, name_and_postcode] }
+              reason: { type: string, enum: [company_number, registration_number, business_name, name_and_postcode] }
               name: { type: string }
               business: { type: string }
               status: { type: string }
-        decision:
-          type: [object, "null"]
-          properties:
-            outcome: { type: string, enum: [verified, rejected] }
-            at: { type: string, format: date-time }
-            byName: { type: [string, "null"] }
-            reason: { type: [string, "null"] }
         queue:
           type: [object, "null"]
           properties:
@@ -360,48 +370,55 @@ components:
         letter: { type: [object, "null"], description: "The letter they came from: the claim code redeemed (code null when only the batch is known)", properties: { code: { type: [string, "null"] }, batch: { type: string }, variant: { type: [string, "null"] }, redeemedAt: { type: [string, "null"], format: date-time } } }
         gasSafe:
           type: object
+          description: The Gas Safe ID card's details (Matt, 4 Nov). There is no stored copy of the register.
           properties:
-            number: { type: [string, "null"] }
-            registerName: { type: [string, "null"] }
-            registerCompany: { type: [string, "null"] }
+            licenceNo: { type: [string, "null"], description: The engineer's own licence number (7 digits) }
+            registrationNo: { type: [string, "null"], description: "The business's registration number (a staff member's comes from the owner)" }
             categories: { type: [string, "null"] }
             cardOnFile: { type: boolean }
             cardExpiresOn: { type: [string, "null"], format: date }
             qualifications: { type: array, items: { type: object, properties: { code: { type: string }, title: { type: string }, confirmedAt: { type: string } } } }
-            nextRegisterCheck: { type: [string, "null"], format: date, description: "12 months after verification, or the card's expiry if sooner (lib/admin/verifications.ts)" }
+            nextRegisterCheck: { type: [string, "null"], format: date, description: "14 days after the card's expiry, else 12 months after the last register check; null before the first (lib/admin/verifications.ts)" }
         founding:
           type: object
-          description: "lib/admin/founding.ts. state: top_spot or badge (holding one of spotsPerTown spots, position from 1), released (the clock ran out), waiting (place in line), no_town, not_in_line (reason: not_verified, banned, left, test, staff)"
-          required: [state, spotsPerTown, clockDays]
+          description: "Read from the app's own record (lib/founding.ts via lib/admin/founding.ts): a Founding Member claimed their letter by its date; the first spotsPerTown of them in a town to complete their account hold its top spots, each released without a customer signed within spotDays."
+          required: [rules, member, label, town, spot]
           properties:
-            state: { type: string, enum: [top_spot, badge, released, waiting, no_town, not_in_line] }
-            spotsPerTown: { type: integer }
-            clockDays: { type: integer }
-            town: { type: string }
-            position: { type: integer }
-            since: { type: string, format: date-time }
-            clockEndsAt: { type: string, format: date-time }
-            kept: { type: boolean, description: Their first plan went live within the clock }
-            releasedAt: { type: string, format: date-time }
-            place: { type: integer }
-            reason: { type: string }
+            rules: { type: object, properties: { spotsPerTown: { type: integer }, spotDays: { type: integer }, reminderDays: { type: array, items: { type: integer } } } }
+            member: { type: boolean, description: Holds the Founding badge (permanent) }
+            label: { type: string, enum: ["Founding · top spot", Founding, Standard] }
+            town: { type: [string, "null"], description: The town of their spot }
+            spot:
+              type: [object, "null"]
+              description: "Their open top spot, else their latest released one. holding: position counts from 1 (held longest first), kept once they've signed a customer. released: reason no_customer or left_town."
+              properties:
+                state: { type: string, enum: [holding, released] }
+                position: { type: integer }
+                heldFrom: { type: string, format: date-time }
+                endsAt: { type: string, format: date-time }
+                daysLeft: { type: integer }
+                kept: { type: boolean }
+                remindersSent: { type: array, items: { type: integer }, description: Days left when each reminder went }
+                releasedAt: { type: string, format: date-time }
+                reason: { type: [string, "null"] }
         chase:
           type: [object, "null"]
-          description: "Days since their last delivered offer (or since verification) and the call-ladder step (lib/admin/metrics.ts CALL_LADDER); null unless verified and active"
+          description: "Days since their last delivered offer (or since going live) and the follow-up ladder step (lib/admin/metrics.ts CALL_LADDER: 3, 5, 7, 10 days); null unless live, in good standing and not staff"
           properties:
             lastDeliveredOfferAt: { type: [string, "null"], format: date-time }
-            countingFrom: { type: string, enum: [last_offer, verified] }
+            countingFrom: { type: string, enum: [last_offer, live] }
             days: { type: integer }
-            step: { type: [object, "null"], properties: { step: { type: integer }, label: { type: string }, fromDays: { type: integer } } }
+            step: { type: [object, "null"], properties: { step: { type: integer }, label: { type: string }, channel: { type: string, enum: [push, whatsapp, email, call] }, fromDays: { type: integer } } }
         cancelRate:
           type: object
-          description: "The app's cancelRatePercent over windowDays: plans cancelled after going live, over those plus plans live now"
+          description: "The app's cancelRatePercent over windowDays: plans cancelled after going live, over those plus plans live now. Flagged with at least rule.minCustomers customers and rule.minCancelled cancellations, above rule.timesAverage × averagePercent."
           properties:
             percent: { type: [number, "null"] }
             cancelled: { type: integer }
             live: { type: integer }
             windowDays: { type: integer }
-            flagAbovePercent: { type: number }
+            averagePercent: { type: [number, "null"] }
+            rule: { type: object, properties: { minCustomers: { type: integer }, minCancelled: { type: integer }, timesAverage: { type: number } } }
             flagged: { type: boolean }
         status: { $ref: "#/components/schemas/EngineerStatus" }
         pause: { type: [object, "null"], properties: { at: { type: string }, reason: { type: [string, "null"] } } }
@@ -409,11 +426,16 @@ components:
         leftAt: { type: [string, "null"] }
         verification:
           type: object
-          required: [status, gasSafeNo, verifiedAt, rejectedAt]
+          description: "Live first (Matt, 4 Nov): the card check puts them live; the register check on the live Gas Safe Register follows."
+          required: [status, card, register, liveSince, registerCheckedAt, suspendedAt, recheckRequested, rejectedAt, rejectReason]
           properties:
             status: { $ref: "#/components/schemas/VerificationStatus" }
-            gasSafeNo: { type: [string, "null"] }
-            verifiedAt: { type: [string, "null"] }
+            card: { type: [string, "null"], enum: [waiting, passed, failed, no_card, null] }
+            register: { type: [string, "null"], enum: [due, recheck_due, passed, suspended, null] }
+            liveSince: { type: [string, "null"], format: date-time }
+            registerCheckedAt: { type: [string, "null"], format: date-time }
+            suspendedAt: { type: [string, "null"], format: date-time }
+            recheckRequested: { type: [object, "null"], properties: { at: { type: string, format: date-time }, reason: { type: [string, "null"] } } }
             rejectedAt: { type: [string, "null"] }
             rejectReason: { type: [string, "null"] }
         payments: { type: object, required: [accountId, connected, chargesEnabled, payoutsEnabled], properties: { accountId: { type: [string, "null"] }, connected: { type: boolean }, chargesEnabled: { type: boolean, description: Payments set up (the activation step reads the same flag) }, payoutsEnabled: { type: boolean } } }
@@ -761,10 +783,10 @@ paths:
 
   /verifications:
     get:
-      summary: The Gas Safe queue. Needs verification:read. No contact details (checkers see it).
+      summary: "The Gas Safe check, live first (Matt, 4 Nov): the card check passes the engineer live, the register check on the live Gas Safe Register follows. Never checked against a stored copy. Items carry stage, cardCheck (waiting|passed|failed|no_card), registerCheck (due|recheck_due|passed|suspended), licenceNo and registrationNo. Needs verification:read. No contact details (checkers see it)."
       parameters:
-        - { name: tab, in: query, schema: { type: string, enum: [new, duplicates, pending, verified, rejected, decided], default: pending }, description: "pending is everything waiting; new and duplicates split it; decided is verified and rejected, latest decision first" }
-        - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: Name, business, Gas Safe or company number }
+        - { name: tab, in: query, schema: { type: string, enum: [card, register, no_card, recheck, duplicates, pending, decided], default: pending }, description: "card: card check waiting; register: live, register check due; no_card: waiting for a card photo; recheck: register re-check due (card expiry + 14 days, a year on, a new card, or asked for); duplicates: open cases sharing a company number, Gas Safe registration number, business name, or name and postcode (staff only as people); pending: card, register and recheck; decided: register check passed, card check failed or suspended, latest first" }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: Name, business, licence, registration or company number }
         - { name: sort, in: query, schema: { type: string, enum: [submitted, decided, name, business] }, description: business is the name as shown (trading name, else legal name) }
         - { $ref: "#/components/parameters/dir" }
         - { $ref: "#/components/parameters/page" }
@@ -774,7 +796,7 @@ paths:
         default: { $ref: "#/components/responses/Error" }
   /verifications/{engineerId}:
     get:
-      summary: One application (the engineer's), with register lookup, Companies House officers, duplicate signals, claim and place in the queue. Needs verification:read.
+      summary: "One case (the engineer's): stage and tab, checks (card, register, liveSince, registerCheckedAt, nextRecheck, recheckRequested, suspended), history of check steps, gasSafe (licenceNo, registrationNo, registerUrl), Companies House officers, duplicate signals, warnings (incl. card_expiry_far over 13 months, was_suspended), customersOnPlans, claim and place in its tab. Needs verification:read."
       parameters: [{ $ref: "#/components/parameters/engineerId" }]
       responses:
         "200": { description: The application, content: { application/json: { schema: { $ref: "#/components/schemas/VerificationDetail" } } } }
@@ -797,7 +819,7 @@ paths:
         default: { $ref: "#/components/responses/Error" }
   /verifications/{engineerId}/decision:
     post:
-      summary: Approve or reject a waiting application. The engineer is told by push, text and email once the answer has gone back (each send gives up after 10 seconds). Needs verification:decide.
+      summary: "The card check: approve puts the engineer live straight away (badge, town page, offers) with the register check due; it needs a card photo (409 without). Reject fails it with the reason they're told. The engineer is told by push, text and email once the answer has gone back (each send gives up after 10 seconds). Needs verification:decide."
       parameters: [{ $ref: "#/components/parameters/engineerId" }]
       requestBody:
         required: true
@@ -820,6 +842,39 @@ paths:
           description: nextId is the next waiting application in the same tab.
           content: { application/json: { schema: { type: object, required: [id, outcome, decidedAt, nextId], properties: { id: { type: string }, outcome: { type: string, enum: [verified, rejected] }, decidedAt: { type: string, format: date-time }, nextId: { type: [string, "null"] } } } } }
         "409": { description: "Already decided, another admin is checking it, or it changed since it was opened (revision)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /verifications/{engineerId}/register-check:
+    post:
+      summary: "Register check passed, for a live engineer whose register check or re-check is due: note says what the live Gas Safe Register showed. Member packs post only after this. 409 if it isn't due, another admin holds the case, or it changed (revision). Needs verification:decide."
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [note], properties: { note: { type: string, minLength: 2, maxLength: 500 }, revision: { type: string } } } } } }
+      responses:
+        "200": { description: nextId is the next case in the same tab, content: { application/json: { schema: { type: object, required: [id, checkedAt, nextId], properties: { id: { type: string }, checkedAt: { type: string, format: date-time }, nextId: { type: [string, "null"] } } } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /verifications/{engineerId}/suspend:
+    post:
+      summary: "Suspend a live engineer after a failed register check: badge down, off the town page, offers stopped (gasSafeVerifiedAt cleared), the engineer told why; with tellCustomers, each customer on a live plan is offered a nearby engineer. 409 unless live. Needs verification:decide."
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [reason], properties: { reason: { type: string, minLength: 3, maxLength: 500 }, tellCustomers: { type: boolean, default: false }, revision: { type: string } } } } } }
+      responses:
+        "200": { description: Suspended, content: { application/json: { schema: { type: object, required: [id, suspendedAt, nextId], properties: { id: { type: string }, suspendedAt: { type: string, format: date-time }, nextId: { type: [string, "null"] } } } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /verifications/{engineerId}/recheck:
+    post:
+      summary: "Ask for a register re-check out of turn (a homeowner's safety complaint); the engineer stays live. 409 unless their register check has passed. Needs verification:decide."
+      parameters: [{ $ref: "#/components/parameters/engineerId" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [reason], properties: { reason: { type: string, minLength: 3, maxLength: 500 } } } } } }
+      responses:
+        "200": { description: Asked for, content: { application/json: { schema: { type: object, required: [id, requestedAt], properties: { id: { type: string }, requestedAt: { type: string, format: date-time } } } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/{engineerId}/tiers/{tierId}/take-down:
+    post:
+      summary: "Take a plan that breaks the rules off sale: status STOPPED, customers on it keep it, the engineer told why by text, push and email, recorded as plan_taken_down. 409 unless it's on sale. Needs engineers:status."
+      parameters: [{ $ref: "#/components/parameters/engineerId" }, { name: tierId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Reason" } } } }
+      responses:
+        "200": { description: Taken down, content: { application/json: { schema: { type: object, required: [id, status], properties: { id: { type: string }, status: { const: STOPPED } } } } } }
         default: { $ref: "#/components/responses/Error" }
 
   /verifications/{engineerId}/chase:
@@ -887,6 +942,255 @@ paths:
                   posted: { type: array, items: { type: string } }
                   postedAt: { type: string, format: date-time }
                   skipped: { type: array, items: { type: object, required: [id, reason], properties: { id: { type: string }, reason: { type: string } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /letters/batches:
+    get:
+      summary: "Letter batches (Matt, 4 Nov), newest first, with each one's codes, claimed on the claim page, signed up and opted out. Needs letters:read."
+      responses:
+        "200":
+          description: Every batch
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, reservedUntil, codes, claimed, signedUp, suppressed, uploadedAt, uploadedBy]
+                      properties:
+                        name: { type: string, description: "2026-11-A: the month, then A, B…" }
+                        reservedUntil: { type: string, format: date, description: "The reservation date the letters print (for batches from before uploads, the letter date Founding judges them by)" }
+                        codes: { type: integer }
+                        claimed: { type: integer, description: Confirmed their details on the claim page }
+                        signedUp: { type: integer }
+                        suppressed: { type: integer, description: Opted out; left out of the mail house's file }
+                        uploadedAt: { type: string, format: date-time }
+                        uploadedBy: { type: [string, "null"] }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      summary: "Upload a batch from our engineer list: every row becomes a reserved ClaimCode at once (SMITH-7K3Q: the surname, else the business name, then four random characters), with the town and reservation date its letter prints, or none do. The reservation date is also the batch's Founding deadline. Up to 5,000 rows (about 2 MB). Recorded as letter_batch_uploaded. Needs letters:write."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reservedUntil, rows]
+              properties:
+                reservedUntil: { type: string, format: date, description: After today, within a year }
+                rows:
+                  type: array
+                  minItems: 1
+                  maxItems: 5000
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [businessName, firstName, town]
+                    properties:
+                      businessName: { type: string, maxLength: 120 }
+                      firstName: { type: string, maxLength: 60, description: The owner's }
+                      lastName: { type: string, maxLength: 60, description: "The code starts with it when given, else with the business name" }
+                      town: { type: string, maxLength: 80, description: Printed on the letter; the town of their Founding place }
+                      mailingAddress: { $ref: "#/components/schemas/PostalAddress" }
+                      variant: { type: string, enum: [A, B, C, D], description: "The letter's split-test version; A when left out" }
+      responses:
+        "200": { description: The batch, content: { application/json: { schema: { type: object, required: [name, count, reservedUntil], properties: { name: { type: string }, count: { type: integer }, reservedUntil: { type: string, format: date } } } } } }
+        "409": { description: 26 batches this month already, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /letters/batches/{batch}/mail-house:
+    get:
+      summary: "The mail house's file for one batch: business name, owner first name, town, reservation date, code, QR link (the claim page, /c/CODE) and the mailing address, by town then business. Codes whose owner opted out are left out and counted. Back office only: the claim page and app never show the list's data beyond the business name and town. Needs letters:export."
+      parameters: [{ name: batch, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: The letters to post
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [batch, suppressed, rows]
+                properties:
+                  batch: { type: string }
+                  suppressed: { type: integer }
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      required: [businessName, firstName, town, reservedUntil, code, link, mailingAddress]
+                      properties:
+                        businessName: { type: string }
+                        firstName: { type: string }
+                        town: { type: [string, "null"] }
+                        reservedUntil: { type: string, format: date }
+                        code: { type: string }
+                        link: { type: string, format: uri }
+                        mailingAddress: { type: [object, "null"], properties: { lines: { type: array, items: { type: string } }, town: { type: string }, postcode: { type: string } } }
+        "404": { description: No batch by that name, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /towns:
+    get:
+      summary: "Founding Members and town pages (Matt, 4 Nov): every town with a page, an engineer or a top spot, A–Z. Taken: top spots held now, of spots. Live: held spots showing on the public town page. Released: spots given up, ever. Next in line: complete Founding Members who've never held one of the town's spots, who'd get the next free one. Needs towns:read."
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 80 }, description: Part of the town's name }
+        - { $ref: "#/components/parameters/page" }
+        - { $ref: "#/components/parameters/size" }
+      responses:
+        "200":
+          description: A page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, page, size, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [slug, name, page, spots, taken, live, released, nextInLine, foundingMembers, listed]
+                      properties:
+                        slug: { type: string }
+                        name: { type: string }
+                        page: { $ref: "#/components/schemas/TownPageState" }
+                        spots: { type: integer, description: "The town's top spots (3)" }
+                        taken: { type: integer }
+                        live: { type: integer }
+                        released: { type: integer }
+                        nextInLine: { type: integer }
+                        foundingMembers: { type: integer }
+                        listed: { type: integer, description: Engineers the town page lists }
+                  page: { type: integer }
+                  size: { type: integer }
+                  total: { type: integer }
+        default: { $ref: "#/components/responses/Error" }
+  /towns/{slug}:
+    get:
+      summary: "One town: its top spots in order (with the 60-day clock, reminders sent, whether a customer has signed, whether it's live on the page, and the admin's reason if one was given out of turn), the spots released (why, and by whom if an admin), who's next in line, the town page's order (lib/founding.ts townPageOrder: top spots › paying customers, ties by reviews › reviews by number, average, recency) and who an admin could give a spot to. Needs towns:read."
+      parameters: [{ $ref: "#/components/parameters/slug" }]
+      responses:
+        "200":
+          description: The town
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [slug, name, page, url, rules, spots, released, nextInLine, order, eligible, leadWindowMinutes]
+                properties:
+                  slug: { type: string }
+                  name: { type: string }
+                  page: { $ref: "#/components/schemas/TownPageState" }
+                  url: { type: string, format: uri, description: The public town page }
+                  rules: { type: object, required: [spotsPerTown, spotDays, reminderDays], properties: { spotsPerTown: { type: integer }, spotDays: { type: integer }, reminderDays: { type: array, items: { type: integer } } } }
+                  spots:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, position, engineer, heldFrom, endsAt, daysLeft, customerSigned, remindersSent, live, given]
+                      properties:
+                        id: { type: string }
+                        position: { type: integer }
+                        engineer: { $ref: "#/components/schemas/TownPerson" }
+                        heldFrom: { type: string, format: date-time }
+                        endsAt: { type: string, format: date-time, description: When it's released without a customer }
+                        daysLeft: { type: integer }
+                        customerSigned: { type: boolean, description: The spot is theirs to keep }
+                        remindersSent: { type: array, items: { type: integer }, description: Days left at each reminder sent }
+                        live: { type: boolean, description: On the public town page now }
+                        given: { type: [object, "null"], properties: { by: { type: [string, "null"] }, reason: { type: [string, "null"] } }, description: Given by an admin out of turn }
+                  released:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, engineer, heldFrom, releasedAt, reason, by, note]
+                      properties:
+                        id: { type: string }
+                        engineer: { $ref: "#/components/schemas/TownPerson" }
+                        heldFrom: { type: string, format: date-time }
+                        releasedAt: { type: string, format: date-time }
+                        reason: { type: [string, "null"], enum: [no_customer, left_town, account_closed, admin, null] }
+                        by: { type: [string, "null"], description: The admin, when an admin released it }
+                        note: { type: [string, "null"], description: The admin's reason }
+                  nextInLine:
+                    type: array
+                    items: { allOf: [{ $ref: "#/components/schemas/TownPerson" }, { type: object, required: [completedAt], properties: { completedAt: { type: string, format: date-time } } }] }
+                  order:
+                    type: array
+                    items:
+                      allOf:
+                        - { $ref: "#/components/schemas/TownPerson" }
+                        - type: object
+                          required: [position, group, payingCustomers, reviews]
+                          properties:
+                            position: { type: integer }
+                            group: { type: string, enum: [top_spot, most_active, reviews] }
+                            payingCustomers: { type: integer, description: Direct Debit active and not cancelling }
+                            reviews: { type: object, required: [count, average, lastAt], properties: { count: { type: integer }, average: { type: [number, "null"] }, lastAt: { type: [string, "null"], format: date-time } } }
+                  eligible:
+                    type: array
+                    items: { allOf: [{ $ref: "#/components/schemas/TownPerson" }, { type: object, required: [owner, founding, nextInLine], properties: { owner: { type: [string, "null"], description: "The owner's name, to tell apart businesses with the same name" }, founding: { type: boolean }, nextInLine: { type: boolean } } }] }
+                  leadWindowMinutes: { type: integer }
+        "404": { description: No town by that name, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /towns/{slug}/spots:
+    post:
+      summary: "The manual override: give a free top spot to an engineer who works in the town and holds none, out of turn. Its 60-day clock starts now; they're told as the app tells anyone given a spot. Recorded as top_spot_awarded (actor ADMIN, with the reason as note). Needs towns:write."
+      parameters: [{ $ref: "#/components/parameters/slug" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [engineerId, reason]
+              properties:
+                engineerId: { type: string }
+                reason: { type: string, minLength: 3, maxLength: 500 }
+      responses:
+        "200": { description: Given, content: { application/json: { schema: { type: object, required: [spotId, givenTo], properties: { spotId: { type: string }, givenTo: { $ref: "#/components/schemas/TownPerson" } } } } } }
+        "409": { description: "The town's spots are all taken, or they hold one already", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /towns/{slug}/spots/{spotId}/release:
+    post:
+      summary: "The manual override: release a top spot before its time. With to: null it passes to the next in line, as when the app releases one; otherwise to that engineer (in the town, holding none). Released by an admin, the engineer isn't next in line for the town's spots again. Recorded as top_spot_released (reason admin, note the admin's reason). Needs towns:write."
+      parameters: [{ $ref: "#/components/parameters/slug" }, { name: spotId, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason, to]
+              properties:
+                reason: { type: string, minLength: 3, maxLength: 500 }
+                to: { type: [string, "null"], description: "An engineer ID, or null for the next in line" }
+      responses:
+        "200": { description: Released, content: { application/json: { schema: { type: object, required: [released, givenTo], properties: { released: { type: string, description: The engineer who held it }, givenTo: { oneOf: [{ $ref: "#/components/schemas/TownPerson" }, { type: "null" }], description: "Who has it now; null while nobody's next in line" } } } } } }
+        "404": { description: No such spot in this town, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Already released, or the chosen engineer holds a spot", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /settings/town-leads:
+    get:
+      summary: "How long a town's Founding Members get first pick of a homeowner request from its town page before everyone there sees it (lib/town-leads.ts; Matt: about 2 hours). Needs towns:read."
+      responses:
+        "200": { description: The window, content: { application/json: { schema: { type: object, required: [minutes, defaultMinutes, maxMinutes], properties: { minutes: { type: integer }, defaultMinutes: { type: integer }, maxMinutes: { type: integer } } } } } }
+        default: { $ref: "#/components/responses/Error" }
+    put:
+      summary: "Change it, for requests made from now on (0 opens them to everyone at once). Recorded as town_lead_window_changed. Needs towns:write."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [minutes], properties: { minutes: { type: integer, minimum: 0, maximum: 1440 } } }
+      responses:
+        "200": { description: Changed, content: { application/json: { schema: { type: object, required: [minutes, before], properties: { minutes: { type: integer }, before: { type: integer } } } } } }
         default: { $ref: "#/components/responses/Error" }
 
   /engineers:

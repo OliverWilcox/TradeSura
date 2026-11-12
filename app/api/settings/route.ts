@@ -9,6 +9,7 @@ import { smsAvailable } from "@/lib/contact-verification";
 import { whatsappConfigured } from "@/lib/whatsapp";
 import { formatAddress, parseAddress, sameAddress, tradingAddressOf } from "@/lib/addresses";
 import { companyProfile } from "@/lib/admin/companies";
+import { track } from "@/lib/track";
 
 const Body = z.object({
   // Blank is allowed for a company with a Companies House name on file —
@@ -24,6 +25,18 @@ const Body = z.object({
   // "TradeSura can text me to help me finish setting up". Left out, it stays as it is.
   setupTextConsent: z.boolean().optional(),
 });
+
+// A change of mind about setup texts goes on the engineer record's Activity
+// tab, beside the WhatsApp and text opt-ins (Matt, 4 Nov: "consent changes").
+async function trackSetupTexts(engineerId: string, was: boolean, now: boolean | undefined) {
+  if (now === undefined || now === was) return;
+  // A failed event never fails the save.
+  try {
+    await track(now ? "setup_texts_opted_in" : "setup_texts_opted_out", { type: "ENGINEER", id: engineerId }, { via: "account" });
+  } catch (err) {
+    console.error("[settings] setup-texts event failed:", err);
+  }
+}
 
 // Mobile counterpart to the settings form's initial values in app/more/page.tsx.
 export async function GET() {
@@ -118,10 +131,12 @@ export async function PATCH(req: Request) {
 
   if (parsed.data.tradingName === undefined) {
     if (parsed.data.setupTextConsent !== undefined) {
+      const was = await prisma.engineer.findUnique({ where: { id: engineerId }, select: { setupTextConsentAt: true } });
       await prisma.engineer.update({
         where: { id: engineerId },
         data: { setupTextConsentAt: parsed.data.setupTextConsent ? new Date() : null },
       });
+      await trackSetupTexts(engineerId, Boolean(was?.setupTextConsentAt), parsed.data.setupTextConsent);
     }
     return NextResponse.json({ ok: true });
   }
@@ -142,7 +157,7 @@ export async function PATCH(req: Request) {
   // address keeps redirecting.
   const current = await prisma.engineer.findUniqueOrThrow({
     where: { id: engineerId },
-    select: { slug: true, previousSlugs: true, slugChosenAt: true },
+    select: { slug: true, previousSlugs: true, slugChosenAt: true, setupTextConsentAt: true },
   });
   const address = current.slugChosenAt
     ? { slug: current.slug }
@@ -158,5 +173,6 @@ export async function PATCH(req: Request) {
       ...(parsed.data.setupTextConsent === undefined ? {} : { setupTextConsentAt: parsed.data.setupTextConsent ? new Date() : null }),
     },
   });
+  await trackSetupTexts(engineerId, Boolean(current.setupTextConsentAt), parsed.data.setupTextConsent);
   return NextResponse.json({ ok: true, slug: address.slug, tradingName });
 }

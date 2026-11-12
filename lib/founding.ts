@@ -43,7 +43,10 @@ export function foundingDeadlineFrom(setting: string | null | undefined, codesLo
   return (setting && endOfUkDay(setting.trim())) || new Date(codesLoadedAt.getTime() + DEFAULT_FOUNDING_WINDOW_DAYS * DAY);
 }
 
-export async function foundingDeadline(code: { letterBatch: string; createdAt: Date }): Promise<Date> {
+/** The code's own reservation date (printed on its letter), else the batch's letter date, else the default window. */
+export async function foundingDeadline(code: { letterBatch: string; createdAt: Date; reservedUntil?: Date | null }): Promise<Date> {
+  const own = code.reservedUntil && endOfUkDay(code.reservedUntil.toISOString().slice(0, 10));
+  if (own) return own;
   const row = await prisma.appSetting.findUnique({ where: { key: foundingDeadlineKey(code.letterBatch) } }).catch(() => null);
   return foundingDeadlineFrom(row?.value, code.createdAt);
 }
@@ -59,7 +62,7 @@ export async function foundingMemberIds(engineerIds: string[]): Promise<Set<stri
   if (engineerIds.length === 0) return new Set();
   const codes = await prisma.claimCode.findMany({
     where: { redeemedByEngineerId: { in: engineerIds }, suppressedAt: null },
-    select: { redeemedByEngineerId: true, claimedAt: true, redeemedAt: true, letterBatch: true, createdAt: true },
+    select: { redeemedByEngineerId: true, claimedAt: true, redeemedAt: true, letterBatch: true, createdAt: true, reservedUntil: true },
   });
   const out = new Set<string>();
   for (const c of codes) {
@@ -275,7 +278,8 @@ async function emailTo(engineerId: string) {
   return prisma.engineer.findUnique({ where: { id: engineerId }, select: { email: true, deletedAt: true } });
 }
 
-async function tellAwarded(engineerId: string, town: string, endsAt: Date) {
+/** Tells an engineer they hold a top spot, and the date they need a customer by. */
+export async function tellAwarded(engineerId: string, town: string, endsAt: Date) {
   const line = `You've got a top spot in ${town}: your business now sits at the top of the ${town} page. Sign your first customer by ${longUkDate(endsAt)} to keep it.`;
   await sendPushNotification(engineerId, `Top spot in ${town}`, line, { url: "/" }).catch(() => {});
   await notifyEngineer(engineerId, `TradeSura: ${line}`, { template: "top_spot_awarded", vars: [town, longUkDate(endsAt)] }).catch(() => {});

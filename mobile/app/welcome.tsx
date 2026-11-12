@@ -172,7 +172,7 @@ export default function Welcome() {
   async function submitCode(raw: string) {
     const found = findClaimCode(raw);
     if (!found) {
-      setCodeError("That doesn't look like a code — it's on your letter, like TS-48217.");
+      setCodeError("That doesn't look like a code — type it as it's printed on your letter.");
       return;
     }
     setCodeBusy(true);
@@ -310,7 +310,7 @@ export default function Welcome() {
                     setCodeError(null);
                   }}
                   onSubmitEditing={() => submitCode(codeInput)}
-                  placeholder="Or type it, e.g. TS-48217"
+                  placeholder="Or type the code from your letter"
                   placeholderTextColor="#6e86a3"
                   autoCapitalize="characters"
                   autoCorrect={false}

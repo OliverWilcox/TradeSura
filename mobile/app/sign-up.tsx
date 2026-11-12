@@ -34,6 +34,7 @@ import {
   checkCompanyNumber,
   checkEmail,
   checkGasSafeNo,
+  checkRegistrationNo,
   checkRequired,
   checkUkMobile,
   checkUkPostcode,
@@ -123,6 +124,7 @@ type FieldKey =
   | "phone"
   | "email"
   | "gasSafeNo"
+  | "gasSafeRegistrationNo"
   | "gasSafeCard"
   | "cardExpiry"
   | "tradingName"
@@ -138,6 +140,7 @@ const FIELD_STEP: Record<FieldKey, 1 | 2 | 3> = {
   phone: 1,
   email: 1,
   gasSafeNo: 2,
+  gasSafeRegistrationNo: 2,
   gasSafeCard: 2,
   cardExpiry: 2,
   tradingName: 3,
@@ -159,6 +162,7 @@ type Draft = {
   referralCode: string;
   interestTrades: string[];
   gasSafeNo: string;
+  gasSafeRegistrationNo?: string;
   tradingName: string;
   businessType: BusinessType;
   companyNumber: string;
@@ -410,6 +414,7 @@ export default function SignUp() {
   // Step 2 — trade + Gas Safe
   const [interestTrades, setInterestTrades] = useState<Set<string>>(new Set());
   const [gasSafeNo, setGasSafeNo] = useState("");
+  const [gasSafeRegistrationNo, setGasSafeRegistrationNo] = useState("");
   const [card, setCard] = useState<IdCardState>({ phase: "empty" });
   const [cardToken, setCardToken] = useState<string | null>(null);
   // The expiry printed on the card, typed as DD/MM/YYYY (or MM/YYYY).
@@ -477,6 +482,7 @@ export default function SignUp() {
         }
         setInterestTrades(new Set(d.interestTrades));
         setGasSafeNo(d.gasSafeNo);
+        setGasSafeRegistrationNo(d.gasSafeRegistrationNo ?? "");
         setTradingName((p) => p || d.tradingName);
         setBusinessType(d.businessType);
         setCompanyNumber(d.companyNumber);
@@ -520,6 +526,7 @@ export default function SignUp() {
         referralCode,
         interestTrades: [...interestTrades],
         gasSafeNo,
+        gasSafeRegistrationNo,
         tradingName,
         businessType,
         companyNumber,
@@ -554,6 +561,7 @@ export default function SignUp() {
     referralCode,
     interestTrades,
     gasSafeNo,
+    gasSafeRegistrationNo,
     tradingName,
     businessType,
     companyNumber,
@@ -958,6 +966,7 @@ export default function SignUp() {
   // tapped "Use this photo"; anything unsent goes up here.
   async function continueStep2() {
     const noErr = checkGasSafeNo(gasSafeNo);
+    const registrationErr = checkRegistrationNo(gasSafeRegistrationNo);
     let cardErr: string | null = null;
     if (card.phase === "empty" || card.phase === "denied") {
       cardErr = "Add a photo of your ID card — or tap “I'll add the photo later”.";
@@ -969,7 +978,7 @@ export default function SignUp() {
     // The expiry goes with the photo, so it's asked for only when there is one.
     const expiry = card.phase === "empty" || card.phase === "denied" ? null : cardExpiryOf(cardExpiry);
     const expiryErr = expiry && "error" in expiry ? expiry.error : null;
-    if (fail({ gasSafeNo: noErr, gasSafeCard: cardErr, cardExpiry: expiryErr })) return;
+    if (fail({ gasSafeNo: noErr, gasSafeRegistrationNo: registrationErr, gasSafeCard: cardErr, cardExpiry: expiryErr })) return;
     if (card.phase === "preview" || (card.phase === "added" && !cardToken)) {
       const photo = card.photo;
       setStep2Busy(true);
@@ -992,7 +1001,7 @@ export default function SignUp() {
   // created, the badge stays pending, and the offer gate holds until a
   // reviewer has the photo.
   function skipCard() {
-    if (fail({ gasSafeNo: checkGasSafeNo(gasSafeNo) })) return;
+    if (fail({ gasSafeNo: checkGasSafeNo(gasSafeNo), gasSafeRegistrationNo: checkRegistrationNo(gasSafeRegistrationNo) })) return;
     setCard({ phase: "empty" });
     setCardToken(null);
     goToStep(3);
@@ -1081,6 +1090,7 @@ export default function SignUp() {
             smsSignInEnabled: smsEnabled,
             trades: [...interestTrades],
             gasSafeNo: gasSafeNo.replace(/\s/g, ""),
+            gasSafeRegistrationNo: gasSafeRegistrationNo.replace(/\s/g, ""),
             gasSafeCardToken: cardToken ?? undefined,
             gasSafeCardExpiresOn: cardToken ? expiryIso(cardExpiry) : undefined,
             tradingName: tradingName.trim(),
@@ -1572,21 +1582,37 @@ export default function SignUp() {
                     </View>
                     <Hint>Tap any to register interest</Hint>
 
+                    {/* Matt, 4 Nov: both numbers, named as the Gas Safe ID card names them. */}
                     <View ref={fieldRef("gasSafeNo")} collapsable={false}>
-                      <Text className={`${labelCls} mt-5`}>Gas Safe registration number</Text>
+                      <Text className={`${labelCls} mt-5`}>Licence number</Text>
                       <Input
                         value={gasSafeNo}
                         onChangeText={(v) => {
                           setGasSafeNo(v);
                           clearError("gasSafeNo");
                         }}
-                        placeholder="584123"
+                        placeholder="1234567"
                         keyboardType="number-pad"
-                        maxLength={8}
+                        maxLength={9}
                         error={errors.gasSafeNo}
                       />
                       <FieldError>{errors.gasSafeNo}</FieldError>
-                      <Hint>The registration number on your Gas Safe ID card</Hint>
+                    </View>
+
+                    <View ref={fieldRef("gasSafeRegistrationNo")} collapsable={false}>
+                      <Text className={labelCls}>Business registration number</Text>
+                      <Input
+                        value={gasSafeRegistrationNo}
+                        onChangeText={(v) => {
+                          setGasSafeRegistrationNo(v);
+                          clearError("gasSafeRegistrationNo");
+                        }}
+                        placeholder="584123"
+                        keyboardType="number-pad"
+                        maxLength={9}
+                        error={errors.gasSafeRegistrationNo}
+                      />
+                      <FieldError>{errors.gasSafeRegistrationNo}</FieldError>
                     </View>
 
                     <View ref={fieldRef("gasSafeCard")} collapsable={false}>
