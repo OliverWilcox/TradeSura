@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { prisma } from "@/lib/db";
+import { ensureReferralCode, referralLink } from "@/lib/referral-code";
 import { brandName } from "@/lib/engineer";
 import { activeMonthlyPence } from "@/lib/plans";
 
@@ -14,6 +15,7 @@ export async function GET(req: Request) {
   const slug = new URL(req.url).searchParams.get("slug") ?? "";
   const engineer = await prisma.engineer.findUnique({ where: { slug } });
   if (!engineer) return new Response("Not found", { status: 404 });
+  const code = await ensureReferralCode(engineer.id);
 
   const { totalPence } = await activeMonthlyPence(engineer.id);
   const yearly = Math.round((totalPence * 12) / 100).toLocaleString();
@@ -45,7 +47,7 @@ export async function GET(req: Request) {
           locked in with care plans
         </div>
         <div style={{ fontSize: 26, color: "#9FB6D0", marginTop: 40 }}>
-          {`Free account · you keep 80% · paid weekly · tradesura.com/join/${slug}`}
+          {`Free account · you keep 80% · paid weekly · ${referralLink(code).replace(/^https?:\/\/(www\.)?/, "")}`}
         </div>
       </div>
     ),

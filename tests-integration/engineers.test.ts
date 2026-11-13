@@ -4,6 +4,7 @@ import { GET as list } from "@/app/api/admin/v1/engineers/route";
 import { GET as filterOptions } from "@/app/api/admin/v1/engineers/filter-options/route";
 import { GET as detail } from "@/app/api/admin/v1/engineers/[engineerId]/route";
 import { GET as activity } from "@/app/api/admin/v1/engineers/[engineerId]/activity/route";
+import { POST as takeDown } from "@/app/api/admin/v1/engineers/[engineerId]/tiers/[tierId]/take-down/route";
 import { POST as reveal } from "@/app/api/admin/v1/engineers/[engineerId]/contact/route";
 import { POST as pause } from "@/app/api/admin/v1/engineers/[engineerId]/pause/route";
 import { POST as resume } from "@/app/api/admin/v1/engineers/[engineerId]/resume/route";
@@ -31,19 +32,23 @@ describe("the engineer list", () => {
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
     // No offer sent, so not active, though the account is in good standing.
-    expect(res.body.items[0]).toMatchObject({ id: e.id, plansLive: 1, customers: 2, status: "inactive", isTest: false, verification: "pending" });
+    expect(res.body.items[0]).toMatchObject({ id: e.id, plansLive: 1, customers: 2, status: "inactive", isTest: false, verification: "pending", checks: { card: "no_card", register: null } });
     expect(res.body.items[0].lastOfferAt).not.toBeNull();
   });
 
   it("filters by status, verification and team", async () => {
     const paused = await makeEngineer({ pausedAt: new Date() });
     const banned = await makeEngineer({ bannedAt: new Date(), pausedAt: new Date() });
-    const verified = await makeEngineer({ gasSafeVerifiedAt: new Date() });
-    const staff = await makeEngineer({ ownerId: verified.id, gasSafeNo: null });
+    const verified = await makeEngineer({ gasSafeVerifiedAt: new Date(), tradingName: "Owner Heating" });
+    const staff = await makeEngineer({ ownerId: verified.id, gasSafeNo: null, tradingName: "Staff's own name" });
     expect(ids(await call(list, { query: { status: "paused" } }))).toEqual([paused.id]);
     expect(ids(await call(list, { query: { status: "banned" } }))).toEqual([banned.id]);
-    expect(ids(await call(list, { query: { verification: "verified" } }))).toEqual([verified.id]);
-    expect(ids(await call(list, { query: { staff: "staff" } }))).toEqual([staff.id]);
+    expect(ids(await call(list, { query: { verification: "live" } }))).toEqual([verified.id]);
+    expect(ids(await call(list, { query: { verification: "register_due" } }))).toEqual([verified.id]);
+    const staffRows = (await call(list, { query: { staff: "staff" } })).body.items;
+    expect(staffRows.map((r: { id: string }) => r.id)).toEqual([staff.id]);
+    // Staff sit under their business (Matt, 4 Nov).
+    expect(staffRows[0]).toMatchObject({ business: "Owner Heating", isStaff: true });
   });
 
   it("finds an engineer by business name, Gas Safe number or phone", async () => {
@@ -119,8 +124,31 @@ describe("one engineer", () => {
     await prisma.event.create({ data: { name: "plan_live", actorType: "ENGINEER", actorId: e.id, ts: new Date("2026-10-03T09:00:00Z"), meta: { tierId: tier.id } } });
 
     const res = await call(detail, { params: { engineerId: e.id } });
-    expect(res.body.tiers).toEqual([{ id: tier.id, name: "Boiler care", status: "LIVE", priceMonthlyPence: 1500, options: ["Annual boiler service"], customersOnIt: 0 }]);
-    expect(res.body.referrals).toMatchObject({ code: e.slug, earnedPence: 150, paidPence: 75, owedPence: 75, people: [{ id: invitee.id, business: "Invited Heating", earnedPence: 150, currentRatePercent: 25 }] });
+    expect(res.body.tiers).toEqual([
+      {
+        id: tier.id,
+        name: "Boiler care",
+        status: "LIVE",
+        priceMonthlyPence: 1500,
+        options: ["Annual boiler service"],
+        customersOnIt: 0,
+        publishedAt: "2026-10-03T09:00:00.000Z",
+        editedAt: null,
+        version: 1,
+        takenDown: null,
+        priceRises: [],
+      },
+    ]);
+    expect(res.body.planRules).toEqual({ priceRiseCapPercent: 10, benefitsFromPayment: 3 });
+    expect(res.body.referrals).toMatchObject({
+      code: expect.stringMatching(/^SMITH\d{2}$/),
+      earnedPence: 150,
+      paidPence: 75,
+      owedPence: 75,
+      people: [{ id: invitee.id, business: "Invited Heating", plansSold: 0, ratePercent: 25, monthsLeftAtFirstRate: expect.any(Number), earnedPence: 150, owedPence: 75 }],
+    });
+    // Matt, 4 Nov: the link the letters print, tradesura.com/r/{code}.
+    expect(res.body.referrals.link).toBe(`http://localhost:3000/r/${res.body.referrals.code}`);
     expect(res.body.payouts).toEqual([{ id: "po_1", paidOn: "2026-10-24", amountPence: 4321, status: "paid" }]);
     expect(res.body.lifetimePayoutsPence).toBe(4321);
     expect(res.body.steps.find((s: { key: string }) => s.key === "plan_live")).toEqual({ key: "plan_live", label: "First plan live", reached: true, at: "2026-10-03T09:00:00.000Z" });
@@ -232,7 +260,50 @@ describe("an engineer's standing", () => {
     const e = await makeEngineer();
     await call(pause, { params: { engineerId: e.id }, body: { reason: "Checking a complaint" } });
     const res = await call(activity, { params: { engineerId: e.id } });
-    expect(res.body.items[0]).toMatchObject({ name: "engineer_paused", actor: { type: "ADMIN", name: SUPER_ADMIN.name }, reason: "Checking a complaint" });
+    expect(res.body.items[0]).toMatchObject({ name: "engineer_paused", actor: { type: "ADMIN", name: `${SUPER_ADMIN.name} (admin)` }, reason: "Checking a complaint" });
+  });
+
+  it("names the customer and the plan, tells publishing from joining, shows an edit's before and after, and the texts sent to them (Matt, 4 Nov)", async () => {
+    const e = await makeEngineer({ firstName: "Matt", lastName: "Wood", phone: "+447700900321" });
+    const customer = await makeCustomer(e.id, { firstName: "Oliver", lastName: "Wilcox" });
+    const tier = await prisma.planTier.create({ data: { engineerId: e.id, name: "Boiler Care", priceMonthlyPence: 1250, sortOrder: 0, status: "LIVE" } });
+    const plan = await makePlan(e.id, customer.id, { tierId: tier.id });
+    await prisma.event.createMany({
+      data: [
+        { name: "plan_live", actorType: "ENGINEER", actorId: e.id, ts: new Date("2026-10-01T09:00:00Z"), meta: { tierId: tier.id, name: "Boiler Care", priceMonthlyPence: 1200 } },
+        { name: "plan_edited", actorType: "ENGINEER", actorId: e.id, ts: new Date("2026-10-02T09:00:00Z"), meta: { tierId: tier.id, name: "Boiler Care", priceMonthlyPence: 1250 } },
+        { name: "plan_live", actorType: "SYSTEM", ts: new Date("2026-10-03T09:00:00Z"), meta: { planId: plan.id, engineerId: e.id } },
+      ],
+    });
+    await prisma.outboundSms.create({ data: { engineerId: e.id, toPhone: "+447700900321", senderName: "TradeSura", body: "Oliver Wilcox wants to cancel", class: "TRANSACTIONAL", status: "SENT", sendAfter: new Date("2026-10-04T09:00:00Z"), sentAt: new Date("2026-10-04T09:00:00Z") } });
+    const items = (await call(activity, { params: { engineerId: e.id } })).body.items;
+    expect(items.map((i: { name: string }) => i.name)).toEqual(["engineer_texted", "customer_joined", "plan_edited", "plan_published"]);
+    expect(items[0].detail).toMatchObject({ body: "Oliver Wilcox wants to cancel", delivery: "sent" });
+    expect(items[1]).toMatchObject({ actor: { name: "TradeSura" }, detail: { customer: { id: customer.id, name: "Oliver Wilcox" }, plan: "Boiler Care" } });
+    expect(items[2]).toMatchObject({ actor: { name: "Matt Wood (engineer)" }, detail: { before: { priceMonthlyPence: 1200 }, after: { priceMonthlyPence: 1250 } } });
+  });
+});
+
+describe("taking a plan down (Matt, 4 Nov)", () => {
+  it("stops new customers, keeps the reason, and counts its version, edits and price rises", async () => {
+    const e = await makeEngineer();
+    const tier = await prisma.planTier.create({ data: { engineerId: e.id, name: "Boiler Care", priceMonthlyPence: 1250, sortOrder: 0, status: "LIVE" } });
+    const customer = await makeCustomer(e.id);
+    const plan = await makePlan(e.id, customer.id, { tierId: tier.id });
+    await prisma.priceReview.create({ data: { planId: plan.id, oldPence: 1000, newPence: 1250, effectiveAt: new Date("2026-12-01") } });
+    await prisma.event.createMany({
+      data: [
+        { name: "plan_live", actorType: "ENGINEER", actorId: e.id, ts: new Date("2026-10-01T09:00:00Z"), meta: { tierId: tier.id } },
+        { name: "plan_edited", actorType: "ENGINEER", actorId: e.id, ts: new Date("2026-10-02T09:00:00Z"), meta: { tierId: tier.id } },
+      ],
+    });
+    const res = await call(takeDown, { params: { engineerId: e.id, tierId: tier.id }, body: { reason: "Promises breakdown cover" } });
+    expect(res.status).toBe(200);
+    expect((await prisma.planTier.findUniqueOrThrow({ where: { id: tier.id } })).status).toBe("STOPPED");
+    expect((await call(takeDown, { params: { engineerId: e.id, tierId: tier.id }, body: { reason: "Promises breakdown cover" } })).status).toBe(409);
+    const [t] = (await call(detail, { params: { engineerId: e.id } })).body.tiers;
+    expect(t).toMatchObject({ version: 2, publishedAt: "2026-10-01T09:00:00.000Z", editedAt: "2026-10-02T09:00:00.000Z", takenDown: { reason: "Promises breakdown cover" } });
+    expect(t.priceRises).toEqual([expect.objectContaining({ fromPence: 1000, toPence: 1250, percent: 25, overCap: true })]);
   });
 });
 

@@ -92,7 +92,13 @@ model Engineer {
   // (the admin's verification chase) need it; sign-in codes and texts about
   // their customers don't.
   setupTextConsentAt         DateTime?
-  gasSafeNo                  String?           @unique // review #13 — one licence, one account
+  // The engineer's own 7-digit licence number, from their Gas Safe ID card
+  // (review #13 — one licence, one account).
+  gasSafeNo                  String?           @unique
+  // The business's Gas Safe registration number (Matt, 4 Nov): on the same
+  // card, shared by everyone in the business, so not unique. Staff take the
+  // owner's. Null for sign-ups before it was asked for.
+  gasSafeRegistrationNo      String?
   gasSafeName                String?
   gasSafeCompany             String?
   gasSafeCategories          String?
@@ -111,6 +117,18 @@ model Engineer {
   gasSafeCardExpiresOn       DateTime?         @db.Date
   gasSafeRejectedAt          DateTime?
   gasSafeRejectReason        String?
+  // Live first, register check behind (Matt, 4 Nov). Passing the card check
+  // sets gasSafeVerifiedAt (live); the checker then checks the live Gas Safe
+  // Register and records it here. Never against a stored copy.
+  gasSafeRegisterCheckedAt   DateTime?
+  // A failed register check suspends: gasSafeVerifiedAt is cleared and the
+  // reason goes in gasSafeRejectReason, so the badge, town page and offers
+  // stop wherever they read gasSafeVerifiedAt. Passing a new card check clears it.
+  gasSafeSuspendedAt         DateTime?
+  // An ad hoc register re-check (a homeowner's safety complaint), on top of
+  // the yearly one after the card's expiry.
+  gasSafeRecheckRequestedAt  DateTime?
+  gasSafeRecheckReason       String?
   // Build Guide v2 Part 11 — push notifications. Set once the app has asked
   // permission (after the first plan goes live, per spec) and registered a
   // real device token via POST /api/me/push-token. Null means either the
@@ -210,6 +228,9 @@ model Engineer {
   stickers                   Sticker[]         @relation("StickerAllocated")
   // E10 — who brought this engineer in, and whether their £50 bounty is paid.
   referrerId                 String?
+  // The short code printed on the cover letter (SMITH25) and the link
+  // tradesura.com/r/{code} (Matt, 4 Nov). Made when first needed (lib/referral-code.ts).
+  referralCode               String?           @unique
   referrer                   Engineer?         @relation("Referrals", fields: [referrerId], references: [id])
   referrals                  Engineer[]        @relation("Referrals")
   referralBountyPaidAt       DateTime? // retired flat-£50 scheme; kept for history
@@ -232,9 +253,9 @@ model Engineer {
   customers                  Customer[]
   tiers                      PlanTier[]
   plans                      Plan[]
+  townLeadsClaimed           TownLead[]        @relation("TownLeadClaims")
 
   @@index([previousSlugs], type: Gin)
-  townLeadsClaimed           TownLead[]        @relation("TownLeadClaims")
 }
 
 model Customer {
@@ -443,11 +464,14 @@ model SignInCode {
   @@index([engineerId, createdAt])
 }
 
+// Matt, 4 Nov: nothing reads or writes this any more. Checks are made on the
+// live Gas Safe Register only, until TradeSura's solicitor advises otherwise.
+// Kept until the owner decides whether to drop the table and its rows.
 model GasSafeRecord {
-  regNo      String @id // normalised: digits only
-  name       String
-  company    String
-  categories String
+  regNo         String    @id // normalised: digits only
+  name          String
+  company       String
+  categories    String
   // QA-07: only when the register file has them (scripts/import-gas-safe.ts):
   // the business address, and the licence card's expiry, set beside what the
   // engineer gave on the admin's check page.
@@ -470,23 +494,23 @@ model Event {
 
 // Quiet-hours queue + abandon nudges.
 model OutboundSms {
-  id           String       @id @default(cuid())
-  engineerId   String
-  toPhone      String
-  senderName   String // trading name
-  body         String
-  class        MessageClass
-  status       SmsStatus    @default(QUEUED)
-  sendAfter    DateTime
-  cancelKey    String? // e.g. "nudge:<planId>" — cancelled on activation
+  id            String       @id @default(cuid())
+  engineerId    String
+  toPhone       String
+  senderName    String // trading name
+  body          String
+  class         MessageClass
+  status        SmsStatus    @default(QUEUED)
+  sendAfter     DateTime
+  cancelKey     String? // e.g. "nudge:<planId>" — cancelled on activation
   // plan-member-transactional | engineer-initiated | marketing
-  consentBasis String?
-  sentAt       DateTime?
+  consentBasis  String?
+  sentAt        DateTime?
   // What happened to it (QA-02): Twilio's message ID once it took the text,
   // then its delivery receipt (app/api/webhooks/sms-status). failedAt is set
   // when Twilio refused it, texts weren't set up, or the network couldn't
   // deliver it; failureReason says which (or Twilio's error code).
-  providerSid   String?   @unique
+  providerSid   String?      @unique
   deliveredAt   DateTime?
   failedAt      DateTime?
   failureReason String?
@@ -509,7 +533,7 @@ model Suppression {
 // Letter-campaign claim codes (C5). One row per letter recipient; the split
 // test's variant cell is the attribution that must survive to the account.
 model ClaimCode {
-  code                  String    @id // e.g. TS-48217 (normalised: upper, no spaces)
+  code                  String    @id // SMITH-7K3Q from an uploaded batch (Matt, 4 Nov); TS-48217 before
   firstName             String
   businessName          String
   letterBatch           String
@@ -518,6 +542,12 @@ model ClaimCode {
   redeemedByEngineerId  String?   @unique
   redeemedAt            DateTime?
   createdAt             DateTime  @default(now())
+  // Matt, 4 Nov: printed on the letter, the date their Founding place is held
+  // until (null: the batch's founding_deadline setting, else 28 days).
+  reservedUntil         DateTime? @db.Date
+  // Where the letter is posted, from our engineer list: back office and the
+  // mail house only, never shown on the claim page or in the app.
+  mailingAddress        String? // "line1\nline2\npostcode"
   // 30 Oct update §1 — the claim page (tradesura.com/c/CODE). `town` is the
   // one printed on the letter; the rest is what they confirm there, which
   // the app shows back at sign-up (never our list data).
@@ -530,6 +560,8 @@ model ClaimCode {
   mobile                String? // E.164
   textConsentAt         DateTime? // "TradeSura can text me to help me finish setting up."
   codeTextedAt          DateTime?
+
+  @@index([letterBatch])
 }
 
 // 30 Oct update §10 — a Founding Member's top-3 spot in their town. The
@@ -649,20 +681,20 @@ model HomePassport {
 // A dated entry on a passport: a service, certificate, install or note.
 // Engineers see only their own; the homeowner sees everything.
 model ServiceRecord {
-  id          String       @id @default(cuid())
+  id          String         @id @default(cuid())
   passportId  String
-  passport    HomePassport @relation(fields: [passportId], references: [id])
+  passport    HomePassport   @relation(fields: [passportId], references: [id])
   applianceId String?
-  appliance   Appliance?   @relation(fields: [applianceId], references: [id])
+  appliance   Appliance?     @relation(fields: [applianceId], references: [id])
   engineerId  String
-  engineer    Engineer     @relation(fields: [engineerId], references: [id])
+  engineer    Engineer       @relation(fields: [engineerId], references: [id])
   planId      String?
   kind        String // service | certificate | install | note
   doneAt      DateTime
   notes       String?
-  photoUrls   String[]     @default([])
+  photoUrls   String[]       @default([])
   nextDueAt   DateTime?
-  createdAt   DateTime     @default(now())
+  createdAt   DateTime       @default(now())
   rating      Rating?
   files       PassportFile[]
 
@@ -709,9 +741,9 @@ model Sticker {
 // Section 5 — one rating per logged service, plan holders only. Never
 // filtered; removed only for clear abuse with a logged reason.
 model Rating {
-  id              String        @id @default(cuid())
+  id              String         @id @default(cuid())
   engineerId      String
-  engineer        Engineer      @relation(fields: [engineerId], references: [id])
+  engineer        Engineer       @relation(fields: [engineerId], references: [id])
   // A service rating has a plan and a logged service; an at-the-job review
   // (30 Oct update §6, "plans first, then the review") may have neither.
   planId          String?
@@ -724,7 +756,7 @@ model Rating {
   contactEmail    String? // verified by an emailed code (non-joiners)
   // "[Business] may send you occasional plan offers" — ticked by default.
   offerConsent    Boolean        @default(false)
-  requestToken    String        @unique
+  requestToken    String         @unique
   stars           Int?
   comment         String?
   customerName    String? // first name + initial, shown publicly
@@ -733,7 +765,7 @@ model Rating {
   repliedAt       DateTime?
   removedAt       DateTime?
   removedReason   String?
-  createdAt       DateTime      @default(now())
+  createdAt       DateTime       @default(now())
 
   @@index([engineerId, ratedAt])
 }

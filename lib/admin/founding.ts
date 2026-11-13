@@ -1,104 +1,74 @@
 import { prisma } from "@/lib/db";
-import { milestones, realEngineerWhere, type TestMarks } from "@/lib/admin/metrics";
+import { TOP_SPOT_DAYS, TOP_SPOT_REMINDER_DAYS, TOP_SPOTS_PER_TOWN, daysLeft, foundingMemberIds, spotEndsAt } from "@/lib/founding";
 
-// Founding spots (client feedback 4.4 and engineer record 3). These rules are
-// defaults until the client's spec confirms them:
-// - each town has FOUNDING_SPOTS_PER_TOWN spots, given to its engineers in
-//   the order they were verified;
-// - a spot's clock runs FOUNDING_CLOCK_DAYS from when the engineer got it. If
-//   their first plan goes live in that time the spot is theirs to keep;
-//   otherwise it's released to the next engineer in line, whose clock
-//   starts then;
-// - of those holding a spot, whoever has held it longest has the top spot;
-//   the others have the Founding badge.
-// Who's in line: real engineers (lib/admin/metrics.ts), verified, not banned
-// and still with TradeSura, with a town page. It's worked out afresh each
-// time, so a ban or a change of town moves the line along.
+// Founding for the admin API, read from the app's own record (lib/founding.ts,
+// confirmed by Matt on 4 Nov): a Founding Member claimed their letter by its
+// date; the first TOP_SPOTS_PER_TOWN of them in a town to complete their
+// account hold its top spots, each released if they haven't signed a customer
+// within TOP_SPOT_DAYS (reminders at 30, 14, 7 and 2 days left). The admin
+// only reads it, so the record and the app never disagree.
 
-export const FOUNDING_SPOTS_PER_TOWN = 3;
-export const FOUNDING_CLOCK_DAYS = 60;
+export const FOUNDING_RULES = { spotsPerTown: TOP_SPOTS_PER_TOWN, spotDays: TOP_SPOT_DAYS, reminderDays: [...TOP_SPOT_REMINDER_DAYS] };
 
-const DAY_MS = 86_400_000;
+export type FoundingSpot =
+  | { state: "holding"; position: number; heldFrom: Date; endsAt: Date; daysLeft: number; kept: boolean; remindersSent: number[] }
+  | { state: "released"; heldFrom: Date; releasedAt: Date; reason: string | null };
 
-export type FoundingCandidate = { id: string; verifiedAt: Date; planLive: boolean; planLiveAt: Date | null };
+export type FoundingStatus = { member: boolean; town: string | null; spot: FoundingSpot | null };
 
-export type FoundingState =
-  | { state: "top_spot" | "badge"; position: number; since: Date; clockEndsAt: Date; kept: boolean }
-  | { state: "released"; since: Date; releasedAt: Date }
-  | { state: "waiting"; place: number };
-
-/**
- * One town's spots at an instant. A first plan live with no date on record
- * went live before the app logged it, so it keeps the spot.
- */
-export function allocateFounding(candidates: FoundingCandidate[], now: Date, spots = FOUNDING_SPOTS_PER_TOWN): Map<string, FoundingState> {
-  const line = candidates
-    .filter((c) => c.verifiedAt <= now)
-    .sort((a, b) => a.verifiedAt.getTime() - b.verifiedAt.getTime() || a.id.localeCompare(b.id));
-  type Holder = { c: FoundingCandidate; since: Date; endsAt: Date; kept: boolean };
-  const held: Holder[] = [];
-  const waiting: FoundingCandidate[] = [];
-  const out = new Map<string, FoundingState>();
-  const give = (c: FoundingCandidate, at: Date) => {
-    const endsAt = new Date(at.getTime() + FOUNDING_CLOCK_DAYS * DAY_MS);
-    held.push({ c, since: at, endsAt, kept: c.planLive && (c.planLiveAt === null || c.planLiveAt < endsAt) });
-  };
-  let next = 0;
-  for (;;) {
-    const release = held.filter((h) => !h.kept && h.endsAt <= now).sort((a, b) => a.endsAt.getTime() - b.endsAt.getTime())[0];
-    const arrival = line[next];
-    if (!release && !arrival) break;
-    if (release && (!arrival || release.endsAt <= arrival.verifiedAt)) {
-      held.splice(held.indexOf(release), 1);
-      out.set(release.c.id, { state: "released", since: release.since, releasedAt: release.endsAt });
-      const nextInLine = waiting.shift();
-      if (nextInLine) give(nextInLine, release.endsAt);
-    } else {
-      next += 1;
-      if (held.length < spots) give(arrival, arrival.verifiedAt);
-      else waiting.push(arrival);
-    }
-  }
-  held
-    .sort((a, b) => a.since.getTime() - b.since.getTime() || a.c.verifiedAt.getTime() - b.c.verifiedAt.getTime())
-    .forEach((h, i) => out.set(h.c.id, { state: i === 0 ? "top_spot" : "badge", position: i + 1, since: h.since, clockEndsAt: h.endsAt, kept: h.kept }));
-  waiting.forEach((c, i) => out.set(c.id, { state: "waiting", place: i + 1 }));
-  return out;
+/** "Founding · top spot", "Founding" or "Standard": the pack and the list say it the same way. */
+export function foundingLabel(f: FoundingStatus | undefined): "Founding · top spot" | "Founding" | "Standard" {
+  if (f?.spot?.state === "holding") return "Founding · top spot";
+  return f?.member ? "Founding" : "Standard";
 }
 
-export type FoundingStatus = (FoundingState & { town: string }) | { state: "no_town" } | { state: "not_in_line"; reason: "not_verified" | "banned" | "left" | "test" | "staff" };
-
-/** Founding status for some engineers, each worked out over everyone in their town. */
-export async function foundingFor(marks: TestMarks, engineerIds: string[], now = new Date()): Promise<Map<string, FoundingStatus>> {
-  const asked = engineerIds.length
-    ? await prisma.engineer.findMany({ where: { id: { in: engineerIds } }, select: { id: true, ownerId: true, townSlug: true, gasSafeVerifiedAt: true, bannedAt: true, leftAt: true } })
-    : [];
-  const slugs = [...new Set(asked.map((e) => e.townSlug).filter((s): s is string => Boolean(s)))];
-  const [inLine, towns] = slugs.length
-    ? await Promise.all([
-        prisma.engineer.findMany({
-          where: { ...realEngineerWhere(marks), townSlug: { in: slugs }, gasSafeVerifiedAt: { not: null, lte: now }, bannedAt: null, leftAt: null },
-          select: { id: true, townSlug: true, gasSafeVerifiedAt: true },
-        }),
-        prisma.townPage.findMany({ where: { slug: { in: slugs } }, select: { slug: true, name: true } }),
-      ])
-    : [[], []];
-  const reached = inLine.length ? await milestones(marks, { ids: inLine.map((e) => e.id) }) : new Map();
+/** Founding status for some engineers. */
+export async function foundingFor(engineerIds: string[], now = new Date()): Promise<Map<string, FoundingStatus>> {
+  if (!engineerIds.length) return new Map();
+  const [members, spots] = await Promise.all([
+    foundingMemberIds(engineerIds),
+    prisma.topSpot.findMany({ where: { engineerId: { in: engineerIds } }, orderBy: { heldFrom: "desc" } }),
+  ]);
+  // Each engineer's open spot, or else their latest released one.
+  const spotOf = new Map<string, (typeof spots)[number]>();
+  for (const s of spots) {
+    const seen = spotOf.get(s.engineerId);
+    if (!seen || (seen.releasedAt && !s.releasedAt)) spotOf.set(s.engineerId, s);
+  }
+  const open = [...spotOf.values()].filter((s) => !s.releasedAt);
+  const townSlugs = [...new Set([...spotOf.values()].map((s) => s.townSlug))];
+  const [towns, holders, customers, reminders] = await Promise.all([
+    townSlugs.length ? prisma.townPage.findMany({ where: { slug: { in: townSlugs } }, select: { slug: true, name: true } }) : [],
+    // Position among the town's holders: whoever has held theirs longest first.
+    open.length ? prisma.topSpot.findMany({ where: { townSlug: { in: open.map((s) => s.townSlug) }, releasedAt: null }, orderBy: { heldFrom: "asc" }, select: { id: true, townSlug: true } }) : [],
+    open.length ? prisma.plan.groupBy({ by: ["engineerId"], where: { engineerId: { in: open.map((s) => s.engineerId) }, activatedAt: { not: null } }, _count: { _all: true } }) : [],
+    open.length ? prisma.event.findMany({ where: { name: "top_spot_reminder", OR: open.map((s) => ({ meta: { path: ["spotId"], equals: s.id } })) }, select: { meta: true } }) : [],
+  ]);
   const townName = new Map(towns.map((t) => [t.slug, t.name]));
-  const byTown = new Map<string, Map<string, FoundingState>>();
-  for (const slug of slugs) {
-    const candidates = inLine
-      .filter((e) => e.townSlug === slug)
-      .map((e) => ({ id: e.id, verifiedAt: e.gasSafeVerifiedAt!, planLive: reached.get(e.id)?.plan_live.reached ?? false, planLiveAt: reached.get(e.id)?.plan_live.at ?? null }));
-    byTown.set(slug, allocateFounding(candidates, now));
+  const signed = new Set(customers.map((c) => c.engineerId));
+  const sent = new Map<string, number[]>();
+  for (const r of reminders) {
+    const meta = (r.meta ?? {}) as { spotId?: string; days?: number };
+    if (meta.spotId && typeof meta.days === "number") sent.set(meta.spotId, [...(sent.get(meta.spotId) ?? []), meta.days].sort((a, b) => b - a));
   }
   return new Map(
-    asked.map((e): [string, FoundingStatus] => {
-      if (!e.townSlug && !e.ownerId) return [e.id, { state: "no_town" }];
-      const state = e.townSlug ? byTown.get(e.townSlug)?.get(e.id) : undefined;
-      if (state) return [e.id, { ...state, town: townName.get(e.townSlug!) ?? e.townSlug! }];
-      const reason = e.ownerId ? "staff" : marks.engineers.includes(e.id) ? "test" : e.bannedAt ? "banned" : e.leftAt ? "left" : "not_verified";
-      return [e.id, { state: "not_in_line", reason }];
+    engineerIds.map((id): [string, FoundingStatus] => {
+      const s = spotOf.get(id);
+      const town = s ? (townName.get(s.townSlug) ?? s.townSlug) : null;
+      const spot: FoundingSpot | null = !s
+        ? null
+        : s.releasedAt
+          ? { state: "released", heldFrom: s.heldFrom, releasedAt: s.releasedAt, reason: s.releaseReason }
+          : {
+              state: "holding",
+              position: holders.filter((h) => h.townSlug === s.townSlug).findIndex((h) => h.id === s.id) + 1,
+              heldFrom: s.heldFrom,
+              endsAt: spotEndsAt(s.heldFrom),
+              daysLeft: daysLeft(s.heldFrom, now),
+              kept: signed.has(id),
+              remindersSent: sent.get(s.id) ?? [],
+            };
+      return [id, { member: members.has(id) || spot?.state === "holding", town, spot }];
     }),
   );
 }

@@ -24,8 +24,12 @@ beforeEach(async () => {
   await resetDb();
   twilioFetch.mockReset();
   vi.stubGlobal("fetch", twilioFetch);
+  // Midday today, outside quiet hours (lib/sms.ts), so a text goes now whenever the tests run.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(new Date().setUTCHours(12, 0, 0, 0)));
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   process.env = { ...saved };
 });

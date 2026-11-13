@@ -11,6 +11,7 @@ import {
   referralStage,
 } from "@/lib/referral";
 import { appUrl } from "@/lib/app-url";
+import { ensureReferralCode, referralLink } from "@/lib/referral-code";
 
 // The engineer's referral hub: their invite link, the affiliate terms
 // (Build Review 2, ruling 4), and per referred engineer their stage, current
@@ -48,7 +49,8 @@ export async function GET() {
     }),
   );
 
-  const link = `${appUrl()}/join/${engineer.slug}`;
+  const code = await ensureReferralCode(engineer.id);
+  const link = referralLink(code);
   const qrDataUrl = await QRCode.toDataURL(link, { width: 280, margin: 1 });
 
   // Part 14 — "Share my income card... soft-gated ('Unlocks with your first
@@ -60,6 +62,7 @@ export async function GET() {
     })) > 0;
 
   return NextResponse.json({
+    code,
     link,
     qrDataUrl,
     cardUrl: `${appUrl()}/api/referral/card?slug=${engineer.slug}`,

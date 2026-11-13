@@ -7,7 +7,7 @@ import { POST as chase } from "@/app/api/admin/v1/verifications/[engineerId]/cha
 import { call, CHECKER, resetDb } from "./helpers";
 import { makeEngineer } from "./factories";
 
-// Section 3 of the client's feedback: what the check page shows and asks for.
+// Section 3 of the client's feedback, and Matt's of 4 Nov: what the check page shows and asks for.
 
 const sent = vi.hoisted(() => ({ push: vi.fn(), sms: vi.fn(async () => true), email: vi.fn(async () => {}) }));
 // Whether texts and email are set up on this server (QA-05).
@@ -24,14 +24,14 @@ beforeEach(async () => {
   Object.assign(configured, { sms: true, email: true });
 });
 
-/** An application with nothing left to check: on the register by the same name, with a card. */
-async function cleanApplication(data: Parameters<typeof makeEngineer>[0] = {}) {
-  const e = await makeEngineer({ firstName: "Dave", lastName: "Smith", gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/card.png", ...data });
-  await prisma.gasSafeRecord.create({ data: { regNo: e.gasSafeNo!, name: "D. Smith", company: "Smith Heating", categories: "Domestic gas" } });
-  return e;
-}
+const CARD = "https://x.public.blob.vercel-storage.com/card.png";
 
-describe("3.1: officer and register names", () => {
+/** A case with nothing left to check: a card, and nothing shared with another account. */
+const cleanApplication = (data: Parameters<typeof makeEngineer>[0] = {}) => makeEngineer({ firstName: "Dave", lastName: "Smith", gasSafeCardUrl: CARD, ...data });
+
+const isoDay = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+
+describe("3.1: officer names", () => {
   it("calls Matt Wood a likely match for WOOD, Matthew Dean, not a missing officer", async () => {
     const e = await makeEngineer({ firstName: "Matt", lastName: "Wood", businessType: "ltd", companyNumber: "12345678", legalName: "302 MD LTD", tradingName: "302 MD LTD" });
     const d = (await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body;
@@ -39,37 +39,39 @@ describe("3.1: officer and register names", () => {
     expect(d.warnings.map((w: { code: string }) => w.code)).toContain("officer_likely");
     expect(d.warnings.map((w: { code: string }) => w.code)).not.toContain("no_officer");
   });
-
-  it("calls a full name on the register a likely match for its short form", async () => {
-    const e = await makeEngineer({ firstName: "Matt", lastName: "Wood" });
-    await prisma.gasSafeRecord.create({ data: { regNo: e.gasSafeNo!, name: "Matthew Wood", company: "", categories: "" } });
-    expect((await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body.gasSafe.register).toBe("likely_match");
-  });
 });
 
 describe("3.2, 3.5: the queue", () => {
-  it("shows the Gas Safe number and town, and waits from the latest card upload", async () => {
-    const e = await makeEngineer({ town: "Huddersfield", createdAt: new Date("2026-10-20T09:00:00Z") });
+  it("shows the licence number and town, and waits from the latest card upload", async () => {
+    const e = await cleanApplication({ town: "Huddersfield", gasSafeNo: "1234567", createdAt: new Date("2026-10-20T09:00:00Z") });
     await prisma.event.create({ data: { name: "gas_safe_card_added", actorType: "ENGINEER", actorId: e.id, ts: new Date("2026-10-22T09:00:00Z") } });
     const [row] = (await call(list, { as: CHECKER })).body.items;
-    expect(row).toMatchObject({ gasSafeNo: e.gasSafeNo, town: "Huddersfield", submittedAt: "2026-10-20T09:00:00.000Z", waitingSince: "2026-10-22T09:00:00.000Z" });
+    expect(row).toMatchObject({ licenceNo: "1234567", town: "Huddersfield", submittedAt: "2026-10-20T09:00:00.000Z", waitingSince: "2026-10-22T09:00:00.000Z" });
   });
 });
 
-describe("3.3: our copy of the register", () => {
-  it("says how big it is and when it was imported, if that's recorded", async () => {
-    const e = await makeEngineer();
-    let copy = (await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body.gasSafe.copy;
-    expect(copy).toEqual({ records: 0, importedAt: null });
-    await prisma.appSetting.create({ data: { key: "gas_safe_register_imported_at", value: "2026-09-01T00:00:00.000Z" } });
-    copy = (await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body.gasSafe.copy;
-    expect(copy.importedAt).toBe("2026-09-01T00:00:00.000Z");
+describe("Matt, 4 Nov: only the live register", () => {
+  it("never checks a stored copy, whatever it holds", async () => {
+    await prisma.gasSafeRecord.create({ data: { regNo: "999999", name: "Someone Else", company: "Other Ltd", categories: "Boilers" } });
+    const e = await cleanApplication({ gasSafeNo: "999999" });
+    const d = (await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body;
+    expect(d.warnings).toEqual([]);
+    expect(Object.keys(d.gasSafe).sort()).toEqual(["licenceNo", "registerUrl", "registrationNo"]);
+    expect(d.gasSafe.registerUrl).toMatch(/^https:\/\/www\.gassaferegister\.co\.uk/);
+  });
+
+  it("flags a card expiry more than 13 months away", async () => {
+    const e = await cleanApplication({ gasSafeCardExpiresOn: new Date(`${isoDay(500)}T00:00:00Z`) });
+    expect((await call(list, { as: CHECKER })).body.items[0].signals.cardExpiryFar).toBe(true);
+    expect((await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body.warnings.map((w: { code: string }) => w.code)).toEqual(["card_expiry_far"]);
+    const normal = await cleanApplication({ lastName: "Hughes", gasSafeCardExpiresOn: new Date(`${isoDay(300)}T00:00:00Z`) });
+    expect((await call(detail, { as: CHECKER, params: { engineerId: normal.id } })).body.warnings).toEqual([]);
   });
 });
 
 describe("3.4: business type", () => {
   it("flags a company name on a sole trader, in the queue and on the case", async () => {
-    const e = await makeEngineer({ tradingName: "Test Trading LTD", businessType: "sole_trader" });
+    const e = await cleanApplication({ tradingName: "Test Trading LTD", businessType: "sole_trader" });
     expect((await call(list, { as: CHECKER })).body.items[0].signals.typeMismatch).toBe("name_says_company");
     const d = (await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body;
     // No Companies House key here, so no search results: the flag stands on its own.
@@ -79,19 +81,14 @@ describe("3.4: business type", () => {
 });
 
 describe("3.6: the check page", () => {
-  it("sets what they gave beside the register, and shows contact details only to admins who may see them", async () => {
+  it("sets out what they gave, and shows contact details only to admins who may see them", async () => {
     const e = await cleanApplication({ gasSafeCategories: "Domestic gas, LPG", town: "Leeds" });
     const checker = (await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body;
     expect(checker.submitted).toEqual({ name: "Dave Smith", business: e.tradingName, categories: "Domestic gas, LPG", postcode: "LS1 4AB", town: "Leeds", cardExpiry: null });
-    // Address and card expiry only when the imported register file had them (QA-07).
-    expect(checker.gasSafe.onRegister).toEqual({ name: "D. Smith", company: "Smith Heating", categories: "Domestic gas", address: null, postcode: null, cardExpiry: null });
-    await prisma.gasSafeRecord.update({ where: { regNo: e.gasSafeNo! }, data: { address: "4 Mill Lane, Holmfirth", postcode: "HD9 2TT", cardExpiresOn: new Date("2027-03-31") } });
-    expect((await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body.gasSafe.onRegister).toMatchObject({ address: "4 Mill Lane, Holmfirth", postcode: "HD9 2TT", cardExpiry: "2027-03-31" });
     expect(checker.contact).toBeNull();
     const admin = (await call(detail, { params: { engineerId: e.id } })).body;
     expect(admin.contact.email).toMatch(/•••/);
   });
-
   it("chases a missing card photo by text, and records it", async () => {
     const e = await makeEngineer({ setupTextConsentAt: new Date() });
     const res = await call(chase, { as: CHECKER, params: { engineerId: e.id }, body: { what: "photo", channel: "sms" } });
@@ -133,9 +130,9 @@ describe("3.6: the check page", () => {
   });
 });
 
-describe("3.7: approving over open warnings", () => {
+describe("3.7: passing the card check over open warnings", () => {
   it("needs a note, kept with the decision and the warnings it was made over", async () => {
-    const e = await makeEngineer(); // no card photo, not on the register
+    const e = await cleanApplication({ gasSafeCardExpiresOn: new Date(`${isoDay(500)}T00:00:00Z`) });
     const without = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve" } });
     expect(without.status).toBe(400);
     expect(without.body.error.fields.reason).toBeDefined();
@@ -144,7 +141,7 @@ describe("3.7: approving over open warnings", () => {
     const withNote = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", reason: "Saw the card on a video call" } });
     expect(withNote.status).toBe(200);
     const event = await prisma.event.findFirstOrThrow({ where: { name: "gas_safe_verified" } });
-    expect(event.meta).toMatchObject({ reason: "Saw the card on a video call", warnings: ["not_on_register", "no_card"] });
+    expect(event.meta).toMatchObject({ reason: "Saw the card on a video call", warnings: ["card_expiry_far"] });
   });
 
   it("needs no note when nothing is open", async () => {

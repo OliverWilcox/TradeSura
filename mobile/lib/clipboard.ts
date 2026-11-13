@@ -1,5 +1,8 @@
 import { Share } from "react-native";
 import * as Haptics from "expo-haptics";
+import { findClaimCode } from "@/lib/claim-code";
+
+export { findClaimCode };
 
 // expo-clipboard is a native module: builds made before it was added don't
 // have it, and requiring it there throws. Those builds fall back to the
@@ -28,10 +31,4 @@ export async function pasteClaimCode(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-/** "TS-48217", "ts 48217" or a pasted text/link that contains one → "TS-48217". */
-export function findClaimCode(text: string | null | undefined): string | null {
-  const m = (text ?? "").toUpperCase().match(/\bTS[\s-]?(\d{4,8})\b/);
-  return m ? `TS-${m[1]}` : null;
 }

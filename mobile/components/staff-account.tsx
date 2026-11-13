@@ -40,7 +40,7 @@ export function StaffAccount() {
               </Pill>
             }
           />
-          <RowLine left="Gas Safe number" right={me?.gasSafeNo ?? "—"} />
+          <RowLine left="Licence number" right={me?.gasSafeNo ?? "—"} />
           <RowLine left="Email" right={me?.email ?? "—"} />
         </Card>
         <Card>

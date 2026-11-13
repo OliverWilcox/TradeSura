@@ -8,6 +8,10 @@ export const COMPANY_NUMBER = /^(\d{8}|(SC|NI|OC|SO|NC)\d{6})$/;
 // 1–7 digits: older registrations can be as short as 2, so no fixed length.
 // The exact number is confirmed in the manual check against the ID photo.
 export const GAS_SAFE_NO = /^\d{1,7}$/;
+/** The engineer's own licence number: the 7 digits on the front of their Gas Safe ID card. */
+export const GAS_SAFE_LICENCE_NO = /^\d{7}$/;
+/** The business's Gas Safe registration number (Matt, 4 Nov: shown beside the licence number, never in its place). */
+export const GAS_SAFE_REGISTRATION_NO = /^\d{4,7}$/;
 
 // 6 or 7 digits get their leading zeros back (1234567 → 01234567).
 export function normaliseCompanyNumber(v: string): string {

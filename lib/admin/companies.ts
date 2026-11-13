@@ -13,9 +13,12 @@ export type CompanyProfile = {
 
 type ApiAddress = { premises?: string; address_line_1?: string; address_line_2?: string; locality?: string; region?: string; postal_code?: string };
 
+/** A house number ("32", "71-75", "12A") runs into its street; a named building ("Gateway Tower") is its own part. */
+const HOUSE_NUMBER = /^\d+[a-z]?(\s*-\s*\d+[a-z]?)?$/i;
+
 export function formatOffice(a: ApiAddress | undefined): string | null {
   if (!a) return null;
-  const first = [a.premises, a.address_line_1].filter(Boolean).join(" ");
+  const first = [a.premises, a.address_line_1].filter(Boolean).join(a.premises && HOUSE_NUMBER.test(a.premises.trim()) ? " " : ", ");
   const parts = [first, a.address_line_2, a.locality, a.region, a.postal_code].map((p) => p?.trim()).filter(Boolean);
   return parts.length ? parts.join(", ") : null;
 }

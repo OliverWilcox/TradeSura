@@ -52,7 +52,7 @@ export function ClaimForm({
           setChecked(false);
           setResolved(null);
         }}
-        placeholder="TS-00000"
+        placeholder="Your code"
         className="w-full text-center text-xl font-mono font-bold tracking-[0.12em] uppercase rounded-[10px] border-[1.5px] border-line bg-paper px-3 py-3.5"
       />
 

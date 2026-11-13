@@ -5,10 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => {
   process.env.SESSION_SECRET = "test-secret-for-claim-privacy-0123456789";
-  return { findUnique: vi.fn(), count: vi.fn(), create: vi.fn() };
+  return { findFirst: vi.fn(), count: vi.fn(), create: vi.fn() };
 });
 vi.mock("@/lib/db", () => ({
-  prisma: { claimCode: { findUnique: m.findUnique }, event: { count: m.count, create: m.create } },
+  prisma: { claimCode: { findFirst: m.findFirst }, event: { count: m.count, create: m.create } },
 }));
 vi.mock("next/headers", () => ({ headers: async () => new Map() }));
 
@@ -44,7 +44,7 @@ const ROW = {
 };
 
 beforeEach(() => {
-  m.findUnique.mockReset().mockResolvedValue(ROW);
+  m.findFirst.mockReset().mockResolvedValue(ROW);
   m.count.mockReset().mockResolvedValue(0);
   m.create.mockReset().mockResolvedValue({});
 });

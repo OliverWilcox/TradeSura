@@ -1,31 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { ACTIVE_WINDOW_DAYS, CALL_LADDER, ladderStep } from "@/lib/admin/metrics";
+import { CALL_LADDER, ladderStep } from "@/lib/admin/metrics";
 import { nextRegisterCheck } from "@/lib/admin/verifications";
 import { cardExpiry } from "@/lib/gas-safe-card";
 
-// Engineer record 3 and 4: the call ladder, the next register check, and the
-// card expiry the app sends.
+// Engineer record 3 and 4: the follow-up ladder, the next register check, and
+// the card expiry the app sends.
 
 describe("ladderStep", () => {
-  it("starts when an engineer stops being active and climbs from there", () => {
-    expect(ladderStep(ACTIVE_WINDOW_DAYS - 1)).toBeNull();
-    expect(ladderStep(7)?.label).toBe("Reminder text");
-    expect(ladderStep(13)?.step).toBe(1);
-    expect(ladderStep(14)?.label).toBe("First call");
-    expect(ladderStep(21)?.label).toBe("Second call");
-    expect(ladderStep(30)?.label).toBe("Final call");
+  it("follows Matt's ladder of 4 Nov: day 3 push, day 5 WhatsApp, day 7 email, day 10 call list", () => {
+    expect(ladderStep(2)).toBeNull();
+    expect(ladderStep(3)?.label).toBe("Push");
+    expect(ladderStep(4)?.step).toBe(1);
+    expect(ladderStep(5)?.label).toBe("WhatsApp");
+    expect(ladderStep(7)?.label).toBe("Email");
+    expect(ladderStep(10)?.label).toBe("Call list");
     expect(ladderStep(365)).toBe(CALL_LADDER.at(-1));
   });
 });
 
 describe("nextRegisterCheck", () => {
-  const verified = new Date("2026-03-15T10:00:00Z");
+  const checked = new Date("2026-03-15T10:00:00Z");
 
-  it("is a year after verification, or sooner when the card expires first", () => {
+  it("is two weeks after the card's expiry, or a year after the last check without one", () => {
     expect(nextRegisterCheck(null, null)).toBeNull();
-    expect(nextRegisterCheck(verified, null)).toEqual(new Date("2027-03-15T10:00:00Z"));
-    expect(nextRegisterCheck(verified, new Date("2026-12-31"))).toEqual(new Date("2026-12-31"));
-    expect(nextRegisterCheck(verified, new Date("2028-01-01"))).toEqual(new Date("2027-03-15T10:00:00Z"));
+    expect(nextRegisterCheck(checked, null)).toEqual(new Date("2027-03-15T10:00:00Z"));
+    expect(nextRegisterCheck(checked, new Date("2026-12-31"))).toEqual(new Date("2027-01-14"));
+  });
+
+  it("doesn't fall due again at once for a card that had already lapsed when it was checked", () => {
+    expect(nextRegisterCheck(checked, new Date("2026-02-01"))).toEqual(new Date("2027-03-15T10:00:00Z"));
   });
 });
 

@@ -18,6 +18,8 @@ type Invitee = {
   ratePercent: number;
 };
 type Data = {
+  /** The short code printed on the cover letter (SMITH25); the link is tradesura.com/r/{code}. */
+  code?: string;
   link: string;
   qrDataUrl: string;
   cardUrl: string;
@@ -89,7 +91,7 @@ function ShareChip({ icon, label, onPress }: { icon: IconName; label: string; on
 }
 
 export default function Referral() {
-  const { me, refreshMe } = useAuth();
+  const { refreshMe } = useAuth();
   const [copied, setCopied] = useState(false);
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -244,7 +246,7 @@ export default function Referral() {
               <Text selectable className="mt-1.5 text-[19px] font-bold text-ink">
                 {data.link.replace(/^https?:\/\/(www\.)?/, "")}
               </Text>
-              {me?.slug && <Text className="mt-0.5 text-[14px] text-muted">Your code: {me.slug}</Text>}
+              {data.code ? <Text className="mt-0.5 text-[14px] text-muted">Your code: {data.code}</Text> : null}
               <View className="mt-3 flex-row gap-2">
                 <ShareChip icon="message" label="WhatsApp" onPress={share} />
                 <ShareChip icon="chat" label="Text" onPress={text} />

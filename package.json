@@ -13,8 +13,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "db:up": "docker compose up -d --wait db",
     "db:seed": "tsx prisma/seed.ts",
-    "seed:demo": "tsx scripts/seed-demo.ts",
-    "import:gas-safe": "tsx scripts/import-gas-safe.ts"
+    "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

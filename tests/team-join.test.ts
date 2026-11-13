@@ -14,7 +14,7 @@ const m = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/db", () => ({
   prisma: {
-    claimCode: { findUnique: m.claimFind },
+    claimCode: { findFirst: m.claimFind },
     engineer: { findFirst: m.engFindFirst, findUnique: m.engFindUnique },
     event: { create: m.eventCreate, findUnique: m.eventFind },
   },
@@ -42,7 +42,7 @@ describe("findFirm", () => {
     m.claimFind.mockResolvedValue({ redeemedByEngineerId: "own-1" });
     m.engFindFirst.mockResolvedValue(owner);
     expect(await findFirm({ claimCode: "ts 48217" })).toEqual({ ownerId: "own-1", businessName: "MW Heating", ownerFirstName: "Matt" });
-    expect(m.claimFind).toHaveBeenCalledWith(expect.objectContaining({ where: { code: "TS-48217" } }));
+    expect(m.claimFind).toHaveBeenCalledWith(expect.objectContaining({ where: { code: { in: ["TS-48217"] } } }));
   });
 
   it("finds the owner by company number, never a staff row", async () => {
