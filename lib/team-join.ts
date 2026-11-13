@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { brandName } from "@/lib/engineer";
-import { normaliseClaimCode } from "@/lib/claim";
+import { claimCodeWhere } from "@/lib/claim";
 import { normaliseCompanyNumber } from "@/lib/validate";
 import { sendPushNotification } from "@/lib/push";
 import { sendEmail } from "@/lib/email";
@@ -19,8 +19,8 @@ export async function findFirm(opts: { claimCode?: string | null; companyNumber?
   const live = { ownerId: null, deletedAt: null, bannedAt: null, leftAt: null } as const;
   let owner = null;
   if (opts.claimCode) {
-    const claim = await prisma.claimCode.findUnique({
-      where: { code: normaliseClaimCode(opts.claimCode) },
+    const claim = await prisma.claimCode.findFirst({
+      where: claimCodeWhere(opts.claimCode),
       select: { redeemedByEngineerId: true },
     });
     if (claim?.redeemedByEngineerId) {

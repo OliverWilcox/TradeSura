@@ -24,9 +24,12 @@ export async function POST(req: Request) {
   }
   const stored = await storeGasSafeCard(parsed.data.base64, parsed.data.mimeType);
   if (!stored.ok) return NextResponse.json({ error: stored.error }, { status: 400 });
+  const { gasSafeVerifiedAt } = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId }, select: { gasSafeVerifiedAt: true } });
   await prisma.engineer.update({
     where: { id: engineerId },
     data: {
+      // A live engineer stays live; their new card brings the register re-check forward (Matt, 4 Nov).
+      ...(gasSafeVerifiedAt ? { gasSafeRecheckRequestedAt: new Date(), gasSafeRecheckReason: "New card uploaded" } : {}),
       gasSafeCardUrl: stored.url,
       gasSafeCardExpiresOn: parsed.data.expiresOn ?? null,
       gasSafeRejectedAt: null,

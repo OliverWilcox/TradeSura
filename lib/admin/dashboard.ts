@@ -178,11 +178,22 @@ async function moneyFrom(range: Range, firstMonth: string, months: number) {
     d.setUTCMonth(d.getUTCMonth() + i);
     return d.toISOString().slice(0, 7);
   });
+  // Real referrals only: neither side test data.
+  const realReferral = { referrerId: { notIn: marks.engineers }, inviteeId: { notIn: marks.engineers } };
+  const [earned, owed] = await Promise.all([
+    prisma.referralEarning.aggregate({ where: { ...realReferral, createdAt: { gte: range.from, lt: range.to } }, _sum: { amountPence: true } }),
+    prisma.referralEarning.aggregate({ where: { ...realReferral, transferId: null }, _sum: { amountPence: true } }),
+  ]);
   return {
-    months: keys.map((month) => ({ month, ...paymentTotals(paid.filter((p) => ukDay(p.paidAt).slice(0, 7) === month)) })),
-    period: paymentTotals(paid.filter((p) => p.paidAt >= range.from && p.paidAt < range.to)),
+    months: keys.map((month) => ({ month, ...withShares(paymentTotals(paid.filter((p) => ukDay(p.paidAt).slice(0, 7) === month))) })),
+    period: withShares(paymentTotals(paid.filter((p) => p.paidAt >= range.from && p.paidAt < range.to))),
+    /** Referral payments (Matt, 4 Nov): earned in the range, and owed now (earned, not yet transferred). */
+    referrals: { earnedPence: earned._sum.amountPence ?? 0, owedPence: owed._sum.amountPence ?? 0 },
   };
 }
+
+/** What went to engineers: collected after refunds and claims, less TradeSura's fee (their 80%). */
+const withShares = <T extends { netPence: number; feePence: number }>(t: T) => ({ ...t, engineersPence: t.netPence - t.feePence });
 
 // --- Health: cancellations and failed payments -----------------------------------
 

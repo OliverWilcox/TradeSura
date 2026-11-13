@@ -33,7 +33,8 @@ export default function AddId() {
             check the card matches it. */}
         {me?.gasSafeNo && (
           <View className="mt-4 flex-row items-center justify-between rounded-2xl border border-line-strong px-4 py-3">
-            <Text className="text-[14px] text-muted">Gas Safe registration number</Text>
+            {/* Before sign-up asked for both, the one number given could be either. */}
+            <Text className="text-[14px] text-muted">{/^\d{7}$/.test(me.gasSafeNo) ? "Licence number" : "Business registration number"}</Text>
             <Text className="tabular-nums text-[16px] font-semibold text-ink">{me.gasSafeNo}</Text>
           </View>
         )}

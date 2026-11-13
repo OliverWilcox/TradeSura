@@ -26,13 +26,22 @@ export function checkEmail(v: string): string | null {
     : "That email doesn't look right — check for typos.";
 }
 
-// 1–7 digits — older registrations can be as short as 2, so there's no
-// fixed-length rule; the manual check against the ID photo confirms it.
+// The engineer's own licence number: 7 digits on the front of the Gas Safe
+// ID card (Matt, 4 Nov). The business registration number is asked for
+// separately, below.
 export function checkGasSafeNo(v: string): string | null {
   const d = v.replace(/\s/g, "");
-  if (!d) return "Enter your Gas Safe registration number.";
+  if (!d) return "Enter your licence number.";
   if (/\D/.test(d)) return "Use digits only — no letters.";
-  return d.length <= 7 ? null : "Gas Safe numbers are at most 7 digits.";
+  return d.length === 7 ? null : "Your licence number is 7 digits.";
+}
+
+// The business's Gas Safe registration number, from the same card.
+export function checkRegistrationNo(v: string): string | null {
+  const d = v.replace(/\s/g, "");
+  if (!d) return "Enter your business registration number.";
+  if (/\D/.test(d)) return "Use digits only — no letters.";
+  return d.length >= 4 && d.length <= 7 ? null : "Check the business registration number on your card.";
 }
 
 // 6 or 7 digits get their leading zeros back (1234567 → 01234567).

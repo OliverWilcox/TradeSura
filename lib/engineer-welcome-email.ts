@@ -2,6 +2,7 @@
 // wins over older rules (CLAUDE.md). The checklist ticks off from the
 // account's real setup state.
 import { prisma } from "@/lib/db";
+import { ensureReferralCode, referralLink } from "@/lib/referral-code";
 import { appUrl } from "@/lib/app-url";
 import { EMAIL, SUPPORT_EMAIL, emailAssetBase, emailButton, emailShell, escapeHtml } from "@/lib/email-layout";
 import { REFERRAL_FIRST_YEAR_PERCENT, REFERRAL_LIFETIME_PERCENT } from "@/lib/referral";
@@ -35,10 +36,11 @@ function checklistRow(item: Item, last: boolean): string {
 
 export async function engineerWelcomeEmailHtml(engineerId: string) {
   const e = await prisma.engineer.findUniqueOrThrow({ where: { id: engineerId } });
-  const [liveTiers, customerCount, referralCount] = await Promise.all([
+  const [liveTiers, customerCount, referralCount, code] = await Promise.all([
     prisma.planTier.count({ where: { engineerId, status: "LIVE" } }),
     prisma.customer.count({ where: { engineerId } }),
     prisma.engineer.count({ where: { referrerId: engineerId } }),
+    ensureReferralCode(engineerId),
   ]);
   const firstName = escapeHtml(e.firstName || "there");
   // Build Review 3, P1 — the BUSINESS name fills in ("MW Heating now has a
@@ -124,7 +126,7 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${EMAIL.wash};border-radius:12px;"><tr><td style="padding:16px;font-size:14px;line-height:20px;color:${EMAIL.ink};">
             <div style="font-weight:700;font-size:15px;padding-bottom:4px;">Know another engineer?</div>
             Earn <b>${REFERRAL_FIRST_YEAR_PERCENT}% of our fee</b> on every plan they sell for their first year, then <b>${REFERRAL_LIFETIME_PERCENT}% for life</b>.
-            <div style="padding-top:8px;"><a href="${base}/join/${escapeHtml(e.slug)}" style="color:${EMAIL.link};font-weight:700;text-decoration:none;">Share your invite link &rarr;</a></div>
+            <div style="padding-top:8px;"><a href="${referralLink(code)}" style="color:${EMAIL.link};font-weight:700;text-decoration:none;">Share your invite link &rarr;</a></div>
           </td></tr></table>
         </td>
       </tr>

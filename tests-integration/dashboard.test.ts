@@ -133,7 +133,7 @@ describe("the activation funnel", () => {
     const steps = (await call(funnelRoute, { query: JULY })).body;
     expect(steps.map((s: { label: string; count: number }) => [s.label, s.count])).toEqual([
       ["Signed up", 2],
-      ["Verified", 1],
+      ["Gone live", 1],
       ["First plan live", 1],
       ["Payments set up", 1],
       ["First payment", 1],
@@ -187,7 +187,9 @@ describe("dashboard money", () => {
     });
     const res = await call(moneyRoute, { query: JULY });
     expect(res.status).toBe(200);
-    expect(res.body.period).toEqual({ count: 1, grossPence: 2000, refundedPence: 0, claimedPence: 0, netPence: 2000, feePence: 400 });
+    // Matt, 4 Nov: collected, the engineers' 80% and TradeSura's 20%.
+    expect(res.body.period).toEqual({ count: 1, grossPence: 2000, refundedPence: 0, claimedPence: 0, netPence: 2000, feePence: 400, engineersPence: 1600 });
+    expect(res.body.referrals).toEqual({ earnedPence: 0, owedPence: 0 });
     const months = Object.fromEntries(res.body.months.map((m: { month: string; grossPence: number; feePence: number }) => [m.month, [m.grossPence, m.feePence]]));
     expect(months["2026-08"]).toEqual([1500, 300]);
     expect(res.body.months).toHaveLength(6);

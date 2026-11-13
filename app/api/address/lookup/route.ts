@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getActor, verifyToken } from "@/lib/auth";
-import { claimLookupLimited, normaliseClaimCode, requestIp } from "@/lib/claim";
+import { claimCodeWhere, claimLookupLimited, requestIp } from "@/lib/claim";
 
 const Body = z.object({
   postcode: z.string().min(4).max(10),
@@ -52,8 +52,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Too many tries. Wait a few minutes and try again." }, { status: 429 });
   }
   const claim = claimOnly && parsed.data.claimCode
-    ? await prisma.claimCode.findUnique({
-        where: { code: normaliseClaimCode(parsed.data.claimCode) },
+    ? await prisma.claimCode.findFirst({
+        where: claimCodeWhere(parsed.data.claimCode),
         select: { redeemedByEngineerId: true },
       })
     : null;

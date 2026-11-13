@@ -51,7 +51,14 @@ describe("Companies House", () => {
         registered_office_address: { premises: "Gateway Tower", address_line_1: "32 Western Gateway", locality: "London", postal_code: "E16 1YL" },
       }),
     );
-    expect(await companyProfile("12345678")).toEqual({ number: "12345678", name: "302 MD LTD", type: "ltd", status: "active", registeredOffice: "Gateway Tower 32 Western Gateway, London, E16 1YL" });
+    expect(await companyProfile("12345678")).toEqual({ number: "12345678", name: "302 MD LTD", type: "ltd", status: "active", registeredOffice: "Gateway Tower, 32 Western Gateway, London, E16 1YL" });
+  });
+
+  it("runs a house number into its street, and keeps a named building apart", () => {
+    expect(formatOffice({ premises: "71-75", address_line_1: "Shelton Street", locality: "London", postal_code: "WC2H 9JQ" })).toBe("71-75 Shelton Street, London, WC2H 9JQ");
+    expect(formatOffice({ premises: "12A", address_line_1: "High Street", postal_code: "LS1 1AA" })).toBe("12A High Street, LS1 1AA");
+    expect(formatOffice({ premises: "Unit 12", address_line_1: "1 Dock Road", locality: "London" })).toBe("Unit 12, 1 Dock Road, London");
+    expect(formatOffice({ address_line_1: "1 Dock Road", locality: "London" })).toBe("1 Dock Road, London");
   });
 
   it("answers null without a key, rather than guessing", async () => {

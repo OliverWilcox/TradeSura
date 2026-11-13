@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
-import { verifyGasSafe } from "@/lib/gas-safe";
 import { clauseLine, isLandlordPlan } from "@/lib/clauses";
 import { orderBenefits, preselectedTierId, reasonContent, type ReasonContent } from "@/lib/visit-reasons";
 import { VisitReasonIntro } from "@/components/visit-reason-intro";
@@ -199,14 +198,10 @@ export async function EngineerPage({
     );
   }
 
-  // Live Gas Safe check — the badge shows register data queried now, not a
-  // value cached at signup.
-  const registerMatch = engineer.gasSafeNo ? await verifyGasSafe(engineer.gasSafeNo) : null;
-  // Verification is a human decision in the admin queue (29 Sept review):
-  // an approved, standing engineer shows the badge even when their number
-  // isn't in the imported Gas Safe data.
-  const gasSafe =
-    registerMatch ?? (engineer.gasSafeVerifiedAt && !engineer.pausedAt && !engineer.bannedAt ? true : null);
+  // The badge follows the Gas Safe check alone (Matt, 4 Nov): live once the
+  // card check passes, down when suspended, paused or banned. A stored copy
+  // of the register never shows it.
+  const gasSafe = Boolean(engineer.gasSafeVerifiedAt && !engineer.pausedAt && !engineer.bannedAt);
 
   await track("page_visit", { type: "CUSTOMER" }, {
     engineerId: engineer.id,

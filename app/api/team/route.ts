@@ -9,6 +9,7 @@ import { normaliseUkPhone } from "@/lib/phone";
 import { uniqueSlug } from "@/lib/slug";
 import { GAS_SAFE_NO } from "@/lib/validate";
 import { storeGasSafeCard } from "@/lib/gas-safe-card";
+import { queueCardAlert } from "@/lib/card-alert";
 import { staffCheckStatus } from "@/lib/team";
 
 // Build Review 2, section 8 — the owner's Team page. Owners only
@@ -110,6 +111,8 @@ export async function POST(req: Request) {
     },
   });
   await track("staff_added", { type: "ENGINEER", id: ownerId }, { staffId: staff.id });
+  // Staff cards go through the same queue, with the same alert (QA-22).
+  await queueCardAlert(staff.id, "team");
 
   const brand = brandName(owner);
   await sendEmail({
