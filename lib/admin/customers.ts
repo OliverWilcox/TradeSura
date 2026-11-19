@@ -7,6 +7,7 @@ import { sendSms, smsConfigured } from "@/lib/sms";
 import type { NotSent } from "@/lib/admin/verifications";
 import { parseWinbackOffer, winbackBody, winbackSettingKey } from "@/lib/retention";
 import { reasonList } from "@/lib/visit-reasons";
+import { unusedYearlyMonths, yearlyRefundPence } from "@/lib/billing-interval";
 import { adminEvent } from "@/lib/admin-api/audit";
 import { bounded, likeTerm } from "@/lib/admin-api/db";
 import { conflict, notFound } from "@/lib/admin-api/route";
@@ -40,6 +41,8 @@ export type CustomerListQuery = {
   source?: string;
   /** Where they are with their current plan, by the metrics layer's customerStatus. */
   status?: CustomerStatus;
+  reason?: string;
+  pays?: "monthly" | "yearly";
   sort?: CustomerSort;
   dir?: "asc" | "desc";
   page: number;
@@ -106,22 +109,16 @@ const PLAN_SELECT = {
   paymentRecoveredAt: true,
   tier: { select: { name: true, priceMonthlyPence: true } },
   visitReason: true,
+  billingInterval: true,
   cancellations: { orderBy: { createdAt: "desc" as const }, take: 1, select: { reason: true } },
 } satisfies Prisma.PlanSelect;
 
-/**
- * How the customer came to TradeSura (Matt, 4 Nov): from the engineer's
- * offer link when an offer went to them, whatever page they finished on;
- * otherwise as they were added: at the job (doorstep), the engineer's
- * website, or added to the engineer's book (contacts, an import, by hand).
- */
 export type CustomerSource = "offer_link" | "at_the_job" | "website" | "added";
 export function customerSource(source: string, offered: boolean): CustomerSource {
   if (offered) return "offer_link";
   return source === "doorstep" ? "at_the_job" : source === "web" ? "website" : "added";
 }
 
-/** Visit reasons by code, with the labels the app shows. */
 const visitReasonLabels = () => reasonList().then((list) => new Map(list.map((r) => [r.reason, r.label])));
 
 const LIST_INCLUDE = {
@@ -188,6 +185,18 @@ async function computedPage(ids: string[], sort: ComputedSort, dir: "asc" | "des
   return rows.map((r) => r.id);
 }
 
+async function withCurrentPlan(where: Prisma.CustomerWhereInput, q: Pick<CustomerListQuery, "reason" | "pays">): Promise<Prisma.CustomerWhereInput> {
+  if (!q.reason && !q.pays) return where;
+  const reason = q.reason ? Prisma.sql`AND cp."visitReason" = ${q.reason}` : Prisma.empty;
+  const pays = q.pays === "yearly" ? Prisma.sql`AND cp."billingInterval" = 'year'` : q.pays === "monthly" ? Prisma.sql`AND cp."billingInterval" IS DISTINCT FROM 'year'` : Prisma.empty;
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT cp.id FROM (
+      SELECT DISTINCT ON ("customerId") "customerId" AS id, "visitReason", "billingInterval" FROM "Plan"
+      ORDER BY "customerId", CASE status WHEN 'ACTIVE' THEN 0 WHEN 'PAUSED' THEN 1 WHEN 'PENDING' THEN 2 ELSE 3 END, "createdAt" DESC
+    ) cp WHERE TRUE ${reason} ${pays}`;
+  return { AND: [where, { id: { in: rows.map((r) => r.id) } }] };
+}
+
 /** The status filter: worked out for the customers the other filters match, as the rows show it. */
 async function withStatus(where: Prisma.CustomerWhereInput, status: CustomerStatus | undefined): Promise<Prisma.CustomerWhereInput> {
   if (!status) return where;
@@ -197,7 +206,7 @@ async function withStatus(where: Prisma.CustomerWhereInput, status: CustomerStat
 }
 
 export async function listCustomers(q: CustomerListQuery) {
-  const where = await withStatus(listWhere(q), q.status);
+  const where = await withStatus(await withCurrentPlan(listWhere(q), q), q.status);
   const dir = q.dir ?? (q.sort === "name" || q.sort === "postcode" || q.sort === "engineer" ? "asc" : "desc");
   const skip = (q.page - 1) * q.size;
   let rows: Prisma.CustomerGetPayload<{ include: typeof LIST_INCLUDE }>[];
@@ -223,7 +232,8 @@ export async function listCustomers(q: CustomerListQuery) {
     ]);
   }
   const facts = await rowFacts(rows);
-  return { items: rows.map((r) => listItem(r, facts)), page: q.page, size: q.size, total };
+  const reasons = (await reasonList()).map((r) => ({ reason: r.reason, label: r.label }));
+  return { items: rows.map((r) => listItem(r, facts)), page: q.page, size: q.size, total, filters: { reasons } };
 }
 
 function listItem(c: ListRow, facts: RowFacts) {
@@ -254,7 +264,7 @@ function listItem(c: ListRow, facts: RowFacts) {
     isTest: facts.marks.customers.includes(c.id) || facts.marks.engineers.includes(c.engineerId),
     source: customerSource(c.source, c.plans.some((p) => facts.offerByPlan.has(p.id))),
     visitReason: plan?.visitReason ? (facts.reasons.get(plan.visitReason) ?? plan.visitReason) : null,
-    /** A boiler on their home, registered by the engineer or on the Home Passport. */
+    pays: plan ? (plan.billingInterval === "year" ? ("yearly" as const) : ("monthly" as const)) : null,
     boilerRegistered: c.properties.some((p) => p._count.appliances > 0 || (p.passport?._count.appliances ?? 0) > 0),
     addedAt: c.createdAt.toISOString(),
   };
@@ -262,7 +272,7 @@ function listItem(c: ListRow, facts: RowFacts) {
 
 /** Every customer matching the list's filters, newest first, in batches: what a CSV export streams. */
 export async function* exportCustomers(q: Omit<CustomerListQuery, "page" | "size" | "sort" | "dir">, batch = 500) {
-  const where = await withStatus(listWhere({ ...q, page: 1, size: batch }), q.status);
+  const where = await withStatus(await withCurrentPlan(listWhere({ ...q, page: 1, size: batch }), q), q.status);
   let after: string | undefined;
   for (;;) {
     const rows = await prisma.customer.findMany({
@@ -312,7 +322,7 @@ export async function getCustomer(id: string) {
   if (!c) return null;
   const iso = (d: Date | null) => d?.toISOString() ?? null;
   const planIds = c.plans.map((p) => p.id);
-  const [history, marks, sent, paid, suppressed, test, reasons, winBackTexts] = await Promise.all([
+  const [history, marks, sent, paid, suppressed, test, reasons, winBackTexts, refundEvents] = await Promise.all([
     customerPayments(c.plans.map((p) => p.stripeSubscriptionId).filter((s): s is string => !!s)),
     testMarks(),
     planIds.length ? offers(EVERYONE, { planIds }) : [],
@@ -320,13 +330,15 @@ export async function getCustomer(id: string) {
     isSuppressed("sms", c.phone),
     testMarkOf("customer", id),
     visitReasonLabels(),
-    // The automatic win-backs (30 days after cancelling, and before winter) and any an admin sent.
     planIds.length
       ? prisma.outboundSms.findMany({
           where: { OR: planIds.flatMap((pid) => [{ cancelKey: { startsWith: `winback:${pid}` } }, { cancelKey: `winback:admin:${pid}` }]) },
           orderBy: { sendAfter: "asc" },
           select: { id: true, cancelKey: true, status: true, sendAfter: true, sentAt: true, deliveredAt: true, failedAt: true },
         })
+      : [],
+    planIds.length
+      ? prisma.event.findMany({ where: { name: "yearly_refund", OR: planIds.map((pid) => ({ meta: { path: ["planId"], equals: pid } })) }, orderBy: { ts: "desc" }, select: { ts: true, meta: true } })
       : [],
   ]);
   const offerByPlan = new Map(sent.map((o) => [o.planId, o]));
@@ -361,7 +373,6 @@ export async function getCustomer(id: string) {
         installedAt: iso(a.installedAt),
         lastServicedAt: iso(a.lastServicedAt),
       })),
-      /** The Home Passport: photos and documents engineers added, and service records. Frozen, not removed, once the plan ends. */
       passport: p.passport
         ? {
             files: p.passport.files.map((f) => ({ ...f, createdAt: f.createdAt.toISOString() })),
@@ -390,6 +401,7 @@ export async function getCustomer(id: string) {
       offer: offerByPlan.has(p.id) ? { channel: offerByPlan.get(p.id)!.channel, sentAt: offerByPlan.get(p.id)!.sentAt.toISOString(), delivery: offerByPlan.get(p.id)!.delivery } : null,
       firstPaymentAt: iso(firstPaid.get(p.id) ?? null),
       billingInterval: p.billingInterval,
+      refund: yearlyRefundSplit(p, paid.filter((x) => x.planId === p.id), refundEvents.find((ev) => (ev.meta as { planId?: string } | null)?.planId === p.id) ?? null),
       createdAt: p.createdAt.toISOString(),
       activatedAt: iso(p.activatedAt),
       coolingOffEndsAt: iso(p.coolingOffEndsAt),
@@ -407,6 +419,40 @@ export async function getCustomer(id: string) {
     payments: shown,
     /** £0 trial invoices left out of `payments` (HIDE_ZERO_INVOICES). */
     zeroInvoicesHidden: history.length - shown.length,
+  };
+}
+
+const REFUND_GRACE_MS = 2 * 86_400_000;
+
+export function yearlyRefundSplit(
+  plan: { billingInterval: string; cancelledAt: Date | null; cancelEffectiveAt: Date | null; coolingOffEndsAt?: Date | null },
+  planPayments: { amountPence: number; feePence: number; paidAt: Date }[],
+  refunded: { ts: Date; meta: unknown } | null,
+  now = new Date(),
+) {
+  if (plan.billingInterval !== "year") return null;
+  const ended = plan.cancelledAt ?? plan.cancelEffectiveAt;
+  const last = [...planPayments].sort((a, b) => b.paidAt.getTime() - a.paidAt.getTime())[0];
+  if (!last || (!ended && !refunded)) return null;
+  const coolingOff = !refunded && Boolean(ended && plan.coolingOffEndsAt && ended <= plan.coolingOffEndsAt);
+  const meta = (refunded?.meta ?? {}) as { amountPence?: number; unusedMonths?: number; feeKept?: boolean };
+  const unusedMonths = coolingOff ? 12 : typeof meta.unusedMonths === "number" ? meta.unusedMonths : unusedYearlyMonths(last.paidAt, ended!);
+  if (!refunded && !coolingOff && unusedMonths <= 0) return null;
+  const refundPence = coolingOff ? last.amountPence : typeof meta.amountPence === "number" ? meta.amountPence : yearlyRefundPence(last.amountPence, unusedMonths);
+  const feeRefundedPence = coolingOff ? last.feePence : refunded && !meta.feeKept && last.amountPence > 0 ? Math.round((last.feePence * refundPence) / last.amountPence) : 0;
+  const fromEngineerPence = refundPence - feeRefundedPence;
+  const status = refunded ? ("refunded" as const) : coolingOff ? ("cooling_off" as const) : ended!.getTime() + REFUND_GRACE_MS < now.getTime() ? ("not_recorded" as const) : ("due" as const);
+  return {
+    status,
+    at: (refunded?.ts ?? ended!).toISOString(),
+    paidPence: last.amountPence,
+    feePence: last.feePence,
+    unusedMonths,
+    refundPence,
+    feeRefundedPence,
+    feeKeptPence: last.feePence - feeRefundedPence,
+    fromEngineerPence,
+    engineerKeepsPence: last.amountPence - last.feePence - fromEngineerPence,
   };
 }
 
@@ -545,7 +591,6 @@ export async function customerActivity(id: string, q: { page: number; size: numb
           actor: { type: x.source === "engineer_logged" ? ("ENGINEER" as const) : ("CUSTOMER" as const), id: null, name: null },
           detail: detail({ reason: x.reason, offer: x.offer, outcome: x.outcome }),
         },
-        // The app texts and pushes the engineer the moment a customer starts to cancel (lib/cancel-plan.ts).
         ...(x.source === "engineer_logged"
           ? []
           : [{ id: `${x.id}:alerted`, name: "engineer_alerted", at: new Date(x.createdAt.getTime() + 1), actor: { type: "SYSTEM" as const, id: null, name: null }, detail: detail({ reason: x.reason }) }]),

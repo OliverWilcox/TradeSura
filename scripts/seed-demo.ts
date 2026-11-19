@@ -121,7 +121,6 @@ async function main() {
   const active: EngineerPlan[] = [];
   const verifiedSoFar: { id: string; createdAt: Date }[] = [];
   let phone = 0;
-  // Seven digits, like a Gas Safe licence number.
   let regNo = 3_100_000;
 
   // --- Engineers: ~150 owners, faster growth recently ---------------------
@@ -162,6 +161,7 @@ async function main() {
       if (earlier.length) referrerId = pick(earlier).id;
     }
     const packRequested = verified && chance(0.65);
+    const card = submitted && chance(0.92) ? `${BLOB}/gas-safe-cards/sample-card-${pick(["a", "b", "c"])}.svg` : null;
     engineers.push({
       id,
       email: `${firstName}.${lastName}.${i}`.toLowerCase().replace(/[^a-z0-9.]/g, "") + "@example.com",
@@ -181,7 +181,8 @@ async function main() {
       townSlug: town.slug,
       marketingConsent: chance(0.6),
       gasSafeNo: number,
-      gasSafeCardUrl: submitted && chance(0.92) ? `${BLOB}/gas-safe-cards/sample-card-${pick(["a", "b", "c"])}.svg` : null,
+      gasSafeCardUrl: card,
+      gasSafeCardBackUrl: card && chance(0.4) ? `${BLOB}/gas-safe-cards/sample-card-${pick(["a", "b", "c"])}.svg` : null,
       gasSafeReviewRequestedAt: submitted && chance(0.05) ? createdAt : null,
       gasSafeVerifiedAt: verifiedAt,
       gasSafeRejectedAt: rejected ? after(createdAt, 1.5) : null,
@@ -229,11 +230,6 @@ async function main() {
   Object.assign(toBan, { bannedAt: daysAgo(20), banReason: "Signed up customers without their agreement" });
   Object.assign(toLeave, { leftAt: daysAgo(12) });
 
-  // The checks behind going live (Matt, 4 Nov): most live engineers passed
-  // the register check a day after the card; the newest eight are still due,
-  // one is due a re-check and one was suspended. Every other one gave the
-  // business's registration number. By position, not faker, so the rest of
-  // the seed stays as it was.
   for (const [n, e] of verifiedRows.entries()) {
     if (n % 2 === 0) e.gasSafeRegistrationNo = String(500_000 + n);
     const checked = after(e.gasSafeVerifiedAt as Date, 1);
@@ -265,12 +261,50 @@ async function main() {
       phone: `+447700900${String(phone++).padStart(3, "0")}`,
       ownerId: owner.id,
       gasSafeNo: String(regNo++),
+      gasSafeCardUrl: `${BLOB}/gas-safe-cards/sample-card-${pick(["a", "b", "c"])}.svg`,
       gasSafeVerifiedAt: after(createdAt, 1),
       gasSafeRegisterCheckedAt: after(createdAt, 2).getTime() < NOW ? after(createdAt, 2) : null,
       createdAt,
     });
   }
   await prisma.engineer.createMany({ data: staffRows });
+
+  const registrationOf = new Map<string, string>();
+  const reads: Prisma.GasSafeCardReadCreateManyInput[] = [];
+  const CATEGORIES = ["Domestic natural gas: boilers", "Domestic natural gas: cookers", "Domestic natural gas: gas fires", "Domestic natural gas: water heaters"];
+  for (const e of [...engineers, ...staffRows]) {
+    if (!e.gasSafeCardUrl) continue;
+    const business = e.ownerId ?? e.id!;
+    if (!registrationOf.has(business)) registrationOf.set(business, faker.string.numeric({ length: 6, allowLeadingZeros: false }));
+    const at = new Date((e.gasSafeVerifiedAt ?? e.createdAt) as Date);
+    const roll = faker.number.float({ min: 0, max: 1 });
+    const kind = e.gasSafeVerifiedAt ? "complete" : e.gasSafeRejectedAt ? "skip" : roll < 0.45 ? "complete" : roll < 0.6 ? "no_expiry" : roll < 0.7 ? "not_a_card" : roll < 0.8 ? "other_name" : "skip";
+    if (kind === "skip") continue;
+    const expiry = new Date(at.getTime() + faker.number.int({ min: 200, max: 360 }) * 86_400_000);
+    const back = Boolean((e as { gasSafeCardBackUrl?: string | null }).gasSafeCardBackUrl);
+    reads.push({
+      engineerId: e.id!,
+      cardUrl: e.gasSafeCardUrl,
+      backUrl: (e as { gasSafeCardBackUrl?: string | null }).gasSafeCardBackUrl ?? null,
+      source: "automatic",
+      outcome: kind === "not_a_card" ? "not_a_card" : "read",
+      complete: kind === "complete" || kind === "other_name",
+      isGasSafeCard: kind !== "not_a_card",
+      licenceNo: kind === "not_a_card" ? null : e.gasSafeNo && /^\d{7}$/.test(e.gasSafeNo) ? e.gasSafeNo : faker.string.numeric({ length: 7, allowLeadingZeros: false }),
+      registrationNo: kind === "not_a_card" ? null : registrationOf.get(business)!,
+      name: kind === "not_a_card" ? null : kind === "other_name" ? faker.person.fullName() : `${e.firstName} ${e.lastName}`.toUpperCase(),
+      company: kind === "not_a_card" ? null : e.tradingName ?? null,
+      expiresOn: kind === "complete" || kind === "other_name" ? new Date(`${expiry.toISOString().slice(0, 10)}T00:00:00Z`) : null,
+      categories: back && kind !== "not_a_card" ? CATEGORIES.slice(0, faker.number.int({ min: 1, max: CATEGORIES.length })) : [],
+      notes: kind === "no_expiry" ? ["Glare covers the expiry date."] : kind === "not_a_card" ? ["The photo shows a driving licence, not a Gas Safe ID card."] : [],
+      model: "claude-opus-5-5",
+      createdAt: new Date(at.getTime() - 3_600_000),
+    });
+  }
+  await prisma.gasSafeCardRead.createMany({ data: reads });
+  await prisma.$executeRaw`
+    UPDATE "Engineer" e SET "gasSafeCardReadId" = r.id FROM "GasSafeCardRead" r
+    WHERE r."engineerId" = e.id AND r.complete AND r."cardUrl" = e."gasSafeCardUrl" AND e."gasSafeVerifiedAt" IS NOT NULL`;
 
   // --- Plans, customers, homes ---------------------------------------------
   const tiers: Prisma.PlanTierCreateManyInput[] = [];
@@ -374,14 +408,13 @@ async function main() {
       });
       events.push({ name: "offer_sent", actorType: "ENGINEER", actorId: eng.id, ts: offeredAt, meta: { planId, customerId } });
       if (activatedAt && monthsPaid > 0) {
-        events.push({ name: "payment_confirmed", actorType: "SYSTEM", actorId: null, ts: after(activatedAt, 15), meta: { planId, engineerId: eng.id } });
-        // Each paid month as the webhook stores it (StripeWebhookEvent), the admin's collections source.
         // Paid 15 days after starting (after cooling-off), then every 30 days until today or the cancellation.
         const until = (cancelledAt ?? new Date(NOW)).getTime();
         for (let m = 0; ; m++) {
           const paidAt = after(activatedAt, 15 + 30 * m);
           if (paidAt.getTime() > until) break;
           const invoiceId = `in_demo_${planId.slice(1, 13)}_${m}`;
+          events.push({ name: "payment_confirmed", actorType: "SYSTEM", actorId: null, ts: paidAt, meta: { planId, engineerId: eng.id, invoiceId, amountPence: tierRow.priceMonthlyPence } });
           stripeEvents.push({
             id: `evt_demo_${planId.slice(1, 13)}_${m}`,
             type: "invoice.paid",

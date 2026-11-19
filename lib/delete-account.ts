@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { cancelScheduledSms } from "@/lib/sms";
 import { offerNearbyEngineers } from "@/lib/installer-leaves";
+import { removeCardPhoto } from "@/lib/gas-safe-card";
 
 // Build Review 2, section 10 — "Delete my account inside the app" (App Store
 // rule 5.1.1). The Engineer row is anonymised rather than hard-deleted: plans,
@@ -28,6 +29,8 @@ const scrubbedEngineer = (id: string) => ({
   gasSafeCompany: null,
   gasSafeCategories: null,
   gasSafeCardUrl: null,
+  gasSafeCardBackUrl: null,
+  gasSafeCardReadId: null,
   gasSafeCardExpiresOn: null,
   setupTextConsentAt: null,
   expoPushToken: null,
@@ -41,9 +44,16 @@ async function removeBlob(url: string | null) {
   await del(url).catch((err) => console.error("[delete-account] blob delete failed:", err));
 }
 
+async function removeCardPhotos(e: { id: string; gasSafeCardUrl: string | null; gasSafeCardBackUrl: string | null }) {
+  const reads = await prisma.gasSafeCardRead.findMany({ where: { engineerId: e.id }, select: { cardUrl: true, backUrl: true } });
+  const urls = new Set([e.gasSafeCardUrl, e.gasSafeCardBackUrl, ...reads.flatMap((r) => [r.cardUrl, r.backUrl])].filter((u): u is string => !!u));
+  for (const url of urls) await removeCardPhoto(url).catch((err) => console.error("[delete-account] card photo delete failed:", err));
+  await prisma.gasSafeCardRead.deleteMany({ where: { engineerId: e.id } });
+}
+
 export async function deleteStaffAccount(staffId: string): Promise<DeleteResult> {
   const staff = await prisma.engineer.findUniqueOrThrow({ where: { id: staffId } });
-  await removeBlob(staff.gasSafeCardUrl);
+  await removeCardPhotos(staff);
   // Their customers and sales stay with the business (section 8).
   await prisma.engineerTradingAddress.deleteMany({ where: { engineerId: staffId } });
   await prisma.engineer.update({
@@ -108,7 +118,7 @@ export async function deleteOwnerAccount(engineerId: string): Promise<DeleteResu
   for (const s of staff) await deleteStaffAccount(s.id);
 
   await prisma.planTier.updateMany({ where: { engineerId, status: { not: "STOPPED" } }, data: { status: "STOPPED" } });
-  await removeBlob(engineer.gasSafeCardUrl);
+  await removeCardPhotos(engineer);
   await removeBlob(engineer.logoUrl);
   // Their trading address goes with the pack address and postcode.
   await prisma.engineerTradingAddress.deleteMany({ where: { engineerId } });

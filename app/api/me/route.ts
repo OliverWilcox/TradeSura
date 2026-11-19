@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getActor } from "@/lib/auth";
 import { brandName } from "@/lib/engineer";
+import { badgePublic } from "@/lib/verification-state";
 import { deleteOwnerAccount, deleteStaffAccount } from "@/lib/delete-account";
 import { markAccountComplete } from "@/lib/founding";
 import { growSummary } from "@/lib/grow";
@@ -100,8 +101,10 @@ export async function GET() {
     logoUrl: engineer.logoUrl,
     slug: engineer.slug,
     gasSafeVerifiedAt: engineer.gasSafeVerifiedAt,
+    badgePublic: badgePublic(engineer),
     gasSafeReviewRequestedAt: engineer.gasSafeReviewRequestedAt,
     hasGasSafeCard: Boolean(engineer.gasSafeCardUrl),
+    hasGasSafeCardBack: Boolean(engineer.gasSafeCardUrl && engineer.gasSafeCardBackUrl),
     gasSafeNo: engineer.gasSafeNo,
     gasSafeName: engineer.gasSafeName,
     gasSafeCompany: engineer.gasSafeCompany,
@@ -158,9 +161,11 @@ async function staffMe(staffId: string, businessId: string) {
     logoUrl: owner.logoUrl,
     slug: owner.slug,
     gasSafeVerifiedAt: staff.gasSafeVerifiedAt,
+    badgePublic: badgePublic(staff),
     gasSafeRejectedAt: staff.gasSafeRejectedAt,
     gasSafeReviewRequestedAt: staff.gasSafeReviewRequestedAt,
     hasGasSafeCard: Boolean(staff.gasSafeCardUrl),
+    hasGasSafeCardBack: Boolean(staff.gasSafeCardUrl && staff.gasSafeCardBackUrl),
     gasSafeNo: staff.gasSafeNo,
     // The business's payment setup decides whether customers can join.
     stripeConnected: owner.stripeChargesEnabled,

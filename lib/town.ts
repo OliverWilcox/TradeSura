@@ -108,6 +108,7 @@ export type TownEngineer = {
   liveTiers: number;
   leftAt: Date | null;
   bannedAt: Date | null;
+  pausedAt?: Date | null;
   deletedAt: Date | null;
   ownerId: string | null;
 };
@@ -121,6 +122,7 @@ export function listedOnTownPage(e: TownEngineer): boolean {
     e.liveTiers > 0 &&
     !e.leftAt &&
     !e.bannedAt &&
+    !e.pausedAt &&
     !e.deletedAt &&
     !e.ownerId
   );
@@ -140,6 +142,7 @@ export const LISTED_ENGINEER_WHERE = {
   tiers: { some: { status: "LIVE" as const } },
   leftAt: null,
   bannedAt: null,
+  pausedAt: null,
   deletedAt: null,
   ownerId: null,
 };

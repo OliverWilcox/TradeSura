@@ -524,7 +524,17 @@ export type ConnectAccountStatus = {
   payoutsEnabled: boolean;
   // Stripe is waiting on the engineer for something right now.
   requirementsDue: boolean;
+  deadlineAt?: Date | null;
 };
+
+export function stripeDeadline(time: unknown): Date | null {
+  if (typeof time === "string") {
+    const d = new Date(time);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  if (typeof time === "number") return new Date(time * 1000);
+  return null;
+}
 
 function statusFromV2Account(a: Stripe.V2.Core.Account): ConnectAccountStatus {
   const caps = a.configuration?.merchant?.capabilities;
@@ -555,6 +565,7 @@ function statusFromV2Account(a: Stripe.V2.Core.Account): ConnectAccountStatus {
     chargesEnabled,
     payoutsEnabled,
     requirementsDue,
+    deadlineAt: requirementsDue ? stripeDeadline(a.requirements?.summary?.minimum_deadline?.time) : null,
   };
 }
 

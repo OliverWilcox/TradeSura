@@ -33,7 +33,6 @@ export default async function ReferralLanding({
   // lands here with src=profile; the sign-up is credited to that installer
   // through the same ref code as any invite.
   const src = (await searchParams)?.src === "profile" ? "profile" : undefined;
-  // tradesura.com/r/SMITH25 (Matt, 4 Nov), or a slug link shared before codes.
   const referrer = await findReferrer(slug);
   if (!referrer || !referrer.tradingName) notFound();
   const ref = referrer.referralCode ?? referrer.slug;

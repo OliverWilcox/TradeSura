@@ -1,19 +1,12 @@
-// Notices the admin sends an engineer (a decision, a chase, a pack posted, a
-// plan taken down), on the same chrome as TradeSura's other emails. One
-// shape: a greeting, a heading, short paragraphs, an optional button.
 import { EMAIL, emailButton, emailShell, escapeHtml } from "@/lib/email-layout";
 
 export function noticeEmail(opts: {
   firstName: string | null | undefined;
-  /** The heading inside the email; also the subject unless one is given. */
   title: string;
   subject?: string;
-  /** What the inbox preview shows; the first paragraph when not given. */
   preheader?: string;
-  /** Plain text, one entry per paragraph. */
   paragraphs: string[];
   button?: { href: string; label: string };
-  /** Small print under the paragraphs. */
   note?: string;
 }): { subject: string; html: string } {
   const hi = `Hi ${escapeHtml(opts.firstName?.trim() || "there")},`;

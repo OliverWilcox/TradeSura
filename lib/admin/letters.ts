@@ -7,50 +7,44 @@ import { AdminApiError, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
 import { addDays, ukDay } from "@/lib/admin/time";
 import { foundingDeadline, foundingDeadlineKey } from "@/lib/founding";
-import { claimLink, letterCodeSuffix } from "@/lib/letter-code";
+import { claimLink, letterCodeSuffix, printedLinkProblem } from "@/lib/letter-code";
+import { appUrl } from "@/lib/app-url";
 import { codeStem } from "@/lib/referral-code";
 import { townSlugOf } from "@/lib/town";
 
-// Letter batches for the admin API (Matt, 4 Nov). Uploading a batch makes a
-// real, reserved ClaimCode for every engineer on it before anything is
-// posted: a code that can't be guessed (SMITH-7K3Q), its claim link
-// (tradesura.com/c/CODE, the letter's QR), the town printed on the letter and
-// the reservation date. Our list stays back office: the claim page and the
-// app show back only the business name and town (lib/claim.ts); the mailing
-// address goes to the mail house's file and nowhere else.
-
 export const MAX_LETTERS_PER_BATCH = 5000;
+export const BATCH_NAME = /^[A-Za-z0-9][A-Za-z0-9 -]{0,39}$/;
+export const POSTED_WINDOW_DAYS = { before: 90, after: 60 } as const;
 const VARIANTS = ["A", "B", "C", "D"] as const;
 
 export const LetterRow = z.strictObject({
   businessName: z.string().trim().min(1).max(120),
   firstName: z.string().trim().min(1).max(60),
-  /** Their surname, when the list has it: the code starts with it, else with the business name. */
   lastName: z.string().trim().max(60).optional(),
-  /** The town printed on the letter: where they work, and the town of their Founding place. */
   town: z.string().trim().min(1).max(80).refine((t) => townSlugOf(t) !== "", "Enter the town's name."),
   mailingAddress: AddressInput.optional(),
-  /** The letter's split-test version; A when the list doesn't say. */
   variant: z.enum(VARIANTS).optional(),
 });
 export type LetterRow = z.output<typeof LetterRow>;
 
 export type LetterBatch = {
   name: string;
-  /** The reservation date the letters print (the latest, if codes in the batch differ). */
+  area: string | null;
+  postedOn: string | null;
+  planned: number | null;
   reservedUntil: string;
   codes: number;
-  /** Confirmed their details on the claim page. */
   claimed: number;
-  /** Signed up with the code. */
   signedUp: number;
-  /** Opted out: left out of the mail house's file. */
   suppressed: number;
+  unclaimed: number;
+  secondLetterFrom: string;
   uploadedAt: string;
   uploadedBy: string | null;
 };
 
-/** Every batch, newest first, with how far its codes have got. */
+export const SECOND_LETTER_DAYS = 10;
+
 export async function listLetterBatches(): Promise<{ items: LetterBatch[] }> {
   const groups = await prisma.claimCode.groupBy({
     by: ["letterBatch"],
@@ -65,18 +59,26 @@ export async function listLetterBatches(): Promise<{ items: LetterBatch[] }> {
       })
     : [];
   const uploader = new Map(uploads.map((u) => [(u.meta as { batch: string }).batch, (u.meta as { adminName?: string }).adminName ?? null]));
+  const info = new Map((await prisma.letterBatch.findMany()).map((b) => [b.name, b]));
+  const unclaimed = await prisma.claimCode.groupBy({ by: ["letterBatch"], where: { claimedAt: null, redeemedByEngineerId: null, suppressedAt: null }, _count: { _all: true } });
+  const unclaimedOf = new Map(unclaimed.map((u) => [u.letterBatch, u._count._all]));
   const items = await Promise.all(
     groups.map(async (g): Promise<LetterBatch> => {
       const createdAt = g._min.createdAt!;
-      // Batches from before uploads carry no date of their own: the letter date their codes are judged by.
       const reserved = g._max.reservedUntil ?? (await foundingDeadline({ letterBatch: g.letterBatch, createdAt }));
+      const batch = info.get(g.letterBatch);
       return {
         name: g.letterBatch,
+        area: batch?.area ?? null,
+        postedOn: batch ? batch.postedOn.toISOString().slice(0, 10) : null,
+        planned: batch?.letters ?? null,
         reservedUntil: g._max.reservedUntil ? g._max.reservedUntil.toISOString().slice(0, 10) : ukDay(reserved),
         codes: g._count._all,
         claimed: g._count.claimedAt,
         signedUp: g._count.redeemedByEngineerId,
         suppressed: g._count.suppressedAt,
+        unclaimed: unclaimedOf.get(g.letterBatch) ?? 0,
+        secondLetterFrom: addDays(batch ? batch.postedOn.toISOString().slice(0, 10) : ukDay(createdAt), SECOND_LETTER_DAYS),
         uploadedAt: createdAt.toISOString(),
         uploadedBy: uploader.get(g.letterBatch) ?? null,
       };
@@ -85,16 +87,8 @@ export async function listLetterBatches(): Promise<{ items: LetterBatch[] }> {
   return { items: items.sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt) || b.name.localeCompare(a.name)) };
 }
 
-/** This month's next batch name: 2026-11-A, then 2026-11-B. */
-function nextBatchName(month: string, taken: string[]): string {
-  for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
-    const name = `${month}-${letter}`;
-    if (!taken.includes(name)) return name;
-  }
-  throw new AdminApiError(409, "CONFLICT", "That's 26 batches this month already. Upload it next month, or ask for more batch names.");
-}
+const invalid = (field: string, message: string) => new AdminApiError(400, "VALIDATION", message, { [field]: [message] });
 
-/** A code for each row, none the same as another or as one already given. */
 async function uniqueCodes(rows: LetterRow[], db: Prisma.TransactionClient): Promise<string[]> {
   const stems = rows.map((r) => codeStem({ lastName: r.lastName ?? null, tradingName: r.businessName, legalName: null }));
   const codes = stems.map((s) => `${s}-${letterCodeSuffix()}`);
@@ -108,22 +102,28 @@ async function uniqueCodes(rows: LetterRow[], db: Prisma.TransactionClient): Pro
   throw new Error("Couldn't make unique letter codes");
 }
 
-/**
- * Upload a batch: every row becomes a reserved code at once, or none do. The
- * reservation date is the letter date Founding is judged by, so it's also
- * the batch's founding_deadline setting.
- */
-export async function uploadLetterBatch(admin: AdminPrincipal, input: { reservedUntil: string; rows: LetterRow[] }, now = new Date()) {
+export async function uploadLetterBatch(
+  admin: AdminPrincipal,
+  input: { name: string; area: string; postedOn: string; count: number; reservedUntil: string; rows: LetterRow[] },
+  now = new Date(),
+) {
   const today = ukDay(now);
-  if (input.reservedUntil <= today) throw new AdminApiError(400, "VALIDATION", "The reservation date has to be after today.", { reservedUntil: ["The reservation date has to be after today."] });
-  if (input.reservedUntil > addDays(today, 366)) throw new AdminApiError(400, "VALIDATION", "The reservation date has to be within a year.", { reservedUntil: ["The reservation date has to be within a year."] });
+  const name = input.name.trim().replace(/\s+/g, " ");
+  if (input.count !== input.rows.length) throw invalid("count", `The list has ${input.rows.length} letter${input.rows.length === 1 ? "" : "s"}, not ${input.count}. Check the count or the file.`);
+  if (input.postedOn < addDays(today, -POSTED_WINDOW_DAYS.before) || input.postedOn > addDays(today, POSTED_WINDOW_DAYS.after)) {
+    throw invalid("postedOn", `The date posted has to be within ${POSTED_WINDOW_DAYS.before} days before today and ${POSTED_WINDOW_DAYS.after} days after.`);
+  }
+  if (input.reservedUntil <= today) throw invalid("reservedUntil", "The reservation date has to be after today.");
+  if (input.reservedUntil > addDays(today, 366)) throw invalid("reservedUntil", "The reservation date has to be within a year.");
+  if (input.reservedUntil <= input.postedOn) throw invalid("reservedUntil", "The reservation date has to be after the date posted.");
   return prisma.$transaction(
     async (tx) => {
-      // One upload at a time, so two can't take the same batch name.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('letter_batch_upload'))`;
-      const month = today.slice(0, 7);
-      const taken = await tx.claimCode.findMany({ where: { letterBatch: { startsWith: `${month}-` } }, distinct: ["letterBatch"], select: { letterBatch: true } });
-      const name = nextBatchName(month, taken.map((t) => t.letterBatch));
+      const [batchTaken, codesTaken] = await Promise.all([
+        tx.letterBatch.findFirst({ where: { name: { equals: name, mode: "insensitive" } }, select: { name: true } }),
+        tx.claimCode.findFirst({ where: { letterBatch: { equals: name, mode: "insensitive" } }, select: { code: true } }),
+      ]);
+      if (batchTaken || codesTaken) throw new AdminApiError(409, "CONFLICT", `There's already a batch called ${name}. Give this one another name.`);
       const codes = await uniqueCodes(input.rows, tx);
       const reservedUntil = new Date(`${input.reservedUntil}T00:00:00Z`);
       await tx.claimCode.createMany({
@@ -144,8 +144,11 @@ export async function uploadLetterBatch(admin: AdminPrincipal, input: { reserved
         create: { key: foundingDeadlineKey(name), value: input.reservedUntil },
         update: { value: input.reservedUntil },
       });
-      await adminEvent(admin, "letter_batch_uploaded", { batch: name, count: codes.length, reservedUntil: input.reservedUntil }, tx);
-      return { name, count: codes.length, reservedUntil: input.reservedUntil };
+      await tx.letterBatch.create({
+        data: { name, area: input.area.trim(), postedOn: new Date(`${input.postedOn}T00:00:00Z`), letters: codes.length, createdById: admin.id, createdBy: admin.name },
+      });
+      await adminEvent(admin, "letter_batch_uploaded", { batch: name, area: input.area.trim(), postedOn: input.postedOn, count: codes.length, reservedUntil: input.reservedUntil }, tx);
+      return { name, area: input.area.trim(), postedOn: input.postedOn, count: codes.length, reservedUntil: input.reservedUntil };
     },
     { timeout: 60_000 },
   );
@@ -153,25 +156,29 @@ export async function uploadLetterBatch(admin: AdminPrincipal, input: { reserved
 
 const MAIL_HOUSE_ORDER = [{ town: "asc" as const }, { businessName: "asc" as const }, { code: "asc" as const }];
 
-/**
- * The mail house's file for one batch: who each letter is to, the town and
- * reservation date it prints, its code and QR link, and where it goes.
- * Codes whose owner opted out are left out, and counted.
- */
-export async function mailHouseFile(batch: string) {
+export async function mailHouseFile(batch: string, opts: { second?: boolean } = {}, now = new Date()) {
+  const linkProblem = printedLinkProblem();
+  if (linkProblem) throw new AdminApiError(409, "CONFLICT", `${linkProblem} Set APP_URL to the live site before sending letters to the mail house: printed codes can't be changed.`);
   const rows = await prisma.claimCode.findMany({
     where: { letterBatch: batch },
     orderBy: MAIL_HOUSE_ORDER,
-    select: { code: true, firstName: true, businessName: true, town: true, reservedUntil: true, mailingAddress: true, suppressedAt: true, letterBatch: true, createdAt: true },
+    select: { code: true, firstName: true, businessName: true, town: true, reservedUntil: true, mailingAddress: true, suppressedAt: true, letterBatch: true, createdAt: true, claimedAt: true, redeemedByEngineerId: true },
   });
   if (!rows.length) throw notFound("There's no letter batch with that name.");
-  const letters = rows.filter((r) => !r.suppressedAt);
-  // Codes from before uploads have no date of their own: the batch's letter date, worked out once.
+  if (opts.second) {
+    const info = await prisma.letterBatch.findUnique({ where: { name: batch }, select: { postedOn: true } });
+    const from = addDays(info ? info.postedOn.toISOString().slice(0, 10) : ukDay(new Date(Math.min(...rows.map((r) => r.createdAt.getTime())))), SECOND_LETTER_DAYS);
+    if (ukDay(now) < from) throw new AdminApiError(409, "CONFLICT", `The second letter goes out ${SECOND_LETTER_DAYS} to 14 days after the first: this batch's can go from ${from}.`);
+  }
+  const letters = rows.filter((r) => !r.suppressedAt && (!opts.second || (!r.claimedAt && !r.redeemedByEngineerId)));
   const loadedAt = new Date(Math.min(...rows.map((r) => r.createdAt.getTime())));
   const batchDay = rows.some((r) => !r.reservedUntil) ? ukDay(await foundingDeadline({ letterBatch: batch, createdAt: loadedAt })) : null;
   return {
     batch,
-    suppressed: rows.length - letters.length,
+    linkBase: appUrl(),
+    second: Boolean(opts.second),
+    suppressed: rows.filter((r) => r.suppressedAt).length,
+    responded: opts.second ? rows.filter((r) => !r.suppressedAt && (r.claimedAt || r.redeemedByEngineerId)).length : 0,
     rows: letters.map((r) => ({
       businessName: r.businessName,
       firstName: r.firstName,

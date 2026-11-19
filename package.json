@@ -16,21 +16,21 @@
     "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.8.0",
-    "@prisma/client": "^7.8.0",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
     "@stripe/react-stripe-js": "^6.8.2",
     "@stripe/stripe-js": "^9.14.0",
-    "@vercel/blob": "^2.8.0",
+    "@vercel/blob": "^2.9.0",
     "csv-parse": "^7.0.1",
     "gsap": "^3.15.0",
     "jose": "^6.2.3",
-    "next": "16.2.10",
+    "next": "16.4.6",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "resend": "^6.26.0",
     "stripe": "^22.6.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.5.0",
@@ -41,12 +41,17 @@
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
     "eslint": "^9",
-    "eslint-config-next": "16.2.10",
-    "prisma": "^7.8.0",
+    "eslint-config-next": "16.4.6",
+    "prisma": "^7.10.1",
     "puppeteer-core": "^25.3.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.0",
     "typescript": "^5",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "@vercel/cli-config": {
+      "zod": "$zod"
+    }
   }
 }

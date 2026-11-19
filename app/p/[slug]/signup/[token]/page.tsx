@@ -12,6 +12,7 @@ import { TrustLine } from "@/components/verified-badge";
 import { isFoundingMember } from "@/lib/founding";
 import { signupPath } from "@/lib/public-url";
 import { ratingSummary } from "@/lib/ratings";
+import { badgePublic } from "@/lib/verification-state";
 
 export default async function SignupPage({
   params,
@@ -66,7 +67,7 @@ export default async function SignupPage({
         brand={brand}
         firstName={plan.engineer.firstName}
         photoUrl={plan.engineer.logoUrl}
-        verified={Boolean(plan.engineer.gasSafeVerifiedAt)}
+        verified={badgePublic(plan.engineer)}
         founding={(await isFoundingMember(plan.engineer.id)) ? <FoundingBadge /> : null}
         rating={await ratingSummary(plan.engineer.id)}
       />

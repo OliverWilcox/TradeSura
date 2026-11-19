@@ -196,6 +196,16 @@ describe("cancelAtPeriodEnd", () => {
     expect(m.plan.update.mock.calls[0][0].data).toMatchObject({ status: "CANCELLED" });
   });
 
+  it("in cooling-off with a payment already taken: refunds all of it, our fee too", async () => {
+    m.plan.findUniqueOrThrow.mockResolvedValue({ ...basePlan, coolingOffEndsAt: new Date(Date.now() + 5 * DAY) });
+    m.stripe.subscriptions.retrieve.mockResolvedValue({ id: "sub_1", status: "active", items: { data: [] } });
+    m.stripe.invoices.list.mockResolvedValue({ data: [{ id: "in_9", amount_paid: 1500 }] });
+    m.stripe.invoicePayments.list.mockResolvedValue({ data: [{ status: "paid", payment: { payment_intent: "pi_9" } }] });
+    m.stripe.paymentIntents.retrieve.mockResolvedValue({ latest_charge: { amount_refunded: 0 } });
+    await cancelAtPeriodEnd("plan_1");
+    expect(m.stripe.refunds.create).toHaveBeenCalledWith(expect.objectContaining({ payment_intent: "pi_9", amount: 1500, refund_application_fee: true }), expect.anything());
+  });
+
   it("yearly: ends at the end of the month in progress, no proration", async () => {
     const start = new Date(Date.now() - 40 * DAY);
     const periodEnd = addMonths(start, 12);
@@ -246,13 +256,13 @@ describe("yearly cancellation refund (Review 4)", () => {
     expect((await cancelAtPeriodEnd("plan_1")).refundPence).toBeUndefined();
   });
 
-  it("when it ends: refunds that amount, reversing the engineer's share and our fee", async () => {
+  it("when it ends: refunds that amount from the engineer's share, keeping our whole fee (terms 8.4.3)", async () => {
     m.plan.findUniqueOrThrow.mockResolvedValue({ ...basePlan, billingInterval: "year" });
     paidYear();
     const endedAt = addMonths(start, 2);
     await settleEndedSubscription("plan_1", { ...sub, ended_at: sec(endedAt) } as never);
     expect(m.stripe.refunds.create).toHaveBeenCalledWith(
-      expect.objectContaining({ payment_intent: "pi_1", amount: 13750, reverse_transfer: true, refund_application_fee: true }),
+      expect.objectContaining({ payment_intent: "pi_1", amount: 13750, reverse_transfer: true, refund_application_fee: false }),
       { idempotencyKey: "yearly-refund:in_1" },
     );
   });

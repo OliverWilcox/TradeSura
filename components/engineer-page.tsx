@@ -25,6 +25,7 @@ import {
   RecruitBanner,
   type RatingSummary,
 } from "@/components/engineer-profile";
+import { badgePublic } from "@/lib/verification-state";
 
 // The engineer's public page — tradesura.com/{slug} (Review 4: the one
 // address; each plan also at /{slug}/{plan}). One page is both the
@@ -198,10 +199,7 @@ export async function EngineerPage({
     );
   }
 
-  // The badge follows the Gas Safe check alone (Matt, 4 Nov): live once the
-  // card check passes, down when suspended, paused or banned. A stored copy
-  // of the register never shows it.
-  const gasSafe = Boolean(engineer.gasSafeVerifiedAt && !engineer.pausedAt && !engineer.bannedAt);
+  const gasSafe = badgePublic(engineer);
 
   await track("page_visit", { type: "CUSTOMER" }, {
     engineerId: engineer.id,
@@ -328,47 +326,56 @@ export async function EngineerPage({
 
       {visit && <VisitReasonIntro content={visit} />}
 
-      {/* Build Guide v2 Part 15.1 — title + sub-line, verbatim. */}
-      <div>
-        <h2 className="font-sans font-semibold text-lg">Choose your plan</h2>
-        <p className="text-sm text-muted">Cancel anytime — set up takes about 2 minutes.</p>
-      </div>
+      {mode === "closed" ? (
+        <div className="bg-paper border border-line rounded-xl p-4 text-center">
+          <h2 className="font-sans font-semibold text-base mb-1.5">{brand} isn&apos;t taking new plans right now</h2>
+          <p className="text-sm text-muted">Check back soon, or ask {brand} directly.</p>
+        </div>
+      ) : (
+        <>
+        {/* Build Guide v2 Part 15.1 — title + sub-line, verbatim. */}
+        <div>
+          <h2 className="font-sans font-semibold text-lg">Choose your plan</h2>
+          <p className="text-sm text-muted">Cancel anytime — set up takes about 2 minutes.</p>
+        </div>
 
-      <PublicSignup
-        slug={slug}
-        engineerName={brand}
-        vatRegistered={engineer.vatRegistered}
-        initialTierId={tier ?? visitTierId}
-        offerToken={visit ? offer : undefined}
-        rejoin={rejoin}
-        firstMonthFree={(await rejoinFreeMonth(engineer.id, rejoin)) || neighbour}
-        neighbourRef={neighbour ? nref : undefined}
-        normalPrices={{ normalServicePence: engineer.normalServicePence, normalCalloutPence: engineer.normalCalloutPence }}
-        reason={visit ? { serviceOrder: serviceOrderForVisit(visit.reason) } : undefined}
-        localProof={await localProof(engineer.id, brand)}
-        mode={mode}
-        soldById={demo ? by : undefined}
-        channel={
-          demo ? "demo" : src === "blast" ? "blast" : src === "referral" ? "referral" : src === "website" ? "website" : "web"
-        }
-        tiers={tiers.map((t) => ({
-          id: t.id,
-          name: t.name,
-          priceMonthlyPence: t.priceMonthlyPence,
-          isRecommended: t.isRecommended,
-          codes: t.clauses.map((tc) => tc.clause.code),
-          landlord: isLandlordPlan(t.clauses.map((tc) => tc.clause.code)),
-          lines: [
-            ...orderBenefits(
-              t.clauses
-                .sort((a, b) => a.clause.sortOrder - b.clause.sortOrder)
-                .map((tc) => ({ code: tc.clause.code, tc })),
-              visit?.benefitOrder ?? [],
-            ).map(({ tc }) => clauseLine(tc.clause, t.clauseRates)),
-            ...t.customLabels,
-          ],
-        }))}
-      />
+        <PublicSignup
+          slug={slug}
+          engineerName={brand}
+          vatRegistered={engineer.vatRegistered}
+          initialTierId={tier ?? visitTierId}
+          offerToken={visit ? offer : undefined}
+          rejoin={rejoin}
+          firstMonthFree={(await rejoinFreeMonth(engineer.id, rejoin)) || neighbour}
+          neighbourRef={neighbour ? nref : undefined}
+          normalPrices={{ normalServicePence: engineer.normalServicePence, normalCalloutPence: engineer.normalCalloutPence }}
+          reason={visit ? { serviceOrder: serviceOrderForVisit(visit.reason) } : undefined}
+          localProof={await localProof(engineer.id, brand)}
+          mode={mode}
+          soldById={demo ? by : undefined}
+          channel={
+            demo ? "demo" : src === "blast" ? "blast" : src === "referral" ? "referral" : src === "website" ? "website" : "web"
+          }
+          tiers={tiers.map((t) => ({
+            id: t.id,
+            name: t.name,
+            priceMonthlyPence: t.priceMonthlyPence,
+            isRecommended: t.isRecommended,
+            codes: t.clauses.map((tc) => tc.clause.code),
+            landlord: isLandlordPlan(t.clauses.map((tc) => tc.clause.code)),
+            lines: [
+              ...orderBenefits(
+                t.clauses
+                  .sort((a, b) => a.clause.sortOrder - b.clause.sortOrder)
+                  .map((tc) => ({ code: tc.clause.code, tc })),
+                visit?.benefitOrder ?? [],
+              ).map(({ tc }) => clauseLine(tc.clause, t.clauseRates)),
+              ...t.customLabels,
+            ],
+          }))}
+        />
+        </>
+      )}
 
       {profile && area && (
         <div className="bg-paper border border-line rounded-xl p-3.5">

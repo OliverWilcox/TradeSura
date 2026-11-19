@@ -27,16 +27,16 @@ function wholePounds(pence: number): string {
   return `£${Math.floor(pence / 100).toLocaleString("en-GB")}`;
 }
 
-function accountEmail(opts: {
+export function accountEmail(opts: {
   firstName: string | null;
   title: string;
   preheader: string;
   paragraphs: string[];
-  button: { to: string; label: string };
+  button: { to: string; label: string } | { href: string; label: string };
   /** Extra rows under the button (the happy-moment asks). */
   after?: string;
 }) {
-  const open = `${appUrl()}/api/open?to=${opts.button.to}`;
+  const open = "href" in opts.button ? opts.button.href : `${appUrl()}/api/open?to=${opts.button.to}`;
   const body = opts.paragraphs
     .map((p) => `<p style="margin:0 0 14px;font-size:15px;line-height:22px;color:${EMAIL.body};">${p}</p>`)
     .join("");

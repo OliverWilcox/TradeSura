@@ -12,6 +12,7 @@ import { Stars } from "@/components/engineer-profile";
 import { tradingNameOf } from "@/lib/engineer";
 import { JOIN_BTN, PlanTierCard } from "@/components/plan-tier-card";
 import { EmbedResizer } from "@/components/embed-resizer";
+import { badgePublic } from "@/lib/verification-state";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -63,7 +64,7 @@ export default async function EmbedPlans({
   const slugs = planSlugs(tiers);
   const locked = pageMode({ preview: false, practice: false, engineer }) === "closed";
   const rating = await ratingSummary(engineer.id);
-  const verified = Boolean(engineer.gasSafeVerifiedAt);
+  const verified = badgePublic(engineer);
   return (
     <div className="bg-panel p-3 text-ink">
       <EmbedResizer slug={slug} />

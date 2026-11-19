@@ -17,7 +17,6 @@ export type CardFrom = "signup" | "settings" | "team";
 export function cardAlertEmail(opts: {
   business: string;
   gasSafeNo: string | null;
-  /** Where the card came from: sign-up, a new card in Settings, or an owner adding a staff engineer. */
   from: CardFrom;
   at: Date;
   /** The check page in TradeSura Admin; null when ADMIN_APP_URL isn't set. */

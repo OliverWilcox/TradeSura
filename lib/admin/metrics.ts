@@ -27,7 +27,6 @@ import { cancelRatePercent } from "@/lib/admin-metrics";
 
 export type Range = { from: Date; to: Date };
 
-/** An engineer is active when they've sent a delivered offer in this many days. */
 export const ACTIVE_WINDOW_DAYS = 7;
 
 /**
@@ -196,39 +195,59 @@ export function offerCounts(os: Offer[]) {
 
 // --- Engineers ------------------------------------------------------------------
 
-/**
- * Engineers active at an instant: real, in good standing then (not paused,
- * banned or gone), and sent a delivered offer in the ACTIVE_WINDOW_DAYS × 24
- * hours before it. An instant still to come (the end of today, for a range
- * that includes it) means now, so the dashboard's card and the Engineers
- * list's Active label count the same window (QA-03). The set, so lists and
- * cards agree.
- */
-export async function activeEngineerIds(marks: TestMarks, at: Date, engineerIds?: string[]): Promise<Set<string>> {
-  const now = new Date();
-  if (at > now) at = now;
-  const since = new Date(at.getTime() - ACTIVE_WINDOW_DAYS * DAY_MS);
-  const standing = [{ OR: [{ pausedAt: null }, { pausedAt: { gte: at } }] }, { OR: [{ bannedAt: null }, { bannedAt: { gte: at } }] }, { OR: [{ leftAt: null }, { leftAt: { gte: at } }] }];
-  const [os, real] = await Promise.all([
-    offers(marks, { from: since, to: at, engineerIds }),
-    prisma.engineer.findMany({
-      where: { ...realEngineerWhere(marks), ...(engineerIds ? { id: { in: engineerIds, notIn: marks.engineers } } : {}), AND: standing },
-      select: { id: true },
-    }),
-  ]);
-  const ids = new Set(real.map((r) => r.id));
-  return new Set(os.filter((o) => o.delivery === "delivered" && ids.has(o.engineerId)).map((o) => o.engineerId));
+export function liveWhere(at: Date) {
+  return {
+    gasSafeVerifiedAt: { not: null, lt: at },
+    gasSafeCardReadId: { not: null },
+    AND: [
+      { OR: [{ deletedAt: null }, { deletedAt: { gte: at } }] },
+      { OR: [{ bannedAt: null }, { bannedAt: { gte: at } }] },
+      { OR: [{ pausedAt: null }, { pausedAt: { gte: at } }] },
+      { OR: [{ leftAt: null }, { leftAt: { gte: at } }] },
+    ],
+  } satisfies Prisma.EngineerWhereInput;
 }
 
-/** Verified engineers at an instant: real, approved before it, and neither deleted nor banned by then. */
-export function verifiedEngineerCount(marks: TestMarks, at: Date) {
+export function isLive(e: { gasSafeVerifiedAt: Date | null; gasSafeCardReadId: string | null; deletedAt?: Date | null; bannedAt: Date | null; pausedAt: Date | null; leftAt: Date | null }): boolean {
+  return Boolean(e.gasSafeVerifiedAt && e.gasSafeCardReadId && !e.deletedAt && !e.bannedAt && !e.pausedAt && !e.leftAt);
+}
+
+const capNow = (at: Date) => {
+  const now = new Date();
+  return at > now ? now : at;
+};
+
+export function liveEngineerCount(marks: TestMarks, at: Date) {
+  return prisma.engineer.count({ where: { ownerId: null, id: { notIn: marks.engineers }, ...liveWhere(capNow(at)) } });
+}
+
+export async function liveEngineerIds(marks: TestMarks, at: Date, engineerIds?: string[]): Promise<Set<string>> {
+  const rows = await prisma.engineer.findMany({
+    where: { id: { notIn: marks.engineers, ...(engineerIds ? { in: engineerIds } : {}) }, ...liveWhere(capNow(at)) },
+    select: { id: true },
+  });
+  return new Set(rows.map((r) => r.id));
+}
+
+export async function payingCustomerCounts(marks: TestMarks, at: Date, engineerIds?: string[]): Promise<Map<string, number>> {
+  const when = capNow(at);
+  const rows = await prisma.$queryRaw<{ id: string; n: bigint }[]>`
+    SELECT p."engineerId" AS id, COUNT(DISTINCT p."customerId") AS n FROM "Plan" p JOIN "Engineer" e ON e.id = p."engineerId"
+    WHERE p."activatedAt" < ${when} AND (p."cancelledAt" IS NULL OR p."cancelledAt" >= ${when}) AND p."mandateStatus" <> 'pending'
+      AND ${realPlanSql(marks)}
+      ${engineerIds ? Prisma.sql`AND p."engineerId" = ANY(${engineerIds}::text[])` : Prisma.empty}
+    GROUP BY 1`;
+  return new Map(rows.map((r) => [r.id, Number(r.n)]));
+}
+
+export async function activeEngineerIds(marks: TestMarks, at: Date, engineerIds?: string[]): Promise<Set<string>> {
+  const [live, paying] = await Promise.all([liveEngineerIds(marks, at, engineerIds), payingCustomerCounts(marks, at, engineerIds)]);
+  return new Set([...live].filter((id) => (paying.get(id) ?? 0) > 0));
+}
+
+export async function wentLiveCount(marks: TestMarks, range: Range) {
   return prisma.engineer.count({
-    where: {
-      ownerId: null,
-      id: { notIn: marks.engineers },
-      gasSafeVerifiedAt: { lt: at },
-      AND: [{ OR: [{ deletedAt: null }, { deletedAt: { gte: at } }] }, { OR: [{ bannedAt: null }, { bannedAt: { gte: at } }] }],
-    },
+    where: { ...realEngineerWhere(marks), gasSafeVerifiedAt: { gte: range.from, lt: range.to }, gasSafeCardReadId: { not: null } },
   });
 }
 
@@ -244,11 +263,6 @@ export async function lastDeliveredOffers(marks: TestMarks, engineerIds: string[
   return last;
 }
 
-/**
- * The follow-up ladder (Matt, 4 Nov): how TradeSura follows up an engineer
- * who's stopped sending offers, by whole days since their last delivered
- * offer (or since they went live, if they've never sent one).
- */
 export const CALL_LADDER = [
   { step: 1, label: "Push", channel: "push", fromDays: 3 },
   { step: 2, label: "WhatsApp", channel: "whatsapp", fromDays: 5 },
@@ -258,7 +272,6 @@ export const CALL_LADDER = [
 
 export type LadderStep = (typeof CALL_LADDER)[number];
 
-/** The ladder step for so many days without a delivered offer; null before the first step. */
 export function ladderStep(days: number): LadderStep | null {
   return [...CALL_LADDER].reverse().find((s) => days >= s.fromDays) ?? null;
 }
@@ -269,15 +282,8 @@ export const daysBetween = (from: Date, to: Date) => Math.floor((to.getTime() - 
 /** Cancellations are counted over this many days (the cancel rate, below). */
 export const CANCEL_RATE_WINDOW_DAYS = 90;
 
-/**
- * When a cancel rate is flagged (decided 4 Nov): over the window, at least
- * minCustomers on a plan (live now, or cancelled in the window), at least
- * minCancelled cancellations, and a rate more than timesAverage the average
- * across all engineers. Replaces the fixed "above 6%".
- */
 export const CANCEL_FLAG_RULE = { minCustomers: 10, minCancelled: 2, timesAverage: 2 } as const;
 
-/** Real plans that had gone live and were cancelled in the window, and plans live now, per engineer (or for everyone with no ids). */
 async function cancelCounts(marks: TestMarks, at: Date, engineerIds?: string[]) {
   const since = new Date(at.getTime() - CANCEL_RATE_WINDOW_DAYS * DAY_MS);
   const real = realPlanWhere(marks);
@@ -289,7 +295,6 @@ async function cancelCounts(marks: TestMarks, at: Date, engineerIds?: string[]) 
   return { cancelled: new Map(cancelled.map((c) => [c.engineerId, c._count._all])), live: new Map(live.map((l) => [l.engineerId, l._count._all])) };
 }
 
-/** The average cancel rate across all engineers: every real plan, pooled. */
 async function averageCancelRate(marks: TestMarks, at: Date) {
   const all = await cancelCounts(marks, at);
   const sum = (m: Map<string, number>) => [...m.values()].reduce((n, v) => n + v, 0);
@@ -306,11 +311,6 @@ export type CancelRate = {
   flagged: boolean;
 };
 
-/**
- * Engineers' cancel rates, by the app's own cancelRatePercent
- * (lib/admin-metrics.ts): real plans that had gone live and were cancelled in
- * the window, over those plus the plans live now. Flagged by CANCEL_FLAG_RULE.
- */
 export async function cancelRates(marks: TestMarks, engineerIds: string[], at = new Date()): Promise<Map<string, CancelRate>> {
   const [counts, averagePercent] = await Promise.all([cancelCounts(marks, at, engineerIds), averageCancelRate(marks, at)]);
   return new Map(
@@ -346,7 +346,7 @@ export const FUNNEL_STEPS: readonly FunnelStep[] = ["signed_up", "verified", "pl
 
 export const STEP_LABELS: Record<FunnelStep, string> = {
   signed_up: "Signed up",
-  verified: "Gone live",
+  verified: "Card check passed",
   plan_live: "First plan live",
   payments_set_up: "Payments set up",
   first_payment: "First payment",
@@ -380,7 +380,11 @@ export async function milestones(marks: TestMarks, where: { ids: string[] } | { 
       : Prisma.sql`e."ownerId" IS NULL AND e."deletedAt" IS NULL AND NOT (e.id = ANY(${marks.engineers}::text[]))
           AND e."createdAt" >= ${where.signedUp.from} AND e."createdAt" < ${where.signedUp.to}`;
   const rows = await bounded(prisma.$queryRaw<MilestoneRow[]>`
-    WITH e AS (SELECT id, "createdAt", "gasSafeVerifiedAt", "stripeChargesEnabled" FROM "Engineer" e WHERE ${scope}),
+    WITH e AS (
+      SELECT id, "createdAt",
+        CASE WHEN "gasSafeCardReadId" IS NOT NULL THEN "gasSafeVerifiedAt" END AS "gasSafeVerifiedAt",
+        "stripeChargesEnabled"
+      FROM "Engineer" e WHERE ${scope}),
     payments AS (
       SELECT "actorId" AS id, min(ts) AS at FROM "Event"
       WHERE name = 'stripe_onboarded' AND "actorId" IN (SELECT id FROM e) GROUP BY 1
