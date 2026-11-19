@@ -21,7 +21,7 @@ import { GET as signupsRoute } from "@/app/api/admin/v1/dashboard/signups/route"
 import { GET as packs } from "@/app/api/admin/v1/member-packs/route";
 import { POST as packsPosted } from "@/app/api/admin/v1/member-packs/posted/route";
 import { call, CHECKER, resetDb, SUPER_ADMIN, withPermissions } from "./helpers";
-import { makeCustomer, makeEngineer, makePlan } from "./factories";
+import { makeCustomer, makeEngineer, makePlan, readCard } from "./factories";
 
 /** These applications have open warnings (no card photo, not on the register), so approving takes a note (3.7). */
 const CHECKED = "Checked the card and register by phone";
@@ -114,6 +114,7 @@ describe("M3: telling the engineer", () => {
     });
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const e = await makeEngineer({ gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/card.png" });
+    await readCard(e.id);
     const res = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", reason: CHECKED } });
     log.mockRestore();
     expect(res.status).toBe(200);
@@ -197,9 +198,11 @@ describe("M4: sorting the verification queue", () => {
 describe("M6: a stale view", () => {
   it("can't decide an application that changed after it was opened", async () => {
     const e = await makeEngineer({ gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/old.jpg" });
+    await readCard(e.id);
     const { revision } = (await call(verification, { as: CHECKER, params: { engineerId: e.id } })).body;
     expect(revision).toMatch(/^[0-9a-f]{16}$/);
     await prisma.engineer.update({ where: { id: e.id }, data: { gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/new.jpg" } });
+    await readCard(e.id);
     const stale = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", revision, reason: CHECKED } });
     expect(stale.status).toBe(409);
     expect(stale.body.error.message).toMatch(/changed while you had it open/);
@@ -211,6 +214,7 @@ describe("M6: a stale view", () => {
 
   it("still says it's already decided, rather than changed", async () => {
     const e = await makeEngineer({ gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/card.png" });
+    await readCard(e.id);
     const { revision } = (await call(verification, { as: CHECKER, params: { engineerId: e.id } })).body;
     await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve", reason: CHECKED } });
     const again = await call(decide, { as: other, params: { engineerId: e.id }, body: { decision: "approve", revision, reason: CHECKED } });
@@ -255,13 +259,12 @@ describe("L5: CSV exports", () => {
     const e = await makeEngineer();
     await makeEngineer({ pausedAt: new Date() });
     for (let i = 0; i < 3; i++) await makeCustomer(e.id);
-    // Neither has sent an offer, so the one not paused is inactive.
-    const res = await call(engineerExport, { query: { status: "inactive" } });
+    const res = await call(engineerExport, { query: { status: "not_live" } });
     expect(res.headers.get("content-type")).toContain("application/x-ndjson");
     const lines = (res.body as string).trim().split("\n").map((l) => JSON.parse(l));
-    expect(lines).toHaveLength(2);
-    expect(lines[0]).toMatchObject({ id: e.id, customers: 3 });
-    expect(lines.at(-1)).toEqual({ end: true, count: 1 });
+    expect(lines).toHaveLength(3);
+    expect(lines.find((l) => l.id === e.id)).toMatchObject({ customers: 3, status: "not_live" });
+    expect(lines.at(-1)).toEqual({ end: true, count: 2 });
 
     const all = (await call(customerExport)).body.trim().split("\n");
     expect(JSON.parse(all.at(-1))).toEqual({ end: true, count: 3 });
@@ -321,12 +324,13 @@ describe("member packs, for the admin's backend mode", () => {
 
   it("can be marked posted together on a day, with the ones that can't go listed", async () => {
     const ready = await makeEngineer({ ...requested, gasSafeVerifiedAt: new Date(), gasSafeRegisterCheckedAt: new Date() });
+    await prisma.planTier.create({ data: { engineerId: ready.id, name: "Care", priceMonthlyPence: 1500, sortOrder: 1, status: "LIVE" } });
     const unverified = await makeEngineer(requested);
     const res = await call(packsPosted, { body: { engineerIds: [ready.id, unverified.id, "nope"], postedOn: "2026-10-20" } });
     expect(res.status).toBe(200);
     expect(res.body.posted).toEqual([ready.id]);
     expect(res.body.skipped).toEqual([
-      { id: unverified.id, reason: "This pack can't go out until the engineer is live." },
+      { id: unverified.id, reason: "This pack can't go out until the engineer is live: there's no photo of their Gas Safe ID card yet." },
       { id: "nope", reason: "There's no engineer with that ID." },
     ]);
     expect((await prisma.engineer.findUniqueOrThrow({ where: { id: ready.id } })).packShippedAt?.toISOString()).toBe("2026-10-20T12:00:00.000Z");

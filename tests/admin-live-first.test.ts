@@ -4,9 +4,6 @@ vi.mock("@/lib/db", () => ({ prisma: {} }));
 const { businessKey, checksOf, gasSafeNumbers, stageOf } = await import("@/lib/admin/verifications");
 const { codeStem } = await import("@/lib/referral-code");
 
-// Matt, 4 Nov: live first, register check behind; two Gas Safe numbers; the
-// duplicate check's business name; short referral codes.
-
 const none = {
   gasSafeNo: "1234567",
   gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/card.jpg",
@@ -16,6 +13,7 @@ const none = {
   gasSafeRegisterCheckedAt: null,
   gasSafeSuspendedAt: null,
   gasSafeRecheckRequestedAt: null,
+  gasSafeCardReadId: "read" as string | null,
 };
 const now = new Date("2026-11-05T12:00:00Z");
 const day = (d: string) => new Date(`${d}T09:00:00Z`);
@@ -29,6 +27,13 @@ describe("the check's stages", () => {
     expect(checksOf({ ...none, gasSafeVerifiedAt: day("2026-11-05"), gasSafeRegisterCheckedAt: day("2026-11-05") }, now)).toEqual({ stage: "passed", card: "passed", register: "passed" });
   });
 
+  it("never counts a card check as passed without a read card: they wait for the card, and aren't in the register check", () => {
+    const marked = { ...none, gasSafeVerifiedAt: day("2026-11-01"), gasSafeCardReadId: null };
+    expect(checksOf(marked, now)).toEqual({ stage: "card", card: "waiting", register: null });
+    expect(checksOf({ ...marked, gasSafeCardUrl: null }, now)).toEqual({ stage: "no_card", card: "no_card", register: null });
+    expect(checksOf({ ...marked, gasSafeRegisterCheckedAt: day("2026-11-02") }, now)).toEqual({ stage: "card", card: "waiting", register: null });
+  });
+
   it("is due a re-check two weeks after the card expires, or when one is asked for", () => {
     const passed = { ...none, gasSafeVerifiedAt: day("2025-11-01"), gasSafeRegisterCheckedAt: day("2025-11-01") };
     expect(stageOf({ ...passed, gasSafeCardExpiresOn: new Date("2026-10-30") }, now)).toBe("passed");
@@ -39,6 +44,8 @@ describe("the check's stages", () => {
   it("tells a failed card check from a suspension, and keeps showing the suspension while a new card waits", () => {
     expect(checksOf({ ...none, gasSafeRejectedAt: now }, now)).toEqual({ stage: "card_failed", card: "failed", register: null });
     expect(checksOf({ ...none, gasSafeRejectedAt: now, gasSafeSuspendedAt: now }, now)).toEqual({ stage: "suspended", card: "passed", register: "suspended" });
+    expect(checksOf({ ...none, gasSafeCardReadId: null, gasSafeRejectedAt: now, gasSafeSuspendedAt: now }, now)).toEqual({ stage: "suspended", card: "waiting", register: "suspended" });
+    expect(checksOf({ ...none, gasSafeCardUrl: null, gasSafeCardReadId: null, gasSafeRejectedAt: now, gasSafeSuspendedAt: now }, now).card).toBe("no_card");
     expect(checksOf({ ...none, gasSafeSuspendedAt: now }, now)).toEqual({ stage: "card", card: "waiting", register: "suspended" });
   });
 });

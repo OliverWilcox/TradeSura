@@ -142,7 +142,6 @@ export function parseQuery<T extends z.ZodType>(req: Request, schema: T): z.outp
 
 const MAX_BODY_BYTES = 64 * 1024;
 
-/** A JSON body, validated. Bodies over 64 KB (or the route's own `maxBytes`), or not JSON, are refused. */
 export async function parseBody<T extends z.ZodType>(req: Request, schema: T, { maxBytes = MAX_BODY_BYTES } = {}): Promise<z.output<T>> {
   if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
     throw new AdminApiError(415, "UNSUPPORTED_MEDIA_TYPE", "Send the request body as JSON.");

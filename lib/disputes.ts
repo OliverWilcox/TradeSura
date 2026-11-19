@@ -211,3 +211,30 @@ export async function handleDisputeClosed(dispute: Stripe.Dispute) {
         : "Nothing was handed back to the engineer.",
   ]);
 }
+
+export async function engineerDisputes(engineerId: string) {
+  const rows = await prisma.planDispute.findMany({ where: { engineerId }, orderBy: { createdAt: "desc" } });
+  const planIds = [...new Set(rows.map((r) => r.planId).filter((id): id is string => !!id))];
+  const plans = planIds.length ? await prisma.plan.findMany({ where: { id: { in: planIds } }, select: { id: true, ref: true, customer: { select: { firstName: true, lastName: true } } } }) : [];
+  const planOf = new Map(plans.map((p) => [p.id, p]));
+  return rows.map((r) => {
+    const plan = r.planId ? planOf.get(r.planId) : undefined;
+    const kind = !r.closedAt ? "payment_disputed" : r.status === "won" ? "dispute_won" : r.status === "lost" ? "dispute_lost" : "dispute_closed";
+    const feeTakenPence = r.feeDebitId ? r.feePence : 0;
+    const won = kind === "dispute_won";
+    return {
+      at: r.createdAt.toISOString(),
+      closedAt: r.closedAt?.toISOString() ?? null,
+      kind,
+      disputeId: r.stripeDisputeId,
+      amountPence: r.amountPence,
+      feePence: r.feePence,
+      reversedPence: r.reversedPence + feeTakenPence,
+      shortfallPence: won ? 0 : Math.max(0, r.amountPence - r.reversedPence) + (r.feePence - feeTakenPence),
+      returnedPence: r.returnedTransferId ? r.reversedPence : null,
+      handBackDuePence: won && !r.returnedTransferId && r.reversedPence > 0 ? r.reversedPence : null,
+      reason: r.reason,
+      plan: plan ? { ref: plan.ref, customer: `${plan.customer.firstName} ${plan.customer.lastName}`.trim() } : null,
+    } as const;
+  });
+}

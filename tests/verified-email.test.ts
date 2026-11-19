@@ -17,8 +17,10 @@ describe("You're verified email", () => {
   it("matches the preview: 20 customers on a £15 plan is £2,880 a year to them", () => {
     expect(yearlyForCustomers(1500)).toBe(288000);
     const { subject, html } = verifiedEmail(base);
-    expect(subject).toBe("You're verified, Dave!");
-    expect(html).toContain("GAS SAFE CHECK PASSED");
+    expect(subject).toBe("You're live, Dave!");
+    expect(html).toContain("GAS SAFE CARD CHECKED");
+    expect(html).toContain("once we've checked you on the Gas Safe Register");
+    expect(html).not.toContain("Homeowners can see it from today");
     expect(html).toContain("£2,880 a year to you");
     expect(html).toContain("the app does the selling");
     expect(html).toContain("/smithandsons");

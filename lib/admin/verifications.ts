@@ -21,25 +21,12 @@ import { likeTerm } from "@/lib/admin-api/db";
 import { AdminApiError, conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
 import { formatUkDate, ukDay } from "@/lib/admin/time";
-import { GAS_SAFE_REGISTER_URL } from "@/lib/gas-safe-register-link";
+import { GAS_SAFE_REGISTER_URL, gasSafeRegisterSearch } from "@/lib/gas-safe-register-link";
+import { autoPassOn, cardCheckView, cardPassBlock, currentReads, detailsOf, readComplete, type CardCheckView, type CardDetails } from "@/lib/admin/card-check";
+import { cardReadConfigured, notSetUpReading, readGasSafeCard, type CardImage, type CardReading } from "@/lib/card-read";
+import type { GasSafeCardRead } from "@/lib/generated/prisma/client";
+import { isPrivateCardUrl, readPrivateCard } from "@/lib/gas-safe-card";
 
-// The Gas Safe check for the admin API, with who decided recorded against
-// each step. Live first, register check behind (Matt, 4 Nov): passing the
-// card check puts the engineer live; the checker then checks the live Gas
-// Safe Register the same day and records what it showed. Nothing is checked
-// against a stored copy of the register. A case shows only what the check
-// needs, no contact details, because verification checkers see it too.
-
-/**
- * Where a case stands:
- *   no_card      a Gas Safe number but no card photo yet
- *   card         card photo in, card check waiting
- *   register     card check passed (live), register check due
- *   recheck      register checked before and due again
- *   passed       register check passed, not due again yet
- *   card_failed  card check failed (rejected)
- *   suspended    register check failed: badge, town page and offers off
- */
 export type CheckStage = "not_submitted" | "no_card" | "card" | "register" | "recheck" | "passed" | "card_failed" | "suspended";
 export type CardCheck = "waiting" | "passed" | "failed" | "no_card";
 export type RegisterCheck = "due" | "recheck_due" | "passed" | "suspended";
@@ -48,7 +35,6 @@ const OPEN_STAGES = ["card", "register", "no_card", "recheck"] as const;
 type OpenStage = (typeof OPEN_STAGES)[number];
 const isOpen = (s: CheckStage): s is OpenStage => (OPEN_STAGES as readonly string[]).includes(s);
 
-/** The queue's tabs: one per open stage, flagged duplicates across them, and decided. pending is card, register and recheck together (what needs a person). */
 export type VerificationTab = OpenStage | "duplicates" | "pending" | "decided";
 
 const live = { deletedAt: null } satisfies Prisma.EngineerWhereInput;
@@ -66,19 +52,14 @@ export function qualificationsOf(raw: unknown) {
 }
 
 const DAY_MS = 86_400_000;
-/** The yearly register re-check falls due this many days after the card's expiry (Matt, 4 Nov). */
 export const RECHECK_DAYS_AFTER_CARD_EXPIRY = 14;
-/** Without a card date, the register is checked again this many months after the last check. */
 export const REGISTER_RECHECK_MONTHS = 12;
-/** Cards renew yearly, so an expiry further off than this is flagged (Matt, 4 Nov: "more than about 13 months"). */
 export const CARD_EXPIRY_FLAG_DAYS = 396;
 
-/** When the register check is next due after the one passed at `checkedAt`. */
 export function nextRegisterCheck(checkedAt: Date | null, cardExpiresOn: Date | null): Date | null {
   if (!checkedAt) return null;
   if (cardExpiresOn) {
     const due = new Date(cardExpiresOn.getTime() + RECHECK_DAYS_AFTER_CARD_EXPIRY * DAY_MS);
-    // A card that had already lapsed when it was checked doesn't make the check due again at once.
     if (due > checkedAt) return due;
   }
   const due = new Date(checkedAt);
@@ -95,9 +76,19 @@ type CheckFields = {
   gasSafeRegisterCheckedAt: Date | null;
   gasSafeSuspendedAt: Date | null;
   gasSafeRecheckRequestedAt: Date | null;
+  gasSafeCardReadId: string | null;
 };
 
+export const PASSED_READ = { gasSafeCardReadId: { not: null } } as const;
+
+export const cardCheckPassed = (e: Pick<CheckFields, "gasSafeVerifiedAt" | "gasSafeCardReadId">) => Boolean(e.gasSafeVerifiedAt && e.gasSafeCardReadId);
+
+export function badgeOf(e: Pick<CheckFields, "gasSafeVerifiedAt" | "gasSafeCardReadId" | "gasSafeRegisterCheckedAt"> & { pausedAt: Date | null; bannedAt: Date | null }): "public" | "hidden" {
+  return cardCheckPassed(e) && e.gasSafeRegisterCheckedAt && !e.pausedAt && !e.bannedAt ? "public" : "hidden";
+}
+
 export function stageOf(e: CheckFields, now = new Date()): CheckStage {
+  if (e.gasSafeVerifiedAt && !e.gasSafeCardReadId) return e.gasSafeCardUrl ? "card" : "no_card";
   if (e.gasSafeVerifiedAt) {
     if (!e.gasSafeRegisterCheckedAt) return "register";
     const due = nextRegisterCheck(e.gasSafeRegisterCheckedAt, e.gasSafeCardExpiresOn);
@@ -108,22 +99,28 @@ export function stageOf(e: CheckFields, now = new Date()): CheckStage {
   return e.gasSafeCardUrl ? "card" : "no_card";
 }
 
-/** The two results the queue and the engineers list show (Matt, 4 Nov), instead of one "pending". */
 export function checksOf(e: CheckFields, now = new Date()) {
   const stage = stageOf(e, now);
+  const unread: CardCheck = e.gasSafeCardUrl ? "waiting" : "no_card";
   const card: CardCheck | null =
-    stage === "not_submitted" ? null : stage === "no_card" ? "no_card" : stage === "card" ? "waiting" : stage === "card_failed" ? "failed" : "passed";
-  // Suspended stays shown while a new card waits, so the checker sees why.
+    stage === "not_submitted"
+      ? null
+      : stage === "no_card"
+        ? "no_card"
+        : stage === "card"
+          ? "waiting"
+          : stage === "card_failed"
+            ? "failed"
+            : stage === "suspended"
+              ? e.gasSafeCardReadId
+                ? "passed"
+                : unread
+              : "passed";
   const register: RegisterCheck | null =
     e.gasSafeSuspendedAt && !e.gasSafeVerifiedAt ? "suspended" : stage === "register" ? "due" : stage === "recheck" ? "recheck_due" : stage === "passed" ? "passed" : null;
   return { stage, card, register };
 }
 
-/**
- * The engineer's own licence number and the business's registration number.
- * Before the app asked for both, its one field was labelled "registration
- * number", so a number there that isn't a 7-digit licence is taken as that.
- */
 export function gasSafeNumbers(e: { gasSafeNo: string | null; gasSafeRegistrationNo: string | null }) {
   const licenceNo = e.gasSafeNo && /^\d{7}$/.test(e.gasSafeNo) ? e.gasSafeNo : null;
   return { licenceNo, registrationNo: e.gasSafeRegistrationNo ?? (licenceNo ? null : e.gasSafeNo) };
@@ -143,6 +140,10 @@ const lockOf = (c: { adminId: string; adminName: string; claimedAt: Date } | und
   c ? { holderId: c.adminId, holderName: c.adminName, until: new Date(c.claimedAt.getTime() + CLAIM_MINUTES * 60_000).toISOString() } : null;
 
 const CHECK_SELECT = {
+  gasSafeCardReadId: true,
+  gasSafeCardBackUrl: true,
+  pausedAt: true,
+  bannedAt: true,
   gasSafeNo: true,
   gasSafeReviewRequestedAt: true,
   gasSafeRegistrationNo: true,
@@ -155,6 +156,9 @@ const CHECK_SELECT = {
   gasSafeSuspendedAt: true,
   gasSafeRecheckRequestedAt: true,
   gasSafeRecheckReason: true,
+  gasSafeReopenedAt: true,
+  gasSafeVerifiedBeforeReopenAt: true,
+  gasSafeRegisterCheckedBeforeReopenAt: true,
 } satisfies Prisma.EngineerSelect;
 
 const ROW_SELECT = {
@@ -173,7 +177,6 @@ const ROW_SELECT = {
   gasSafeCategories: true,
   qualificationConfirmations: true,
   setupTextConsentAt: true,
-  // Only whether there is one (a chase by text needs it); never sent on.
   phone: true,
   ownerId: true,
   owner: { select: { tradingName: true, legalName: true, slug: true, gasSafeNo: true, gasSafeRegistrationNo: true } },
@@ -182,7 +185,6 @@ const ROW_SELECT = {
 
 type Row = Prisma.EngineerGetPayload<{ select: typeof ROW_SELECT }>;
 
-/** Staff take the business's registration number from the owner when they haven't given one. */
 function numbersOf(r: Row) {
   const own = gasSafeNumbers(r);
   return { licenceNo: own.licenceNo, registrationNo: own.registrationNo ?? (r.owner ? gasSafeNumbers(r.owner).registrationNo : null) };
@@ -234,40 +236,55 @@ export function verificationStatus(e: Pick<Row, "gasSafeNo" | "gasSafeVerifiedAt
   return e.gasSafeNo ? ("pending" as const) : ("not_submitted" as const);
 }
 
-type DuplicateReason = "company_number" | "registration_number" | "business_name" | "name_and_postcode";
+type DuplicateReason = "company_number" | "registration_number" | "business_name" | "email" | "name_and_postcode";
 export type Duplicate = { engineerId: string; reason: DuplicateReason; name: string; business: string; status: string };
 
-/** A business name to compare on: lower case, letters and digits only, without a closing Ltd, Limited, PLC or LLP. */
 export function businessKey(name: string | null): string | null {
   const key = (name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "").replace(/(ltd|limited|plc|llp)$/, "");
   return key.length >= 4 ? key : null;
 }
 
-/** businessKey() in SQL, for one column. */
 const businessKeySql = (column: "tradingName" | "legalName") =>
   Prisma.sql`regexp_replace(regexp_replace(lower(COALESCE(${Prisma.raw(`"${column}"`)}, '')), '[^a-z0-9]+', '', 'g'), '(ltd|limited|plc|llp)$', '')`;
 
 const keysOf = (e: { tradingName: string | null; legalName: string | null }) => [businessKey(e.tradingName), businessKey(e.legalName)].filter((k): k is string => !!k);
 
-/**
- * Other accounts that look like the same business or person: the same
- * company number, Gas Safe registration number or business name, or the same
- * name and postcode. Staff sit under their owner's business (Matt, 4 Nov):
- * never the business's duplicates, and compared with others only as people.
- * A signal for the checker, never a decision.
- */
+export function emailKey(email: string | null): string | null {
+  const [local = "", domain = ""] = (email ?? "").trim().toLowerCase().split("@");
+  const base = local.split("+")[0];
+  if (!base || !domain) return null;
+  return domain === "gmail.com" || domain === "googlemail.com" ? `${base.replace(/\./g, "")}@gmail.com` : `${base}@${domain}`;
+}
+
+const EMAIL_KEY_SQL = Prisma.sql`CASE WHEN lower(split_part(email, '@', 2)) IN ('gmail.com', 'googlemail.com') THEN replace(lower(split_part(split_part(email, '@', 1), '+', 1)), '.', '') || '@gmail.com' ELSE lower(split_part(split_part(email, '@', 1), '+', 1)) || '@' || lower(split_part(email, '@', 2)) END`;
+
 async function duplicatesFor(rows: Row[]): Promise<Map<string, Duplicate[]>> {
   const result = new Map<string, Duplicate[]>(rows.map((r) => [r.id, []]));
+  const [reads, emails] = await Promise.all([
+    currentReads(rows),
+    prisma.engineer.findMany({ where: { id: { in: rows.map((r) => r.id) } }, select: { id: true, email: true } }),
+  ]);
+  const emailOf = new Map(emails.map((e) => [e.id, emailKey(e.email)]));
+  const registrationsOf = (r: Row) => [numbersOf(r).registrationNo, reads.get(r.id)?.read?.registrationNo ?? null].filter((n): n is string => !!n);
   const companyNumbers = [...new Set(rows.map((r) => r.companyNumber).filter((n): n is string => !!n))];
   const postcodes = [...new Set(rows.map((r) => r.postcode).filter((p): p is string => !!p))];
-  const registrations = [...new Set(rows.map((r) => numbersOf(r).registrationNo).filter((n): n is string => !!n))];
+  const registrations = [...new Set(rows.flatMap(registrationsOf))];
   const keys = [...new Set(rows.flatMap(keysOf))];
-  const named = keys.length
-    ? await prisma.$queryRaw<{ id: string }[]>`
-        SELECT id FROM "Engineer"
-        WHERE "deletedAt" IS NULL AND (${businessKeySql("tradingName")} IN (${Prisma.join(keys)}) OR ${businessKeySql("legalName")} IN (${Prisma.join(keys)}))`
-    : [];
-  if (!companyNumbers.length && !postcodes.length && !registrations.length && !named.length) return result;
+  const emailKeys = [...new Set([...emailOf.values()].filter((k): k is string => !!k))];
+  const [named, sameEmail] = await Promise.all([
+    keys.length
+      ? prisma.$queryRaw<{ id: string }[]>`
+          SELECT id FROM "Engineer"
+          WHERE "deletedAt" IS NULL AND (${businessKeySql("tradingName")} IN (${Prisma.join(keys)}) OR ${businessKeySql("legalName")} IN (${Prisma.join(keys)}))`
+      : [],
+    emailKeys.length
+      ? prisma.$queryRaw<{ id: string; key: string }[]>`
+          SELECT id, ${EMAIL_KEY_SQL} AS key FROM "Engineer"
+          WHERE "deletedAt" IS NULL AND email IS NOT NULL AND ${EMAIL_KEY_SQL} IN (${Prisma.join(emailKeys)})`
+      : [],
+  ]);
+  const emailKeyOf = new Map(sameEmail.map((e) => [e.id, e.key]));
+  if (!companyNumbers.length && !postcodes.length && !registrations.length && !named.length && !sameEmail.length) return result;
   const others = await prisma.engineer.findMany({
     where: {
       ...live,
@@ -275,37 +292,39 @@ async function duplicatesFor(rows: Row[]): Promise<Map<string, Duplicate[]>> {
         ...(companyNumbers.length ? [{ companyNumber: { in: companyNumbers } }] : []),
         ...(postcodes.length ? [{ postcode: { in: postcodes } }] : []),
         ...(registrations.length ? [{ gasSafeRegistrationNo: { in: registrations } }, { gasSafeNo: { in: registrations } }] : []),
-        ...(named.length ? [{ id: { in: named.map((n) => n.id) } }] : []),
+        ...(named.length || sameEmail.length ? [{ id: { in: [...named.map((n) => n.id), ...sameEmail.map((n) => n.id)] } }] : []),
       ],
     },
-    select: { ...ROW_SELECT, bannedAt: true },
+    select: { ...ROW_SELECT, leftAt: true },
   });
   const key = (e: { firstName: string | null; lastName: string | null }) => personName(e).toLowerCase();
   for (const row of rows) {
     const rowKeys = new Set(keysOf(row));
-    const rowRegistration = numbersOf(row).registrationNo;
+    const rowRegistrations = registrationsOf(row);
+    const rowEmail = emailOf.get(row.id) ?? null;
     for (const o of others) {
       const sameBusiness = o.id === row.id || o.id === row.ownerId || o.ownerId === row.id || (!!row.ownerId && o.ownerId === row.ownerId);
       if (sameBusiness) continue;
-      // Staff carry their owner's business details, so only owners are compared as businesses.
       const businesses = !row.ownerId && !o.ownerId;
       const reason: DuplicateReason | null =
         businesses && row.companyNumber && o.companyNumber === row.companyNumber
           ? "company_number"
-          : businesses && rowRegistration && numbersOf(o).registrationNo === rowRegistration
+          : businesses && rowRegistrations.some((n) => numbersOf(o).registrationNo === n)
             ? "registration_number"
             : businesses && keysOf(o).some((k) => rowKeys.has(k))
               ? "business_name"
-              : row.postcode && o.postcode === row.postcode && row.firstName && key(o) === key(row)
-                ? "name_and_postcode"
-                : null;
+              : rowEmail && emailKeyOf.get(o.id) === rowEmail
+                ? "email"
+                : row.postcode && o.postcode === row.postcode && row.firstName && key(o) === key(row)
+                  ? "name_and_postcode"
+                  : null;
       if (reason) {
         result.get(row.id)!.push({
           engineerId: o.id,
           reason,
           name: personName(o),
           business: displayName(o),
-          status: o.bannedAt ? "banned" : verificationStatus(o),
+          status: o.bannedAt ? "banned" : cardCheckPassed(o) && !o.pausedAt && !o.leftAt ? "live" : "not_live",
         });
       }
     }
@@ -313,7 +332,6 @@ async function duplicatesFor(rows: Row[]): Promise<Map<string, Duplicate[]>> {
   return result;
 }
 
-/** When each engineer last uploaded a card (null if only at sign-up). */
 async function lastUploads(rows: Row[]): Promise<Map<string, Date>> {
   const ids = rows.map((r) => r.id);
   const uploads = ids.length
@@ -322,15 +340,11 @@ async function lastUploads(rows: Row[]): Promise<Map<string, Date>> {
   return new Map(uploads.map((u) => [u.actorId!, u._max.ts!]));
 }
 
-/**
- * Since when a case has waited at its stage, which is what the waiting time
- * and its colours run from: the latest card upload (or sign-up) for a card
- * check, going live for a register check, the due date or the request for a
- * re-check.
- */
+const later = (a: Date, b: Date | null) => (b && b > a ? b : a);
+
 function waitingSinceOf(r: Row, stage: CheckStage, uploads: Map<string, Date>, now: Date): Date | null {
-  if (stage === "card") return uploads.get(r.id) ?? r.createdAt;
-  if (stage === "no_card") return r.createdAt;
+  if (stage === "card") return later(uploads.get(r.id) ?? r.createdAt, r.gasSafeReopenedAt);
+  if (stage === "no_card") return later(r.createdAt, r.gasSafeReopenedAt);
   if (stage === "register") return r.gasSafeVerifiedAt;
   if (stage === "recheck") {
     const due = nextRegisterCheck(r.gasSafeRegisterCheckedAt, r.gasSafeCardExpiresOn);
@@ -343,16 +357,14 @@ function waitingSinceOf(r: Row, stage: CheckStage, uploads: Map<string, Date>, n
 /** The business name as displayName() shows it, for sorting in SQL. */
 const BUSINESS_SQL = Prisma.sql`lower(COALESCE(NULLIF(trim("tradingName"), ''), NULLIF(trim("legalName"), ''), slug))`;
 
-/** Decided: register check passed, card check failed, or suspended. */
 const DECIDED_WHERE = {
   ...live,
   OR: [
-    { gasSafeVerifiedAt: { not: null }, gasSafeRegisterCheckedAt: { not: null } },
+    { gasSafeVerifiedAt: { not: null }, gasSafeRegisterCheckedAt: { not: null }, ...PASSED_READ },
     { gasSafeVerifiedAt: null, gasSafeRejectedAt: { not: null } },
   ],
 } satisfies Prisma.EngineerWhereInput;
-const DECIDED_SQL = Prisma.sql`(("gasSafeVerifiedAt" IS NOT NULL AND "gasSafeRegisterCheckedAt" IS NOT NULL) OR ("gasSafeVerifiedAt" IS NULL AND "gasSafeRejectedAt" IS NOT NULL))`;
-/** The latest decision on a decided case. */
+const DECIDED_SQL = Prisma.sql`(("gasSafeVerifiedAt" IS NOT NULL AND "gasSafeRegisterCheckedAt" IS NOT NULL AND "gasSafeCardReadId" IS NOT NULL) OR ("gasSafeVerifiedAt" IS NULL AND "gasSafeRejectedAt" IS NOT NULL))`;
 const DECIDED_AT_SQL = Prisma.sql`GREATEST("gasSafeRegisterCheckedAt", "gasSafeRejectedAt")`;
 const decidedAtOf = (r: Row) => (r.gasSafeVerifiedAt ? r.gasSafeRegisterCheckedAt : r.gasSafeRejectedAt);
 
@@ -371,7 +383,6 @@ function searchWhere(q: string | undefined): Prisma.EngineerWhereInput {
   };
 }
 
-/** The same search, for the one raw query (decided, ordered by its latest decision). */
 function searchSql(q: string | undefined) {
   if (!q) return Prisma.empty;
   const like = `%${likeTerm(q)}%`;
@@ -382,11 +393,6 @@ function searchSql(q: string | undefined) {
 
 type QueueItem = { row: Row; stage: OpenStage; since: Date };
 
-/**
- * Every open case, longest waiting first, with each one's duplicate signals.
- * The database picks out what might be open; stageOf() has the last word.
- * The queue is short, so it's loaded whole.
- */
 async function openQueue(q?: string) {
   const now = new Date();
   const yearAgo = new Date(now);
@@ -399,6 +405,7 @@ async function openQueue(q?: string) {
         {
           OR: [
             { gasSafeNo: { not: null }, gasSafeVerifiedAt: null, gasSafeRejectedAt: null },
+            { gasSafeVerifiedAt: { not: null }, gasSafeCardReadId: null },
             { gasSafeVerifiedAt: { not: null }, gasSafeRegisterCheckedAt: null },
             {
               gasSafeVerifiedAt: { not: null },
@@ -425,7 +432,6 @@ type OpenQueue = Awaited<ReturnType<typeof openQueue>>;
 const inTab = (tab: VerificationTab, i: QueueItem, queue: OpenQueue) =>
   tab === "pending" ? i.stage !== "no_card" : tab === "duplicates" ? queue.duplicates.get(i.row.id)!.length > 0 : i.stage === tab;
 
-/** Counts per tab. Pass the whole open queue if it's already loaded (unsearched), so it isn't loaded twice. */
 export async function verificationCounts(loaded?: OpenQueue) {
   const [queue, decided] = await Promise.all([loaded ?? openQueue(), prisma.engineer.count({ where: DECIDED_WHERE })]);
   const count = (tab: VerificationTab) => queue.items.filter((i) => inTab(tab, i, queue)).length;
@@ -481,10 +487,33 @@ export async function listVerifications(q: {
     total = await prisma.engineer.count({ where: { AND: [DECIDED_WHERE, searchWhere(q.q)] } });
     [duplicates, uploads] = await Promise.all([duplicatesFor(rows), lastUploads(rows)]);
   }
-  const [claims, counts] = await Promise.all([freshClaims(rows.map((r) => r.id)), verificationCounts(wholeQueue)]);
+  const [claims, counts, reads] = await Promise.all([freshClaims(rows.map((r) => r.id)), verificationCounts(wholeQueue), currentReads(rows)]);
+  const today = ukDay(now);
   const items = rows.map((r) => {
     const checks = checksOf(r, now);
     const since = waitingSinceOf(r, checks.stage, uploads, now);
+    const given = numbersOf(r);
+    const typeMismatch = businessTypeMismatch(r);
+    const rowWarnings: CaseWarningLite[] = [
+      ...((duplicates.get(r.id)?.length ?? 0) > 0 ? [{ code: "duplicate", message: "Possible duplicate of another account." }] : []),
+      ...(r.companyStatus && r.companyStatus !== "active" ? [{ code: "company_not_active", message: `The company is ${r.companyStatus} at Companies House.` }] : []),
+      ...(typeMismatch ? [{ code: "type_mismatch", message: "The business type doesn't match its name." }] : []),
+    ];
+    const own = reads.get(r.id);
+    const view = cardCheckView({
+      hasCard: Boolean(r.gasSafeCardUrl),
+      read: own?.read ?? null,
+      automaticRead: own?.automatic ?? null,
+      live: Boolean(r.gasSafeVerifiedAt),
+      passed: cardCheckPassed(r),
+      newCard: isNewCard(r, own?.passed ?? null),
+      given: { ...given, firstName: r.firstName, lastName: r.lastName },
+      warnings: rowWarnings,
+      today,
+      uploadedAt: uploads.get(r.id) ?? r.createdAt,
+      now,
+      officersChecked: !(r.businessType === "ltd" || r.companyNumber),
+    });
     return {
       id: r.id,
       name: personName(r),
@@ -499,14 +528,20 @@ export async function listVerifications(q: {
       stage: checks.stage,
       cardCheck: checks.card,
       registerCheck: checks.register,
-      liveSince: r.gasSafeVerifiedAt?.toISOString() ?? null,
-      nextRecheck: dateOnly(nextRegisterCheck(r.gasSafeRegisterCheckedAt, r.gasSafeCardExpiresOn)),
+      liveSince: cardCheckPassed(r) ? r.gasSafeVerifiedAt!.toISOString() : null,
+      standing: r.bannedAt ? ("banned" as const) : r.pausedAt ? ("paused" as const) : null,
+      nextRecheck: cardCheckPassed(r) ? dateOnly(nextRegisterCheck(r.gasSafeRegisterCheckedAt, r.gasSafeCardExpiresOn)) : null,
       recheckReason: r.gasSafeRecheckReason,
       decidedAt: decidedAtOf(r)?.toISOString() ?? null,
       rejectReason: r.gasSafeRejectReason,
       claimedBy: claims.get(r.id)?.adminName ?? null,
       /** A chase can go by text: they have a mobile and agreed to texts about finishing setting up. */
       canTextChase: Boolean(r.phone && r.setupTextConsentAt),
+      automaticCheck: view.automatic,
+      whyHere: view.reasons,
+      card: cardOut(view),
+      badge: badgeOf(r),
+      registerSearch: gasSafeRegisterSearch(searchable(view.details, own?.passed ?? null)),
       signals: {
         hasCard: Boolean(r.gasSafeCardUrl),
         cardExpiryFar: cardExpiryFar(r.gasSafeCardExpiresOn, now),
@@ -519,13 +554,17 @@ export async function listVerifications(q: {
   return { items, page: q.page, size: q.size, total, counts };
 }
 
-/** The card says it runs further than a yearly renewal would. */
 function cardExpiryFar(expiresOn: Date | null, now = new Date()) {
   return Boolean(expiresOn && expiresOn.getTime() > now.getTime() + CARD_EXPIRY_FLAG_DAYS * DAY_MS);
 }
 
-/** Every step of the check, newest first, by the event each one recorded. */
-const CHECK_EVENTS: Record<string, "card_passed" | "card_failed" | "register_passed" | "suspended" | "recheck_requested"> = {
+const searchable = (d: CardDetails | null, passed: GasSafeCardRead | null) => (d?.licenceNo || d?.registrationNo ? d : detailsOf(passed));
+
+export const isNewCard = (e: { gasSafeCardUrl: string | null } & Pick<CheckFields, "gasSafeVerifiedAt" | "gasSafeCardReadId">, passed: { cardUrl: string } | null) =>
+  cardCheckPassed(e) && Boolean(passed && passed.cardUrl !== e.gasSafeCardUrl);
+
+const CHECK_EVENTS: Record<string, "card_passed" | "card_failed" | "register_passed" | "suspended" | "recheck_requested" | "reopened"> = {
+  gas_safe_card_check_reopened: "reopened",
   gas_safe_verified: "card_passed",
   gas_safe_rejected: "card_failed",
   gas_safe_register_checked: "register_passed",
@@ -540,11 +579,12 @@ async function checkHistory(engineerId: string) {
     take: 20,
   });
   return events.map((event) => {
-    const meta = (event.meta ?? {}) as { adminName?: string; reason?: string | null; note?: string | null };
+    const meta = (event.meta ?? {}) as { adminName?: string; reason?: string | null; note?: string | null; cardReadId?: string };
+    const kind = CHECK_EVENTS[event.name];
     return {
-      kind: CHECK_EVENTS[event.name],
+      kind: kind === "card_passed" && !meta.cardReadId ? ("marked_live" as const) : kind,
       at: event.ts.toISOString(),
-      byName: meta.adminName ?? (event.actorType === "SYSTEM" ? "TradeSura team" : null),
+      byName: meta.adminName ?? (event.actorType === "SYSTEM" ? ((meta as { automatic?: boolean }).automatic ? "Automatic card check" : "TradeSura team") : null),
       note: meta.note ?? meta.reason ?? null,
     };
   });
@@ -573,7 +613,7 @@ export async function getVerification(engineerId: string, opts: { withContact?: 
   const now = new Date();
   // Before Companies House is asked: whether to look the name up there.
   const nameMismatch = businessTypeMismatch(row);
-  const [duplicates, history, officers, claims, profile, search, uploads] = await Promise.all([
+  const [duplicates, history, officers, claims, profile, search, uploads, reads] = await Promise.all([
     duplicatesFor([row]),
     checkHistory(row.id),
     row.businessType === "ltd" && row.companyNumber ? companyOfficers(row.companyNumber) : Promise.resolve(null),
@@ -582,10 +622,14 @@ export async function getVerification(engineerId: string, opts: { withContact?: 
     // A name that says it's a company with no company number given: look it up by name.
     nameMismatch === "name_says_company" && !row.companyNumber ? searchCompanies(row.legalName ?? row.tradingName ?? "") : Promise.resolve(null),
     lastUploads([row]),
+    currentReads([row]),
   ]);
+  const own = reads.get(row.id);
+  const read = own?.read ?? null;
+  const passed = cardCheckPassed(row);
+  const newCard = isNewCard(row, own?.passed ?? null);
   const typeMismatch = businessTypeMismatch(row, profile?.name ?? null);
   const checks = checksOf(row, now);
-  // Where it sits among the cases in the same tab.
   let queue = null;
   if (isOpen(checks.stage)) {
     const ids = (await openQueue()).items.filter((i) => i.stage === checks.stage).map((i) => i.row.id);
@@ -606,31 +650,29 @@ export async function getVerification(engineerId: string, opts: { withContact?: 
     waitingSince: waitingSinceOf(row, checks.stage, uploads, now)?.toISOString() ?? null,
     stage: checks.stage,
     tab: isOpen(checks.stage) ? checks.stage : checks.stage === "not_submitted" ? null : ("decided" as const),
-    /** Send back with a decision: if the case changes in the meantime, the decision is refused. */
     revision: revisionOf(row),
     standing: standingState(row),
     lock: lockOf(claims.get(row.id)),
     checks: {
       card: checks.card,
       register: checks.register,
-      liveSince: row.gasSafeVerifiedAt?.toISOString() ?? null,
-      registerCheckedAt: row.gasSafeRegisterCheckedAt?.toISOString() ?? null,
-      nextRecheck: dateOnly(nextRegisterCheck(row.gasSafeRegisterCheckedAt, row.gasSafeCardExpiresOn)),
+      liveSince: passed ? row.gasSafeVerifiedAt!.toISOString() : null,
+      registerCheckedAt: passed ? (row.gasSafeRegisterCheckedAt?.toISOString() ?? null) : null,
+      nextRecheck: passed ? dateOnly(nextRegisterCheck(row.gasSafeRegisterCheckedAt, row.gasSafeCardExpiresOn)) : null,
       recheckRequested: row.gasSafeRecheckRequestedAt ? { at: row.gasSafeRecheckRequestedAt.toISOString(), reason: row.gasSafeRecheckReason } : null,
       suspended: row.gasSafeSuspendedAt ? { at: row.gasSafeSuspendedAt.toISOString(), reason: row.gasSafeRejectReason } : null,
       failedReason: checks.stage === "card_failed" ? row.gasSafeRejectReason : null,
     },
     history,
     gasSafe: { ...numbersOf(row), registerUrl: GAS_SAFE_REGISTER_URL },
-    /** What the engineer gave, for the checker to set beside the card and the register. The card's expiry is null until they give it with the photo. */
-    submitted: { name: personName(row), business: displayName(row), categories: row.gasSafeCategories, postcode: row.postcode, town: row.town, cardExpiry: dateOnly(row.gasSafeCardExpiresOn) },
+    submitted: { name: personName(row), business: displayName(row), postcode: row.postcode, town: row.town, cardExpiry: dateOnly(row.gasSafeCardExpiresOn) },
+    badge: badgeOf(row),
     /** Masked, for admins who may see contact details (the full value comes from the audited reveal). */
     contact: opts.withContact ? { email: maskEmail(row.email), phone: row.phone ? maskPhone(row.phone) : null } : null,
     /** A chase can go by text: they have a mobile and agreed to texts about finishing setting up. */
     canTextChase: Boolean(row.phone && row.setupTextConsentAt),
-    /** Customers on a live plan, who'd be told if the engineer is suspended. Staff have none of their own. */
     customersOnPlans: row.ownerId ? 0 : row._count.plans,
-    card: { available: Boolean(row.gasSafeCardUrl) },
+    card: { available: Boolean(row.gasSafeCardUrl), backAvailable: Boolean(row.gasSafeCardUrl && row.gasSafeCardBackUrl), expiresOn: dateOnly(read?.expiresOn ?? null), readId: read?.id ?? null, newCard },
     company:
       row.businessType === "ltd" || row.companyNumber
         ? {
@@ -651,31 +693,76 @@ export async function getVerification(engineerId: string, opts: { withContact?: 
     duplicates: duplicates.get(row.id)!,
     queue,
   };
-  return { ...detail, warnings: caseWarnings(detail, now) };
+  const warnings = caseWarnings(detail, now);
+  const view = cardCheckView({
+    hasCard: Boolean(row.gasSafeCardUrl),
+    read,
+    automaticRead: own?.automatic ?? null,
+    live: Boolean(row.gasSafeVerifiedAt),
+    passed,
+    newCard,
+    given: { ...numbersOf(row), firstName: row.firstName, lastName: row.lastName },
+    warnings,
+    today: ukDay(now),
+    uploadedAt: uploads.get(row.id) ?? row.createdAt,
+    now,
+  });
+  return {
+    ...detail,
+    card: { ...detail.card, ...cardOut(view) },
+    whyHere: view.reasons,
+    registerSearch: gasSafeRegisterSearch(searchable(view.details, own?.passed ?? null)),
+    passBlocked: cardPassBlock(view),
+    registerBlocked: newCard ? cardPassBlock(view) : null,
+    warnings,
+  };
 }
 
 export type VerificationDetail = NonNullable<Awaited<ReturnType<typeof getVerification>>>;
 
 export type CaseWarning = { code: string; message: string };
+type CaseWarningLite = CaseWarning;
+
+const DUPLICATE_WHAT: Record<DuplicateReason, string> = {
+  company_number: "company number",
+  registration_number: "Gas Safe registration number",
+  business_name: "business name",
+  email: "email address",
+  name_and_postcode: "name and postcode",
+};
+
+function duplicateWarning(duplicates: { reason: DuplicateReason }[]): string {
+  const what = [...new Set(duplicates.map((d) => DUPLICATE_WHAT[d.reason]))];
+  const list = what.length > 1 ? `${what.slice(0, -1).join(", ")} or ${what.at(-1)}` : what[0];
+  return `${duplicates.length === 1 ? "Another account shares" : "Other accounts share"} this ${list}.`;
+}
+const TYPE_MISMATCH_WARNING = {
+  name_says_company: "The business name says it's a company, but it was signed up as one that isn't.",
+  type_says_company: "It was signed up as a limited company, but the registered name doesn't say Ltd or Limited.",
+} as const;
+
+export function cardOut(view: CardCheckView) {
+  return { automatic: view.automatic, details: view.details, missing: view.missing, concerns: view.concerns, passedWithoutDetails: view.passedWithoutDetails };
+}
 
 const ukDate = (iso: string) => formatUkDate(new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso));
 
-/** Everything still open on a case, in the words the checker sees: what passing a check over needs a note for. */
 export function caseWarnings(
   d: {
-    duplicates: unknown[];
-    card: { available: boolean };
+    duplicates: { reason: DuplicateReason }[];
+    card: { available: boolean; expiresOn?: string | null };
     submitted: { cardExpiry: string | null };
     checks: { suspended: { at: string; reason: string | null } | null; card: CardCheck | null };
-    company: { status: string | null; officers: { match: NameMatch }[] | null } | null;
+    businessType?: string | null;
+    company: { status: string | null; number?: string | null; officers: { match: NameMatch }[] | null } | null;
     typeMismatch: { kind: "name_says_company" | "type_says_company" } | null;
   },
   now = new Date(),
 ): CaseWarning[] {
   const w: CaseWarning[] = [];
-  if (d.duplicates.length) w.push({ code: "duplicate", message: "Another account shares this company number, business name, Gas Safe registration number, or name and postcode." });
+  if (d.duplicates.length) w.push({ code: "duplicate", message: duplicateWarning(d.duplicates) });
   if (!d.card.available) w.push({ code: "no_card", message: "There's no photo of their Gas Safe ID card." });
-  const expiry = d.submitted.cardExpiry;
+  const expiry = d.card.expiresOn ?? d.submitted.cardExpiry;
   if (expiry && expiry < ukDay(now)) w.push({ code: "card_expired", message: `Their Gas Safe ID card expired on ${ukDate(expiry)}.` });
   if (expiry && cardExpiryFar(new Date(`${expiry}T00:00:00Z`), now)) {
     w.push({ code: "card_expiry_far", message: `The card's expiry, ${ukDate(expiry)}, is more than 13 months away. Cards renew yearly.` });
@@ -685,6 +772,9 @@ export function caseWarnings(
   }
   if (d.company?.status && d.company.status !== "active") w.push({ code: "company_not_active", message: `The company is ${d.company.status} at Companies House.` });
   const officers = d.company?.officers;
+  if (d.company && d.businessType === "ltd" && d.company.number && officers === null) {
+    w.push({ code: "officers_unavailable", message: "Companies House couldn't be asked for the company's officers, so check the applicant is one by hand." });
+  }
   if (officers?.length && !officers.some((o) => o.match === "match")) {
     w.push(
       officers.some((o) => o.match === "likely")
@@ -692,12 +782,9 @@ export function caseWarnings(
         : { code: "no_officer", message: "No current company officer matches the applicant." },
     );
   }
-  if (d.typeMismatch?.kind === "name_says_company") w.push({ code: "type_mismatch", message: "The business name says it's a company, but it was signed up as one that isn't." });
-  if (d.typeMismatch?.kind === "type_says_company") w.push({ code: "type_mismatch", message: "It was signed up as a limited company, but the registered name doesn't say Ltd or Limited." });
+  if (d.typeMismatch) w.push({ code: "type_mismatch", message: TYPE_MISMATCH_WARNING[d.typeMismatch.kind] });
   return w;
 }
-
-// --- Telling the engineer ----------------------------------------------------
 
 /** Whether it went: false with no email on the account, or when email isn't set up here (the dev driver only prints it). Throws if the provider refused it. */
 async function emailEngineer(engineerId: string, title: string, paragraphs: string[]): Promise<boolean> {
@@ -707,21 +794,40 @@ async function emailEngineer(engineerId: string, title: string, paragraphs: stri
   return emailConfigured();
 }
 
-type Outcome = "live" | "card_failed" | "suspended";
+type Outcome = "live" | "live_again" | "reopened" | "card_failed" | "suspended" | "badge_on";
 
-/** Push, text and email for each outcome. A failed send never undoes the decision. */
 async function tellEngineer(engineerId: string, outcome: Outcome, reason: string | null) {
   const why = reason ? ` (${reason})` : "";
   const sends: Record<Outcome, (() => Promise<unknown>)[]> = {
     live: [
-      () => sendPushNotification(engineerId, "You're live", "Your Gas Safe card is checked: your Verified Member badge is on", { url: "/more" }),
-      () => notifyEngineer(engineerId, "Your Gas Safe card is checked and you're live on TradeSura: your Verified Member badge is on and you can send plan offers."),
-      // The designed "You're verified" email, once per owner; otherwise (live again after a suspension, or a staff engineer) a plain notice.
+      () => sendPushNotification(engineerId, "You're live", "Your Gas Safe card is checked: you can send plan offers now", { url: "/more" }),
+      () => notifyEngineer(engineerId, "Your Gas Safe card is checked and you're live on TradeSura: you can send plan offers now. Your Verified Member badge goes on once we've checked you on the Gas Safe Register."),
       async () =>
         (await sendVerifiedEmail(engineerId)) ||
         emailEngineer(engineerId, "You're live on TradeSura", [
-          "Good news: we've checked your Gas Safe ID card and your Verified Member badge is live.",
-          "You can send plan offers straight away.",
+          "Good news: we've checked your Gas Safe ID card and your account is live.",
+          "You can send plan offers straight away. Your Verified Member badge goes on once we've checked you on the Gas Safe Register.",
+        ]),
+    ],
+    live_again: [
+      () => sendPushNotification(engineerId, "You're live again", "Your Gas Safe card is checked: you can send plan offers again", { url: "/more" }),
+      () => notifyEngineer(engineerId, "TradeSura: your Gas Safe card is checked and you're live again: you can send plan offers."),
+      () => emailEngineer(engineerId, "You're live on TradeSura again", ["We've checked your Gas Safe ID card, so your account is live again and you can send plan offers."]),
+    ],
+    reopened: [
+      () => sendPushNotification(engineerId, "We need your Gas Safe card", "Add a photo of your Gas Safe ID card so we can check it and put you live again", { url: "/more" }),
+      () => notifyEngineer(engineerId, "TradeSura: we now check every engineer's Gas Safe ID card before they can send offers. Add a photo of your card in the app and we'll put you live again once it's checked."),
+      () =>
+        emailEngineer(engineerId, "We need to check your Gas Safe card", [
+          "We now check every engineer's Gas Safe ID card before they can send plan offers, and we haven't checked yours yet.",
+          "Your plans and customers are unchanged. Open the TradeSura app and add a photo of the front and back of your card: once it's checked you're live again.",
+        ]),
+    ],
+    badge_on: [
+      () => sendPushNotification(engineerId, "Your badge is on", "You're checked on the Gas Safe Register: your Verified Member badge is on", { url: "/more" }),
+      () =>
+        emailEngineer(engineerId, "Your Verified Member badge is on", [
+          "We've checked you on the Gas Safe Register, so your Verified Member badge now shows to customers on your plans and pages.",
         ]),
     ],
     card_failed: [
@@ -752,6 +858,11 @@ async function tellEngineer(engineerId: string, outcome: Outcome, reason: string
   }
 }
 
+export async function tellReopened(engineerId: string) {
+  await tellEngineer(engineerId, "reopened", null);
+  await prisma.event.create({ data: { name: "gas_safe_card_check_reopen_told", actorType: "SYSTEM", meta: { engineerId } } });
+}
+
 /** Longest one push, text or email may take before the next is tried. */
 const NOTICE_TIMEOUT_MS = 10_000;
 
@@ -778,12 +889,6 @@ export function afterResponse(task: () => Promise<void>): Promise<void> | void {
 
 // --- Deciding ---------------------------------------------------------------
 
-/**
- * Claim an open case for this admin, or refresh their claim. Someone else's
- * fresh claim wins: the answer then says who holds it. Claims on one case are
- * taken one at a time (a transaction-scoped advisory lock), so two admins
- * opening it together can't both get it.
- */
 export async function claimVerification(admin: AdminPrincipal, engineerId: string) {
   const row = await prisma.engineer.findFirst({ where: { id: engineerId, ...live }, select: CHECK_SELECT });
   if (!row) throw notFound("There's no engineer with that ID.");
@@ -804,17 +909,11 @@ export async function claimVerification(admin: AdminPrincipal, engineerId: strin
   });
 }
 
-/** The next case in the same tab, for "move straight on". */
 async function nextInStage(engineerId: string, stage: CheckStage) {
   if (!isOpen(stage)) return null;
   return (await openQueue()).items.find((i) => i.stage === stage && i.row.id !== engineerId)?.row.id ?? null;
 }
 
-/**
- * One step of the check, made inside a transaction that holds the engineer's
- * row: refused if another admin holds the case, if it changed since it was
- * opened (revision), or if it's no longer at a stage the step applies to.
- */
 async function checkStep<T>(
   admin: AdminPrincipal,
   engineerId: string,
@@ -839,11 +938,52 @@ async function checkStep<T>(
   });
 }
 
-/**
- * The card check. Passing it puts the engineer live straight away (badge,
- * town page, offers), with the register check due behind it; it needs a card
- * photo. Failing it rejects the application, with the reason they're told.
- */
+function numbersAgree(row: { gasSafeNo: string | null; gasSafeRegistrationNo: string | null }, read: GasSafeCardRead) {
+  const own = gasSafeNumbers(row);
+  return Boolean(own.licenceNo || own.registrationNo) && (!own.licenceNo || own.licenceNo === read.licenceNo) && (!own.registrationNo || own.registrationNo === read.registrationNo);
+}
+
+function cardData(row: { gasSafeRegistrationNo: string | null }, read: GasSafeCardRead) {
+  return {
+    gasSafeCardReadId: read.id,
+    gasSafeCardExpiresOn: read.expiresOn,
+    ...(read.registrationNo && read.registrationNo !== row.gasSafeRegistrationNo ? { gasSafeRegistrationNo: read.registrationNo } : {}),
+  };
+}
+
+const REOPEN_CLEARED = { gasSafeReopenedAt: null, gasSafeVerifiedBeforeReopenAt: null, gasSafeRegisterCheckedBeforeReopenAt: null } as const;
+
+function passData(
+  row: {
+    gasSafeVerifiedAt: Date | null;
+    gasSafeNo: string | null;
+    gasSafeRegistrationNo: string | null;
+    gasSafeRegisterCheckedAt: Date | null;
+    gasSafeVerifiedBeforeReopenAt: Date | null;
+    gasSafeRegisterCheckedBeforeReopenAt: Date | null;
+  },
+  read: GasSafeCardRead,
+  now: Date,
+) {
+  const keepRegister = Boolean(row.gasSafeVerifiedAt && row.gasSafeRegisterCheckedAt && numbersAgree(row, read));
+  const restoreRegister = Boolean(!row.gasSafeVerifiedAt && row.gasSafeVerifiedBeforeReopenAt && row.gasSafeRegisterCheckedBeforeReopenAt && numbersAgree(row, read));
+  return {
+    gasSafeVerifiedAt: row.gasSafeVerifiedAt ?? row.gasSafeVerifiedBeforeReopenAt ?? now,
+    gasSafeRejectedAt: null,
+    gasSafeRejectReason: null,
+    gasSafeSuspendedAt: null,
+    ...(keepRegister
+      ? {}
+      : restoreRegister
+        ? { gasSafeRegisterCheckedAt: row.gasSafeRegisterCheckedBeforeReopenAt, gasSafeRecheckRequestedAt: null, gasSafeRecheckReason: null }
+        : { gasSafeRegisterCheckedAt: null, gasSafeRecheckRequestedAt: null, gasSafeRecheckReason: null }),
+    ...REOPEN_CLEARED,
+    ...cardData(row, read),
+  };
+}
+
+const liveAgain = (row: { gasSafeVerifiedAt: Date | null; gasSafeVerifiedBeforeReopenAt: Date | null }) => !row.gasSafeVerifiedAt && Boolean(row.gasSafeVerifiedBeforeReopenAt);
+
 export async function decideVerification(
   admin: AdminPrincipal,
   engineerId: string,
@@ -854,74 +994,84 @@ export async function decideVerification(
   // 500 characters) and are kept together, as the engineer is told them.
   const parts = [input.reason?.trim(), input.note?.trim()].filter(Boolean);
   const reason = parts.length ? parts.join(": ") : null;
-  // 3.7: passing over open warnings takes a note saying why, kept with the decision.
   const current = approved ? await getVerification(engineerId) : null;
-  const warnings = current?.stage === "card" ? current.warnings : [];
+  const deciding = current && (current.stage === "card" || current.stage === "no_card") && (!input.revision || current.revision === input.revision);
+  if (deciding && current.passBlocked) throw conflict(current.passBlocked);
+  const concerns = current?.stage === "card" ? current.card.concerns : [];
+  const readId = current?.card.readId ?? null;
   if (input.duplicateOf && !(await prisma.engineer.count({ where: { id: input.duplicateOf, NOT: { id: engineerId } } }))) {
     throw notFound("The account it duplicates doesn't exist.");
   }
   const now = new Date();
-  const stage = await checkStep(
+  const { stage, wasLive, again } = await checkStep(
     admin,
     engineerId,
     input.revision,
     ["card", "no_card"],
     "This application has already been decided.",
     async (tx, row, stage) => {
-      if (!row.gasSafeNo) throw conflict("This engineer hasn't submitted a Gas Safe number yet.");
-      // Nobody goes live on "Photo outstanding" (Matt, 4 Nov).
+      if (!row.gasSafeNo && !row.gasSafeVerifiedAt) throw conflict("This engineer hasn't submitted a Gas Safe number yet.");
       if (approved && stage === "no_card") throw conflict("There's no card photo to check yet. Chase them for it.");
-      if (approved && warnings.length && !reason) {
+      if (approved && concerns.length && !reason) {
         throw new AdminApiError(400, "VALIDATION", "Say why you're passing it with open warnings.", { reason: ["Say why you're passing it with open warnings."] });
       }
-      await tx.engineer.update({
-        where: { id: engineerId },
-        data: approved
-          ? {
-              gasSafeVerifiedAt: now,
-              gasSafeRejectedAt: null,
-              gasSafeRejectReason: null,
-              gasSafeSuspendedAt: null,
-              // Every pass of the card check is followed by a register check.
-              gasSafeRegisterCheckedAt: null,
-              gasSafeRecheckRequestedAt: null,
-              gasSafeRecheckReason: null,
-            }
-          : { gasSafeRejectedAt: now, gasSafeRejectReason: reason },
-      });
+      if (approved) {
+        const read = readId ? await tx.gasSafeCardRead.findUnique({ where: { id: readId } }) : null;
+        if (!read || !read.complete || read.cardUrl !== row.gasSafeCardUrl) throw conflict("The card changed while you had it open. Reload to see the latest before deciding.");
+        await tx.engineer.update({ where: { id: engineerId }, data: passData(row, read, now) });
+      } else {
+        await tx.engineer.update({
+          where: { id: engineerId },
+          data: { gasSafeVerifiedAt: null, gasSafeCardReadId: null, gasSafeRegisterCheckedAt: null, gasSafeRecheckRequestedAt: null, gasSafeRecheckReason: null, gasSafeRejectedAt: now, gasSafeRejectReason: reason, ...REOPEN_CLEARED },
+        });
+      }
       await adminEvent(
         admin,
         approved ? "gas_safe_verified" : "gas_safe_rejected",
-        { engineerId, reason, before: stage, ...(input.duplicateOf ? { duplicateOf: input.duplicateOf } : {}), ...(warnings.length ? { warnings: warnings.map((w) => w.code) } : {}) },
+        {
+          engineerId,
+          reason,
+          before: stage,
+          ...(row.gasSafeVerifiedAt ? { wasLive: true } : {}),
+          ...(approved && readId ? { cardReadId: readId } : {}),
+          ...(input.duplicateOf ? { duplicateOf: input.duplicateOf } : {}),
+          ...(concerns.length ? { warnings: (current?.warnings ?? []).filter((w) => w.code !== "no_card").map((w) => w.code), concerns } : {}),
+        },
         tx,
       );
-      return stage;
+      return { stage, wasLive: Boolean(row.gasSafeVerifiedAt), again: liveAgain(row) };
     },
   );
-  await afterResponse(() => tellEngineer(engineerId, approved ? "live" : "card_failed", reason));
+  if (!(approved && wasLive)) await afterResponse(() => tellEngineer(engineerId, approved ? (again ? "live_again" : "live") : "card_failed", reason));
   return { id: engineerId, outcome: approved ? ("verified" as const) : ("rejected" as const), decidedAt: now.toISOString(), nextId: await nextInStage(engineerId, stage) };
 }
 
-/** Register check passed: the checker looked the licence up on the live Gas Safe Register and says what it showed. Member packs post only after this. */
 export async function passRegisterCheck(admin: AdminPrincipal, engineerId: string, input: { note: string; revision?: string }) {
   const now = new Date();
-  const stage = await checkStep(admin, engineerId, input.revision, ["register", "recheck"], "Their register check isn't due.", async (tx, _row, stage) => {
+  const current = await getVerification(engineerId);
+  const sameView = current && (!input.revision || current.revision === input.revision);
+  if (sameView && current.card.newCard && current.registerBlocked) throw conflict(current.registerBlocked);
+  const readId = current?.card.newCard ? current.card.readId : null;
+  const stage = await checkStep(admin, engineerId, input.revision, ["register", "recheck"], "Their register check isn't due.", async (tx, row, stage) => {
+    const passed = row.gasSafeCardReadId ? await tx.gasSafeCardRead.findUnique({ where: { id: row.gasSafeCardReadId }, select: { cardUrl: true } }) : null;
+    let newRead: GasSafeCardRead | null = null;
+    if (!passed || passed.cardUrl !== row.gasSafeCardUrl) {
+      newRead = readId ? await tx.gasSafeCardRead.findUnique({ where: { id: readId } }) : null;
+      if (!newRead || !newRead.complete || newRead.cardUrl !== row.gasSafeCardUrl) {
+        throw conflict("Their new card hasn't been read in full. Enter its details from the photo before passing the register check.");
+      }
+    }
     await tx.engineer.update({
       where: { id: engineerId },
-      data: { gasSafeRegisterCheckedAt: now, gasSafeRecheckRequestedAt: null, gasSafeRecheckReason: null },
+      data: { gasSafeRegisterCheckedAt: now, gasSafeRecheckRequestedAt: null, gasSafeRecheckReason: null, ...(newRead ? cardData(row, newRead) : {}) },
     });
-    await adminEvent(admin, "gas_safe_register_checked", { engineerId, note: input.note, recheck: stage === "recheck" }, tx);
+    await adminEvent(admin, "gas_safe_register_checked", { engineerId, note: input.note, recheck: stage === "recheck", ...(newRead ? { cardReadId: newRead.id, newCard: true } : {}) }, tx);
     return stage;
   });
+  if (stage === "register") await afterResponse(() => tellEngineer(engineerId, "badge_on", null));
   return { id: engineerId, checkedAt: now.toISOString(), nextId: await nextInStage(engineerId, stage) };
 }
 
-/**
- * Suspend after a failed register check: the badge comes down, the town page
- * and offers stop (all read gasSafeVerifiedAt), and the reason is recorded.
- * With tellCustomers, each customer on a live plan is told and offered a
- * TradeSura engineer near them, as when an engineer leaves.
- */
 export async function suspendEngineer(admin: AdminPrincipal, engineerId: string, input: { reason: string; tellCustomers: boolean; revision?: string }) {
   const now = new Date();
   const { stage, owner } = await checkStep(admin, engineerId, input.revision, ["register", "recheck", "passed"], "Only an engineer who's live can be suspended.", async (tx, _row, stage) => {
@@ -951,7 +1101,6 @@ export async function suspendEngineer(admin: AdminPrincipal, engineerId: string,
   return { id: engineerId, suspendedAt: now.toISOString(), nextId: await nextInStage(engineerId, stage) };
 }
 
-/** An ad hoc register re-check (a homeowner's safety complaint), on top of the yearly one. */
 export async function requestRecheck(admin: AdminPrincipal, engineerId: string, input: { reason: string }) {
   const now = new Date();
   await checkStep(admin, engineerId, undefined, ["passed", "recheck"], "Only an engineer whose register check has passed can be re-checked.", async (tx) => {
@@ -1021,17 +1170,16 @@ const MAX_CARD_BYTES = 8 * 1024 * 1024;
 
 /** Cards are stored in Vercel Blob; anywhere else is refused, so this can't be used to fetch other URLs. */
 function cardSourceAllowed(url: URL): boolean {
+  if (isPrivateCardUrl(url)) return true;
   if (url.protocol === "https:" && url.hostname.endsWith(".public.blob.vercel-storage.com")) return true;
   const extra = (process.env.ADMIN_CARD_EXTRA_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   return extra.includes(url.origin);
 }
 
-export async function fetchCard(engineerId: string): Promise<Response | null> {
-  const row = await prisma.engineer.findFirst({ where: { id: engineerId, ...live }, select: { gasSafeCardUrl: true } });
-  if (!row?.gasSafeCardUrl) return null;
+async function cardImage(stored: string, engineerId: string): Promise<{ bytes: ArrayBuffer; type: string } | null> {
   let url: URL;
   try {
-    url = new URL(row.gasSafeCardUrl);
+    url = new URL(stored);
   } catch {
     return null;
   }
@@ -1039,13 +1187,27 @@ export async function fetchCard(engineerId: string): Promise<Response | null> {
     console.error(`[admin-api] card for ${engineerId} isn't on an allowed host: ${url.host}`);
     return null;
   }
+  if (isPrivateCardUrl(url)) {
+    const card = await readPrivateCard(url.href);
+    if (!card || !CARD_TYPES.has(card.type) || card.bytes.byteLength > MAX_CARD_BYTES) return null;
+    return card;
+  }
   const res = await fetch(url, { redirect: "error", cache: "no-store", signal: AbortSignal.timeout(10_000) });
   const type = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   if (!res.ok || !(CARD_TYPES.has(type) || (type === "image/svg+xml" && !url.hostname.endsWith(".vercel-storage.com")))) return null;
-  // Refuse an oversized file before reading it, when the store says its size.
   if (Number(res.headers.get("content-length") ?? 0) > MAX_CARD_BYTES) return null;
-  const body = await res.arrayBuffer();
-  if (body.byteLength > MAX_CARD_BYTES) return null;
+  const bytes = await res.arrayBuffer();
+  if (bytes.byteLength > MAX_CARD_BYTES) return null;
+  return { bytes, type };
+}
+
+export async function fetchCard(engineerId: string, side: "front" | "back" = "front"): Promise<Response | null> {
+  const row = await prisma.engineer.findFirst({ where: { id: engineerId, ...live }, select: { gasSafeCardUrl: true, gasSafeCardBackUrl: true } });
+  const stored = side === "back" ? (row?.gasSafeCardUrl ? row.gasSafeCardBackUrl : null) : row?.gasSafeCardUrl;
+  if (!stored) return null;
+  const image = await cardImage(stored, engineerId);
+  if (!image) return null;
+  const { bytes: body, type } = image;
   return new Response(body, {
     headers: {
       "Content-Type": type,
@@ -1055,4 +1217,163 @@ export async function fetchCard(engineerId: string): Promise<Response | null> {
       "Content-Disposition": "inline",
     },
   });
+}
+
+const SYSTEM_CHECK = { id: "system:card-check", name: "Automatic card check" } as const;
+
+const asImage = (i: { bytes: ArrayBuffer; type: string } | null): CardImage | null => (i ? { bytes: new Uint8Array(i.bytes), mediaType: i.type } : null);
+
+async function saveRead(engineerId: string, cardUrl: string, backUrl: string | null, reading: CardReading, by: { source: "automatic" | "checker"; id?: string; name?: string }) {
+  return prisma.gasSafeCardRead.create({
+    data: {
+      engineerId,
+      cardUrl,
+      backUrl,
+      source: by.source,
+      outcome: reading.outcome,
+      complete: readComplete(reading),
+      isGasSafeCard: reading.isGasSafeCard,
+      suspect: reading.suspect,
+      licenceNo: reading.licenceNo,
+      registrationNo: reading.registrationNo,
+      name: reading.name,
+      company: reading.company,
+      expiresOn: reading.expiresOn ? new Date(`${reading.expiresOn}T00:00:00Z`) : null,
+      categories: reading.categories,
+      notes: reading.notes,
+      model: reading.model,
+      readById: by.id ?? null,
+      readByName: by.name ?? null,
+    },
+  });
+}
+
+async function readFromPhotos(engineerId: string, cardUrl: string, backUrl: string | null): Promise<CardReading> {
+  const [front, back] = await Promise.all([cardImage(cardUrl, engineerId).catch(() => null), backUrl ? cardImage(backUrl, engineerId).catch(() => null) : null]);
+  const frontImage = asImage(front);
+  if (!frontImage) return { outcome: "unreadable", isGasSafeCard: null, suspect: false, licenceNo: null, registrationNo: null, name: null, company: null, expiresOn: null, categories: [], notes: ["The card photo couldn't be opened."], model: null };
+  return readGasSafeCard(frontImage, asImage(back));
+}
+
+export async function runCardCheck(engineerId: string, opts: { force?: boolean } = {}): Promise<GasSafeCardRead | null> {
+  const e = await prisma.engineer.findFirst({ where: { id: engineerId, ...live }, select: { gasSafeCardUrl: true, gasSafeCardBackUrl: true } });
+  if (!e?.gasSafeCardUrl) return null;
+  if (!opts.force) {
+    const existing = await prisma.gasSafeCardRead.findFirst({ where: { engineerId, cardUrl: e.gasSafeCardUrl, backUrl: e.gasSafeCardBackUrl, source: "automatic" }, orderBy: { createdAt: "desc" } });
+    if (existing && existing.outcome !== "error" && existing.outcome !== "not_set_up") return existing;
+  }
+  const reading = cardReadConfigured() ? await readFromPhotos(engineerId, e.gasSafeCardUrl, e.gasSafeCardBackUrl) : notSetUpReading();
+  const saved = await saveRead(engineerId, e.gasSafeCardUrl, e.gasSafeCardBackUrl, reading, { source: "automatic" });
+  if (saved.complete) await passAutomatically(engineerId, saved.id);
+  return saved;
+}
+
+async function passCleanCard(engineerId: string, readId: string | null, by: { automatic: boolean; name: string; via?: string }): Promise<boolean> {
+  const detail = await getVerification(engineerId);
+  if (!detail || detail.stage !== "card" || detail.lock) return false;
+  const id = readId ?? detail.card.readId;
+  if (!id || detail.card.readId !== id || detail.card.concerns.length || detail.passBlocked) return false;
+  if (by.automatic && detail.card.automatic !== "passed") return false;
+  const now = new Date();
+  const passed = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT id FROM "Engineer" WHERE id = ${engineerId} FOR UPDATE`;
+    const row = await tx.engineer.findFirst({ where: { id: engineerId, ...live }, select: { ...CHECK_SELECT, ...REVISION_SELECT } });
+    if (!row || stageOf(row, now) !== "card" || row.pausedAt || row.bannedAt || revisionOf(row) !== detail.revision) return null;
+    const read = await tx.gasSafeCardRead.findUnique({ where: { id } });
+    if (!read?.complete || read.cardUrl !== row.gasSafeCardUrl) return null;
+    const wasLive = Boolean(row.gasSafeVerifiedAt);
+    const again = liveAgain(row);
+    await tx.engineer.update({ where: { id: engineerId }, data: passData(row, read, now) });
+    await tx.event.create({
+      data: {
+        name: "gas_safe_verified",
+        actorType: "SYSTEM",
+        meta: { engineerId, automatic: by.automatic, cardReadId: id, before: "card", adminName: by.name, ...(by.via ? { via: by.via } : {}), ...(wasLive ? { wasLive: true } : {}) },
+      },
+    });
+    return { wasLive, again };
+  });
+  if (passed && !passed.wasLive) await afterResponse(() => tellEngineer(engineerId, passed.again ? "live_again" : "live", null));
+  return Boolean(passed);
+}
+
+const passAutomatically = (engineerId: string, readId: string) => (autoPassOn() ? passCleanCard(engineerId, readId, { automatic: true, name: SYSTEM_CHECK.name }) : Promise.resolve(false));
+
+export const CARD_READ_TRIES = 3;
+const RETRIES_PER_RUN = 5;
+
+export async function retryCardReads(now = new Date()): Promise<number> {
+  if (!cardReadConfigured()) return 0;
+  const rows = await prisma.engineer.findMany({
+    where: { ...live, gasSafeCardUrl: { not: null }, gasSafeRejectedAt: null },
+    select: { id: true, gasSafeCardUrl: true, gasSafeCardReadId: true },
+  });
+  const reads = await currentReads(rows);
+  const unread = rows.filter((r) => !reads.get(r.id)?.read?.complete && !reads.get(r.id)?.automatic);
+  const failed = rows.filter((r) => {
+    const a = reads.get(r.id)?.automatic;
+    return !reads.get(r.id)?.read?.complete && a && (a.outcome === "error" || a.outcome === "not_set_up") && now.getTime() - a.createdAt.getTime() > 20 * 3_600_000;
+  });
+  const due: string[] = [];
+  for (const r of [...unread, ...failed]) {
+    if (due.length >= RETRIES_PER_RUN) break;
+    const tries = await prisma.gasSafeCardRead.count({ where: { engineerId: r.id, cardUrl: r.gasSafeCardUrl!, source: "automatic", outcome: { in: ["error", "not_set_up"] } } });
+    if (tries < CARD_READ_TRIES) due.push(r.id);
+  }
+  await Promise.all(due.map((id) => runCardCheck(id, { force: true }).catch((err) => console.error(`[card-check] retry for ${id} failed:`, err))));
+  return due.length;
+}
+
+export function queueCardCheck(engineerId: string) {
+  return afterResponse(async () => {
+    try {
+      await runCardCheck(engineerId);
+    } catch (err) {
+      console.error(`[card-check] ${engineerId} failed:`, err);
+    }
+  });
+}
+
+export async function readCardAgain(admin: AdminPrincipal, engineerId: string) {
+  const row = await prisma.engineer.findFirst({ where: { id: engineerId, ...live }, select: { gasSafeCardUrl: true } });
+  if (!row) throw notFound("There's no engineer with that ID.");
+  if (!row.gasSafeCardUrl) throw conflict("There's no card photo to read yet.");
+  if (!cardReadConfigured()) throw conflict("The automatic card check isn't set up on this server, so the card can't be read again. Enter the details from the photo instead.");
+  const read = await runCardCheck(engineerId, { force: true });
+  await adminEvent(admin, "gas_safe_card_read_again", { engineerId, cardReadId: read?.id ?? null, outcome: read?.outcome ?? null });
+  return { id: engineerId, outcome: read?.outcome ?? null, complete: read?.complete ?? false };
+}
+
+export async function saveCardDetails(
+  admin: AdminPrincipal,
+  engineerId: string,
+  input: { licenceNo: string; registrationNo: string; name: string; expiresOn: string; categories: string[]; revision?: string },
+) {
+  const row = await prisma.engineer.findFirst({ where: { id: engineerId, ...live }, select: { gasSafeCardBackUrl: true, ...REVISION_SELECT } });
+  if (!row) throw notFound("There's no engineer with that ID.");
+  if (!row.gasSafeCardUrl) throw conflict("There's no card photo to read details from yet.");
+  if (input.revision && revisionOf(row) !== input.revision) throw conflict("This case changed while you had it open. Reload to see the latest before saving.");
+  const latest = (await currentReads([{ id: engineerId, gasSafeCardUrl: row.gasSafeCardUrl, gasSafeCardReadId: null }])).get(engineerId)?.read ?? null;
+  const reading: CardReading = {
+    outcome: "read",
+    isGasSafeCard: true,
+    suspect: false,
+    licenceNo: input.licenceNo,
+    registrationNo: input.registrationNo,
+    name: input.name.trim(),
+    company: latest?.company ?? null,
+    expiresOn: input.expiresOn,
+    categories: row.gasSafeCardBackUrl ? input.categories.map((c) => c.trim()).filter(Boolean) : [],
+    notes: [],
+    model: null,
+  };
+  const saved = await saveRead(engineerId, row.gasSafeCardUrl, row.gasSafeCardBackUrl, reading, { source: "checker", id: admin.id, name: admin.name });
+  await adminEvent(admin, "gas_safe_card_details_entered", {
+    engineerId,
+    cardReadId: saved.id,
+    changed: latest
+      ? (["licenceNo", "registrationNo", "name", "expiresOn"] as const).filter((k) => String((k === "expiresOn" ? dateOnly(latest.expiresOn) : latest[k]) ?? "") !== String(input[k] ?? ""))
+      : ["licenceNo", "registrationNo", "name", "expiresOn"],
+  });
+  return { id: engineerId, cardReadId: saved.id };
 }

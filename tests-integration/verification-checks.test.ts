@@ -5,9 +5,7 @@ import { GET as detail } from "@/app/api/admin/v1/verifications/[engineerId]/rou
 import { POST as decide } from "@/app/api/admin/v1/verifications/[engineerId]/decision/route";
 import { POST as chase } from "@/app/api/admin/v1/verifications/[engineerId]/chase/route";
 import { call, CHECKER, resetDb } from "./helpers";
-import { makeEngineer } from "./factories";
-
-// Section 3 of the client's feedback, and Matt's of 4 Nov: what the check page shows and asks for.
+import { makeEngineer, readCard } from "./factories";
 
 const sent = vi.hoisted(() => ({ push: vi.fn(), sms: vi.fn(async () => true), email: vi.fn(async () => {}) }));
 // Whether texts and email are set up on this server (QA-05).
@@ -26,7 +24,6 @@ beforeEach(async () => {
 
 const CARD = "https://x.public.blob.vercel-storage.com/card.png";
 
-/** A case with nothing left to check: a card, and nothing shared with another account. */
 const cleanApplication = (data: Parameters<typeof makeEngineer>[0] = {}) => makeEngineer({ firstName: "Dave", lastName: "Smith", gasSafeCardUrl: CARD, ...data });
 
 const isoDay = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
@@ -84,7 +81,10 @@ describe("3.6: the check page", () => {
   it("sets out what they gave, and shows contact details only to admins who may see them", async () => {
     const e = await cleanApplication({ gasSafeCategories: "Domestic gas, LPG", town: "Leeds" });
     const checker = (await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body;
-    expect(checker.submitted).toEqual({ name: "Dave Smith", business: e.tradingName, categories: "Domestic gas, LPG", postcode: "LS1 4AB", town: "Leeds", cardExpiry: null });
+    expect(checker.submitted).toEqual({ name: "Dave Smith", business: e.tradingName, postcode: "LS1 4AB", town: "Leeds", cardExpiry: null });
+    expect(JSON.stringify(checker)).not.toContain("Domestic gas, LPG");
+    await readCard(e.id, { backUrl: CARD, categories: ["Boilers", "Cookers"] });
+    expect((await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body.card.details.categories).toEqual(["Boilers", "Cookers"]);
     expect(checker.contact).toBeNull();
     const admin = (await call(detail, { params: { engineerId: e.id } })).body;
     expect(admin.contact.email).toMatch(/•••/);
@@ -133,6 +133,7 @@ describe("3.6: the check page", () => {
 describe("3.7: passing the card check over open warnings", () => {
   it("needs a note, kept with the decision and the warnings it was made over", async () => {
     const e = await cleanApplication({ gasSafeCardExpiresOn: new Date(`${isoDay(500)}T00:00:00Z`) });
+    await readCard(e.id, { expiresOn: new Date(`${isoDay(500)}T00:00:00Z`) });
     const without = await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve" } });
     expect(without.status).toBe(400);
     expect(without.body.error.fields.reason).toBeDefined();
@@ -146,6 +147,7 @@ describe("3.7: passing the card check over open warnings", () => {
 
   it("needs no note when nothing is open", async () => {
     const e = await cleanApplication();
+    await readCard(e.id);
     const d = (await call(detail, { as: CHECKER, params: { engineerId: e.id } })).body;
     expect(d.warnings).toEqual([]);
     expect((await call(decide, { as: CHECKER, params: { engineerId: e.id }, body: { decision: "approve" } })).status).toBe(200);

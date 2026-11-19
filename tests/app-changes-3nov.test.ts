@@ -69,7 +69,6 @@ describe("setup-texts switch", () => {
     const data = (m.engineerUpdate.mock.calls[0] as unknown as [{ data: Record<string, unknown> }])[0].data;
     expect(Object.keys(data)).toEqual(["setupTextConsentAt"]);
     expect(data.setupTextConsentAt).toBeInstanceOf(Date);
-    // The change of mind goes on the Activity tab (Matt, 4 Nov).
     expect(m.track).toHaveBeenCalledWith("setup_texts_opted_in", { type: "ENGINEER", id: "e1" }, { via: "account" });
   });
 

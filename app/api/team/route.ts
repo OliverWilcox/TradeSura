@@ -10,7 +10,10 @@ import { uniqueSlug } from "@/lib/slug";
 import { GAS_SAFE_NO } from "@/lib/validate";
 import { storeGasSafeCard } from "@/lib/gas-safe-card";
 import { queueCardAlert } from "@/lib/card-alert";
+import { queueCardCheck } from "@/lib/admin/verifications";
 import { staffCheckStatus } from "@/lib/team";
+
+export const maxDuration = 300;
 
 // Build Review 2, section 8 — the owner's Team page. Owners only
 // (getEngineerId is null for staff).
@@ -51,6 +54,8 @@ const Body = z.object({
   gasSafeNo: z.string().transform((s) => s.replace(/\s/g, "")).pipe(z.string().regex(GAS_SAFE_NO)),
   cardBase64: z.string().min(1),
   cardMimeType: z.string().min(1),
+  cardBackBase64: z.string().min(1).optional(),
+  cardBackMimeType: z.string().min(1).optional(),
 });
 
 export async function POST(req: Request) {
@@ -92,6 +97,8 @@ export async function POST(req: Request) {
 
   const card = await storeGasSafeCard(b.cardBase64, b.cardMimeType);
   if (!card.ok) return NextResponse.json({ error: card.error, field: "cardBase64" }, { status: 400 });
+  const back = b.cardBackBase64 && b.cardBackMimeType ? await storeGasSafeCard(b.cardBackBase64, b.cardBackMimeType) : null;
+  if (back && !back.ok) return NextResponse.json({ error: back.error, field: "cardBackBase64" }, { status: 400 });
 
   const staff = await prisma.engineer.create({
     data: {
@@ -107,12 +114,13 @@ export async function POST(req: Request) {
       // offers until it's approved.
       gasSafeNo: b.gasSafeNo,
       gasSafeCardUrl: card.url,
+      gasSafeCardBackUrl: back?.ok ? back.url : null,
       gasSafeReviewRequestedAt: new Date(),
     },
   });
   await track("staff_added", { type: "ENGINEER", id: ownerId }, { staffId: staff.id });
-  // Staff cards go through the same queue, with the same alert (QA-22).
   await queueCardAlert(staff.id, "team");
+  await queueCardCheck(staff.id);
 
   const brand = brandName(owner);
   await sendEmail({

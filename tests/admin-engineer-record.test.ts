@@ -3,9 +3,6 @@ import { CALL_LADDER, ladderStep } from "@/lib/admin/metrics";
 import { nextRegisterCheck } from "@/lib/admin/verifications";
 import { cardExpiry } from "@/lib/gas-safe-card";
 
-// Engineer record 3 and 4: the follow-up ladder, the next register check, and
-// the card expiry the app sends.
-
 describe("ladderStep", () => {
   it("follows Matt's ladder of 4 Nov: day 3 push, day 5 WhatsApp, day 7 email, day 10 call list", () => {
     expect(ladderStep(2)).toBeNull();

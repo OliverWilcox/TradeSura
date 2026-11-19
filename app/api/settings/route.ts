@@ -26,11 +26,8 @@ const Body = z.object({
   setupTextConsent: z.boolean().optional(),
 });
 
-// A change of mind about setup texts goes on the engineer record's Activity
-// tab, beside the WhatsApp and text opt-ins (Matt, 4 Nov: "consent changes").
 async function trackSetupTexts(engineerId: string, was: boolean, now: boolean | undefined) {
   if (now === undefined || now === was) return;
-  // A failed event never fails the save.
   try {
     await track(now ? "setup_texts_opted_in" : "setup_texts_opted_out", { type: "ENGINEER", id: engineerId }, { via: "account" });
   } catch (err) {

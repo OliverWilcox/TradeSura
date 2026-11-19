@@ -1,10 +1,6 @@
-import { getPayoutSummary, getStripe, stripeConfigured, stripeSetupState } from "@/lib/stripe";
+import { prisma } from "@/lib/db";
+import { getPayoutSummary, getStripe, stripeConfigured, stripeDeadline, stripeSetupState } from "@/lib/stripe";
 import { withTimeout } from "@/lib/admin/verifications";
-
-// An engineer's Stripe set-up as the admin shows it (Matt, 4 Nov): stage 1 is
-// Stripe's form (the details they give to start taking payments), stage 2 is
-// whatever Stripe asks for after that, by Stripe's own deadline. From the
-// app's own set-up states (lib/stripe.ts), so the admin and the app agree.
 
 export type StripeStages = { stage1: "not_started" | "started" | "done"; stage2: "waiting" | "due" | "done" };
 
@@ -20,15 +16,9 @@ export function stripeStages(e: {
   return { stage1, stage2: stage1 !== "done" ? "waiting" : state === "ready" ? "done" : "due" };
 }
 
-/** Longest the record waits on Stripe before showing what it has without it. */
 const STRIPE_TIMEOUT_MS = 5_000;
 
-/**
- * What only Stripe knows, asked live for one engineer's record: the deadline
- * for what's due, and their balance and next payout. Null when Stripe isn't
- * set up here or didn't answer in time.
- */
-export async function stripeLive(accountId: string | null) {
+export async function stripeLive(accountId: string | null, engineerId?: string) {
   if (!accountId || !stripeConfigured()) return null;
   try {
     const [account, payouts] = await Promise.all([
@@ -36,6 +26,10 @@ export async function stripeLive(accountId: string | null) {
       withTimeout(getPayoutSummary(accountId), STRIPE_TIMEOUT_MS),
     ]);
     const deadline = account.requirements?.summary?.minimum_deadline;
+    if (engineerId) {
+      const at = deadline?.status === "currently_due" || deadline?.status === "past_due" ? stripeDeadline(deadline.time) : null;
+      prisma.engineer.update({ where: { id: engineerId }, data: { stripeRequirementsDeadline: at } }).catch((err) => console.error("[admin-api] Stripe deadline not kept:", err));
+    }
     return {
       deadline: deadline ? { status: deadline.status, at: deadline.time ?? null } : null,
       pendingPence: payouts.pendingPence,

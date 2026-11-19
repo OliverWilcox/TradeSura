@@ -11,8 +11,4 @@ const Query = z.strictObject({
   ...pageParams,
 });
 
-// The Gas Safe check, live first (Matt, 4 Nov): card check waiting, register
-// check due, waiting for a card, re-check due (each longest waiting first),
-// flagged duplicates across them, pending (the ones that need a person), or
-// decided (latest decision first).
 export const GET = adminRoute("verification:read", async ({ req }) => listVerifications(parseQuery(req, Query)));

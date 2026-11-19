@@ -2,9 +2,6 @@ import { describe, expect, it } from "vitest";
 import { noticeEmail } from "@/lib/admin/notice-email";
 import { COMPANY_LINE } from "@/lib/email-layout";
 
-// The admin's notices to an engineer (decisions, chases, pack posted, plan
-// taken down) go out on the same chrome as TradeSura's other emails.
-
 describe("admin notice email", () => {
   it("greets them by first name, with the heading, the paragraphs and the company footer", () => {
     const { subject, html } = noticeEmail({ firstName: "Matthew", title: "Your member pack is on its way", paragraphs: ["It's in the post today.", "Inside: your stickers."] });

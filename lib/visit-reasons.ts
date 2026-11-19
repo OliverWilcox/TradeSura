@@ -200,25 +200,28 @@ export function pickVariant<T extends { variant: string; weight: number }>(rows:
   return live[live.length - 1];
 }
 
-/** The installer's one-tap list: admin rows (active, by sortOrder) over the defaults. */
 export async function reasonList(): Promise<{ reason: string; label: string }[]> {
-  const rows = await prisma.visitReasonContent
-    .findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { variant: "asc" }] })
-    .catch(() => []);
-  const fromAdmin = new Map<string, string>();
-  for (const r of rows) if (!fromAdmin.has(r.reason)) fromAdmin.set(r.reason, r.label);
-  const list: { reason: string; label: string }[] = VISIT_REASONS.map((reason) => ({
-    reason,
-    label: fromAdmin.get(reason) ?? DEFAULTS[reason].label,
-  }));
+  const rows = await prisma.visitReasonContent.findMany({ orderBy: [{ sortOrder: "asc" }, { variant: "asc" }] }).catch(() => []);
+  const fromAdmin = new Map<string, { label: string; sortOrder: number; active: boolean }>();
+  for (const r of rows) {
+    const seen = fromAdmin.get(r.reason);
+    if (!seen) fromAdmin.set(r.reason, { label: r.label, sortOrder: r.sortOrder, active: r.active });
+    else if (r.active) seen.active = true;
+  }
+  const list: { reason: string; label: string; sortOrder: number }[] = [];
+  for (const [i, reason] of VISIT_REASONS.entries()) {
+    const admin = fromAdmin.get(reason);
+    if (admin && !admin.active) continue;
+    list.push({ reason, label: admin?.label || DEFAULTS[reason].label, sortOrder: admin?.sortOrder ?? i });
+  }
   // A reason the admin added that we don't ship a default for.
-  for (const [reason, label] of fromAdmin) if (!isVisitReason(reason)) list.push({ reason, label });
-  return list;
+  for (const [reason, admin] of fromAdmin) if (!isVisitReason(reason) && admin.active) list.push({ reason, label: admin.label, sortOrder: admin.sortOrder });
+  if (list.length === 0) return VISIT_REASONS.map((reason) => ({ reason, label: DEFAULTS[reason].label }));
+  return list.sort((a, b) => a.sortOrder - b.sortOrder).map(({ reason, label }) => ({ reason, label }));
 }
 
-/** The content for one reason, picking the split-test variant for this seed. */
 export async function reasonContent(reason: string, seed: string): Promise<ReasonContent> {
-  const rows = await prisma.visitReasonContent.findMany({ where: { reason, active: true } }).catch(() => []);
+  const rows = await prisma.visitReasonContent.findMany({ where: { reason } }).catch(() => []);
   const row = pickVariant(rows, seed);
   if (row) return fromRow(row);
   return defaultContent(isVisitReason(reason) ? reason : "other");

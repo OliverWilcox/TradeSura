@@ -31,8 +31,7 @@ describe("the engineer list", () => {
     const res = await call(list);
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
-    // No offer sent, so not active, though the account is in good standing.
-    expect(res.body.items[0]).toMatchObject({ id: e.id, plansLive: 1, customers: 2, status: "inactive", isTest: false, verification: "pending", checks: { card: "no_card", register: null } });
+    expect(res.body.items[0]).toMatchObject({ id: e.id, plansLive: 1, customers: 2, status: "not_live", notLiveBecause: "no_card", active: false, isTest: false, verification: "pending", checks: { card: "no_card", register: null } });
     expect(res.body.items[0].lastOfferAt).not.toBeNull();
   });
 
@@ -47,7 +46,6 @@ describe("the engineer list", () => {
     expect(ids(await call(list, { query: { verification: "register_due" } }))).toEqual([verified.id]);
     const staffRows = (await call(list, { query: { staff: "staff" } })).body.items;
     expect(staffRows.map((r: { id: string }) => r.id)).toEqual([staff.id]);
-    // Staff sit under their business (Matt, 4 Nov).
     expect(staffRows[0]).toMatchObject({ business: "Owner Heating", isStaff: true });
   });
 
@@ -147,7 +145,6 @@ describe("one engineer", () => {
       owedPence: 75,
       people: [{ id: invitee.id, business: "Invited Heating", plansSold: 0, ratePercent: 25, monthsLeftAtFirstRate: expect.any(Number), earnedPence: 150, owedPence: 75 }],
     });
-    // Matt, 4 Nov: the link the letters print, tradesura.com/r/{code}.
     expect(res.body.referrals.link).toBe(`http://localhost:3000/r/${res.body.referrals.code}`);
     expect(res.body.payouts).toEqual([{ id: "po_1", paidOn: "2026-10-24", amountPence: 4321, status: "paid" }]);
     expect(res.body.lifetimePayoutsPence).toBe(4321);
@@ -163,23 +160,20 @@ describe("one engineer", () => {
     expect(res.body.activation.paymentsReady).toBe(true);
   });
 
-  // 2.2: one definition of active, in the list, on the record and on the dashboard.
-  it("is active only with a delivered offer in the last 7 days", async () => {
-    const recent = await makeEngineer();
-    const whatsappOnly = await makeEngineer();
-    const old = await makeEngineer();
-    const offer = async (engineerId: string, channel: string, daysAgo: number) => {
-      const c = await makeCustomer(engineerId);
-      const plan = await makePlan(engineerId, c.id, { status: "PENDING", activatedAt: null });
-      await prisma.event.create({ data: { name: "offer_sent", actorType: "ENGINEER", actorId: engineerId, ts: new Date(Date.now() - daysAgo * 86_400_000), meta: { planId: plan.id, channel } } });
-    };
-    await offer(recent.id, "sms", 2);
-    await offer(whatsappOnly.id, "whatsapp", 1); // never opened: not confirmed
-    await offer(old.id, "sms", 9);
-    const status = Object.fromEntries((await call(list)).body.items.map((i: { id: string; status: string }) => [i.id, i.status]));
-    expect(status).toEqual({ [recent.id]: "active", [whatsappOnly.id]: "inactive", [old.id]: "inactive" });
-    expect(ids(await call(list, { query: { status: "active" } }))).toEqual([recent.id]);
-    expect((await call(detail, { params: { engineerId: old.id } })).body.status).toBe("inactive");
+  it("is live once the card check has passed with a read card and the account is in good standing, and active only with a paying customer", async () => {
+    const payer = await makeEngineer({ gasSafeVerifiedAt: new Date() });
+    const liveNoCustomers = await makeEngineer({ gasSafeVerifiedAt: new Date() });
+    const markedWithoutCard = await makeEngineer({ gasSafeVerifiedAt: new Date() }, { cardRead: false });
+    const waiting = await makeEngineer({ gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/card.png" });
+    await makePlan(payer.id, (await makeCustomer(payer.id)).id, { activatedAt: new Date(Date.now() - 86_400_000), mandateStatus: "active" });
+    const rows = new Map((await call(list)).body.items.map((i: { id: string }) => [i.id, i]));
+    expect(rows.get(payer.id)).toMatchObject({ status: "live", active: true, payingCustomers: 1 });
+    expect(rows.get(liveNoCustomers.id)).toMatchObject({ status: "live", active: false, payingCustomers: 0 });
+    expect(rows.get(markedWithoutCard.id)).toMatchObject({ status: "not_live", notLiveBecause: "no_card", checks: { card: "no_card" } });
+    expect(rows.get(waiting.id)).toMatchObject({ status: "not_live", notLiveBecause: "card_check", checks: { card: "waiting" } });
+    expect(new Set(ids(await call(list, { query: { status: "live" } })))).toEqual(new Set([payer.id, liveNoCustomers.id]));
+    expect(ids(await call(list, { query: { active: "yes" } }))).toEqual([payer.id]);
+    expect((await call(detail, { params: { engineerId: liveNoCustomers.id } })).body).toMatchObject({ status: "live", active: false, badge: "hidden" });
   });
 
   it("shows each address on its own, and why customers cancelled", async () => {
@@ -222,11 +216,11 @@ describe("an engineer's standing", () => {
     const e = await makeEngineer({ gasSafeVerifiedAt: new Date() });
     const paused = await call(pause, { params: { engineerId: e.id }, body: { reason: "Customer complaints under review" } });
     expect(paused.status).toBe(200);
-    expect(paused.body).toMatchObject({ status: "paused", standing: "PAUSED", pause: { reason: "Customer complaints under review" } });
+    expect(paused.body).toMatchObject({ status: "not_live", notLiveBecause: "paused", standing: "PAUSED", pause: { reason: "Customer complaints under review" } });
     expect((await call(pause, { params: { engineerId: e.id }, body: { reason: "Again" } })).status).toBe(409);
 
     const resumed = await call(resume, { params: { engineerId: e.id }, body: {} });
-    expect(resumed.body).toMatchObject({ status: "inactive", standing: "ACTIVE", pause: null });
+    expect(resumed.body).toMatchObject({ status: "live", standing: "ACTIVE", pause: null });
     const names = (await prisma.event.findMany({ where: { actorType: "ADMIN" }, orderBy: { ts: "asc" } })).map((ev) => ev.name);
     expect(names).toEqual(["engineer_paused", "engineer_resumed"]);
   });
@@ -242,9 +236,9 @@ describe("an engineer's standing", () => {
     const statusOnly = withPermissions("engineers:read", "engineers:status");
     expect((await call(ban, { as: statusOnly, params: { engineerId: e.id }, body: { reason: "Fraudulent sign-ups" } })).status).toBe(403);
     const banned = await call(ban, { params: { engineerId: e.id }, body: { reason: "Fraudulent sign-ups" } });
-    expect(banned.body).toMatchObject({ status: "banned", standing: "BANNED", ban: { reason: "Fraudulent sign-ups" } });
+    expect(banned.body).toMatchObject({ status: "not_live", notLiveBecause: "banned", standing: "BANNED", ban: { reason: "Fraudulent sign-ups" } });
     const unbanned = await call(unban, { params: { engineerId: e.id }, body: { reason: "Appeal upheld" } });
-    expect(unbanned.body.status).toBe("inactive"); // back in good standing; no offers sent
+    expect(unbanned.body).toMatchObject({ status: "not_live", notLiveBecause: "no_card" });
   });
 
   it("can have the website widget switched off and on", async () => {

@@ -13,6 +13,11 @@ import { runFoundingJobs } from "@/lib/founding";
 import { chaseFinishSetup } from "@/lib/finish-setup";
 import { sendMissedVerifiedEmails } from "@/lib/verified-email";
 import { openDueTownLeads } from "@/lib/town-leads";
+import { runFollowUpLadder } from "@/lib/follow-ups";
+import { sendTrustpilotInvites } from "@/lib/trustpilot";
+import { retryCardReads } from "@/lib/admin/verifications";
+
+export const maxDuration = 300;
 
 // Queue due service reminders (Part 11's 30/14/3 engine), apply due price
 // reviews, then flush the SMS
@@ -42,8 +47,11 @@ async function run() {
   const townLeadsOpened = await openDueTownLeads();
   // Matt, 6 Nov — a weekly push to owners behind their first month goal.
   const goalNudges = await nudgeBehindGoals();
+  const followUps = await runFollowUpLadder();
+  const trustpilotInvites = await sendTrustpilotInvites();
+  const cardReadsRetried = await retryCardReads();
   const sent = await flushSmsQueue();
-  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves, setupNudges, renewalNotices, founding, finishSetupChasers, verifiedEmails, townLeadsOpened, goalNudges });
+  return NextResponse.json({ sent, remindersQueued, priceReviewsApplied, pausesEnded, unpaidPlansEnded, moves, setupNudges, renewalNotices, founding, finishSetupChasers, verifiedEmails, townLeadsOpened, goalNudges, followUps, trustpilotInvites, cardReadsRetried });
 }
 
 // Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.

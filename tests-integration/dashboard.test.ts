@@ -64,33 +64,36 @@ describe("dashboard headline numbers", () => {
       conversion: { sent: 2, converted: 1, rate: 0.5 },
       plansLive: 1, // c3's ended mid-July
       customers: 1,
-      active: 1, // the offer on 28 July is within 7 days of the end
-      verified: { ofSignups: 0, total: 2 },
+      active: 1,
+      live: { atEnd: 2, wentLive: 0 },
     });
   });
 
-  it("count active engineers over the same 7 × 24 hours as the Engineers list when the range runs to today (QA-03)", async () => {
+  it("count as active only live engineers with a paying customer, the same as the Engineers list's Active (QA-03)", async () => {
     const now = Date.now();
     const day = 86_400_000;
-    const offer = async (data: Parameters<typeof makeEngineer>[0], ago: number) => {
+    const withCustomer = async (data: Parameters<typeof makeEngineer>[0], plan: Parameters<typeof makePlan>[2]) => {
       const e = await makeEngineer({ gasSafeVerifiedAt: new Date(now - 60 * day), ...data });
-      const p = await makePlan(e.id, (await makeCustomer(e.id)).id, { createdAt: new Date(now - ago) });
-      await prisma.event.create({ data: { name: "offer_sent", actorType: "ENGINEER", actorId: e.id, ts: new Date(now - ago), meta: { planId: p.id, channel: "sms" } } });
+      await makePlan(e.id, (await makeCustomer(e.id)).id, plan);
       return e;
     };
-    // Inside the last 7 × 24 hours, though before the range's end less 7 days (the end is still to come).
-    const recent = await offer({}, 6.5 * day);
-    await offer({}, 7.5 * day); // too long ago
-    await offer({ pausedAt: new Date(now - 2 * day) }, day); // paused: not in good standing
-    await offer({ bannedAt: new Date(now - 2 * day) }, day);
+    const paying = { activatedAt: new Date(now - 10 * day), mandateStatus: "active" };
+    const payer = await withCustomer({}, paying);
+    await withCustomer({}, { status: "PENDING", activatedAt: null });
+    await withCustomer({}, { ...paying, status: "CANCELLED", cancelledAt: new Date(now - 2 * day) });
+    await withCustomer({ pausedAt: new Date(now - 2 * day) }, paying);
+    await withCustomer({ bannedAt: new Date(now - 2 * day) }, paying);
+    const noReadCard = await makeEngineer({ gasSafeVerifiedAt: new Date(now - 60 * day) }, { cardRead: false });
+    await makePlan(noReadCard.id, (await makeCustomer(noReadCard.id)).id, paying);
 
-    // "Last 30 days" ends at midnight tonight, UK time: later than now.
     const range = { from: new Date(now - 30 * day).toISOString(), to: new Date(now + 12 * 3_600_000).toISOString() };
-    const card = (await call(statsRoute, { query: range })).body.active;
-    const list = (await call(engineersRoute, { query: { status: "active" } })).body;
-    expect(card).toBe(1);
-    expect(list.total).toBe(card);
-    expect(list.items[0].id).toBe(recent.id);
+    const stats = (await call(statsRoute, { query: range })).body;
+    const list = (await call(engineersRoute, { query: { active: "yes" } })).body;
+    expect(stats.active).toBe(1);
+    expect(list.total).toBe(1);
+    expect(list.items[0]).toMatchObject({ id: payer.id, status: "live", active: true, payingCustomers: 1 });
+    expect(stats.live.atEnd).toBe(3);
+    expect((await call(engineersRoute, { query: { status: "live" } })).body.total).toBe(3);
   });
 
   it("count a customer only once their mandate is set up, as the Prisma query did", async () => {
@@ -133,7 +136,7 @@ describe("the activation funnel", () => {
     const steps = (await call(funnelRoute, { query: JULY })).body;
     expect(steps.map((s: { label: string; count: number }) => [s.label, s.count])).toEqual([
       ["Signed up", 2],
-      ["Gone live", 1],
+      ["Card check passed", 1],
       ["First plan live", 1],
       ["Payments set up", 1],
       ["First payment", 1],
@@ -187,7 +190,6 @@ describe("dashboard money", () => {
     });
     const res = await call(moneyRoute, { query: JULY });
     expect(res.status).toBe(200);
-    // Matt, 4 Nov: collected, the engineers' 80% and TradeSura's 20%.
     expect(res.body.period).toEqual({ count: 1, grossPence: 2000, refundedPence: 0, claimedPence: 0, netPence: 2000, feePence: 400, engineersPence: 1600 });
     expect(res.body.referrals).toEqual({ earnedPence: 0, owedPence: 0 });
     const months = Object.fromEntries(res.body.months.map((m: { month: string; grossPence: number; feePence: number }) => [m.month, [m.grossPence, m.feePence]]));
@@ -226,8 +228,9 @@ describe("the core number", () => {
 
 describe("what's waiting", () => {
   it("counts the verification queue, packs to post and open cancel requests", async () => {
-    await makeEngineer(); // waiting for verification
-    await makeEngineer({ gasSafeVerifiedAt: new Date(), packRequestedAt: new Date(), packAddress: "1 High St" });
+    await makeEngineer();
+    await makeEngineer({ gasSafeVerifiedAt: new Date(), gasSafeRegisterCheckedAt: new Date(), packRequestedAt: new Date(), packAddress: "1 High St" });
+    await makeEngineer({ gasSafeVerifiedAt: new Date(), packRequestedAt: new Date(), packAddress: "2 High St" });
     expect((await call(waitingRoute)).body).toEqual({ verifications: 1, memberPacks: 1, cancelRequests: 0 });
   });
 });

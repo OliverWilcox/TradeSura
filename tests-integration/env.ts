@@ -17,4 +17,5 @@ export const TEST_ENV = {
   ADMIN_API_SECRET: "integration-admin-api-secret-integration-admin-api-secret",
   TZ: "Europe/London",
   APP_URL: "http://localhost:3000",
+  CARD_BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_integration_cards",
 } as const;

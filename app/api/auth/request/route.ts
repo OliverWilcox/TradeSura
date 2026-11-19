@@ -13,6 +13,7 @@ import { notifyEngineer } from "@/lib/sms";
 import { cardExpiry } from "@/lib/gas-safe-card";
 import { saveAddresses } from "@/lib/addresses";
 import { queueCardAlert } from "@/lib/card-alert";
+import { queueCardCheck } from "@/lib/admin/verifications";
 import { sendPushNotification } from "@/lib/push";
 import {
   COMPANY_NUMBER,
@@ -24,6 +25,8 @@ import {
   normalisePostcode,
 } from "@/lib/validate";
 
+export const maxDuration = 300;
+
 const AddressInput = z.object({
   line1: z.string().trim().min(1).max(160),
   town: z.string().trim().max(80).default(""),
@@ -32,7 +35,6 @@ const AddressInput = z.object({
 
 // Everything the sign-up wizard (steps 1-3) collects.
 const SignupData = z.object({
-  // Trimmed, so a name of spaces can't make a "Name not given" account (Matt, 4 Nov).
   firstName: z.string().trim().min(2).max(60),
   lastName: z.string().trim().min(2).max(60),
   emailToken: z.string().min(1),
@@ -51,9 +53,6 @@ const SignupData = z.object({
     .max(20)
     .transform((v) => v.replace(/\s/g, ""))
     .pipe(z.string().regex(GAS_SAFE_NO)),
-  // The business's Gas Safe registration number, beside the engineer's own
-  // licence number above (Matt, 4 Nov). Builds that send it send a 7-digit
-  // licence; older builds send one number and leave this out.
   gasSafeRegistrationNo: z
     .string()
     .max(20)
@@ -346,6 +345,7 @@ export async function POST(req: Request) {
     // (not just left to the DB's unique constraint) so the failure is a
     // clear, actionable message instead of a raw 500.
     let gasSafeCardUrl: string | null = null;
+    let gasSafeCardBackUrl: string | null = null;
     if (rest.gasSafeCardToken) {
       const card = await verifyToken(rest.gasSafeCardToken);
       if (!card?.cardUrl || card.phone !== phonePayload.phone) {
@@ -358,6 +358,7 @@ export async function POST(req: Request) {
         );
       }
       gasSafeCardUrl = card.cardUrl;
+      gasSafeCardBackUrl = typeof card.backUrl === "string" && card.backUrl ? card.backUrl : null;
     }
 
     // Only an Apple id our own /api/auth/apple signed after checking Apple's
@@ -457,6 +458,7 @@ export async function POST(req: Request) {
           gasSafeNo: rest.gasSafeNo,
           gasSafeRegistrationNo: rest.gasSafeRegistrationNo ?? null,
           gasSafeCardUrl,
+          gasSafeCardBackUrl,
           gasSafeCardExpiresOn: gasSafeCardUrl && rest.gasSafeCardExpiresOn ? rest.gasSafeCardExpiresOn : null,
           // Into the admin queue — the badge is granted by a person
           // (app/admin/verifications), never by signup.
@@ -522,7 +524,10 @@ export async function POST(req: Request) {
     }
 
     // 3.2: tell the team there's a card to check.
-    if (gasSafeCardUrl) await queueCardAlert(engineer.id, "signup");
+    if (gasSafeCardUrl) {
+      await queueCardAlert(engineer.id, "signup");
+      await queueCardCheck(engineer.id);
+    }
 
     engineerWelcomeEmailHtml(engineer.id)
       .then(({ subject, html }) => sendEmail({ to: email, subject, html }))
@@ -544,8 +549,6 @@ export async function POST(req: Request) {
     }
 
     try {
-    // E10 — link the referrer by their code (SMITH25), or the slug older
-    // links carry (self-referral is ignored).
     if (attribution.referralCode) {
       const referrer = await findReferrer(attribution.referralCode);
       if (referrer && referrer.id !== engineer.id) {

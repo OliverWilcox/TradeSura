@@ -5,7 +5,8 @@ import { isoDay } from "@/lib/admin-api/schemas";
 
 export const engineerFilters = {
   q: z.string().trim().max(100).optional(),
-  status: z.enum(["active", "inactive", "paused", "banned", "left"]).optional(),
+  status: z.enum(["live", "not_live", "paused", "banned", "left"]).optional(),
+  active: z.enum(["yes", "no"]).optional(),
   verification: z.enum(["live", "register_due", "card_waiting", "no_card", "card_failed", "suspended", "not_submitted"]).optional(),
   step: z.enum(["signed_up", "verified", "plan_live", "payments_set_up", "first_payment"]).optional(),
   town: z.string().trim().max(80).optional(),
@@ -27,4 +28,6 @@ export const customerFilters = {
   status: z
     .enum(["offer_sent", "offer_failed", "offer_unconfirmed", "offer_opened", "thinking", "dd_started", "active", "payment_failing", "paused", "cancelled", "no_plan"])
     .optional(),
+  reason: z.string().trim().min(1).max(60).optional(),
+  pays: z.enum(["monthly", "yearly"]).optional(),
 };

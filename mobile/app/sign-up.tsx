@@ -1582,7 +1582,6 @@ export default function SignUp() {
                     </View>
                     <Hint>Tap any to register interest</Hint>
 
-                    {/* Matt, 4 Nov: both numbers, named as the Gas Safe ID card names them. */}
                     <View ref={fieldRef("gasSafeNo")} collapsable={false}>
                       <Text className={`${labelCls} mt-5`}>Licence number</Text>
                       <Input

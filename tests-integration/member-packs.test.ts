@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { GET as list } from "@/app/api/admin/v1/member-packs/route";
 import { POST as posted } from "@/app/api/admin/v1/member-packs/[engineerId]/posted/route";
+import { POST as printed } from "@/app/api/admin/v1/member-packs/printed/route";
 import { call, CHECKER, resetDb, withPermissions } from "./helpers";
 import { makeEngineer } from "./factories";
 
@@ -16,8 +17,11 @@ beforeEach(async () => {
 });
 
 const requested = { packAddress: "1 High Street\nLeeds\nLS1 4AB", packRequestedAt: new Date("2026-10-01") };
-/** Live, with the register check passed: a pack can go (Matt, 4 Nov). */
 const checked = { gasSafeVerifiedAt: new Date("2026-10-02"), gasSafeRegisterCheckedAt: new Date("2026-10-02") };
+const withPlan = async (e: { id: string }) => {
+  await prisma.planTier.create({ data: { engineerId: e.id, name: "Care", priceMonthlyPence: 1500, sortOrder: 1, status: "LIVE" } });
+  return e;
+};
 const ids = (res: { body: { items: { id: string }[] } }) => res.body.items.map((i) => i.id);
 
 describe("member packs", () => {
@@ -35,14 +39,14 @@ describe("member packs", () => {
 
     const held = await call(list, { query: { tab: "held" } });
     expect(Object.fromEntries(held.body.items.map((i: { id: string; heldBecause: string }) => [i.id, i.heldBecause]))).toEqual({
-      [unverified.id]: "not_verified",
+      [unverified.id]: "no_card",
       [registerDue.id]: "register_check_due",
       [paused.id]: "paused",
     });
   });
 
   it("can be marked posted once, and it's recorded against the admin", async () => {
-    const e = await makeEngineer({ ...requested, ...checked });
+    const e = await withPlan(await makeEngineer({ ...requested, ...checked }));
     const first = await call(posted, { params: { engineerId: e.id }, method: "POST" });
     expect(first.status).toBe(200);
     expect((await prisma.engineer.findUniqueOrThrow({ where: { id: e.id } })).packShippedAt).toBeInstanceOf(Date);
@@ -52,6 +56,25 @@ describe("member packs", () => {
     const again = await call(posted, { params: { engineerId: e.id }, method: "POST" });
     expect(again.status).toBe(409);
     expect(await prisma.event.count({ where: { name: "member_pack_shipped" } })).toBe(1);
+  });
+
+  it("can't be posted without a live plan for its cover letter (M-07)", async () => {
+    const e = await makeEngineer({ ...requested, ...checked });
+    const res = await call(posted, { params: { engineerId: e.id }, method: "POST" });
+    expect(res.status).toBe(409);
+    expect(res.body.error.message).toMatch(/no live plan/);
+  });
+
+  it("records the packs put in a print file, so they aren't printed twice (M-07)", async () => {
+    const e = await withPlan(await makeEngineer({ ...requested, ...checked }));
+    const done = await withPlan(await makeEngineer({ ...requested, ...checked, packShippedAt: new Date("2026-10-05") }));
+    const res = await call(printed, { body: { engineerIds: [e.id, done.id], batchRef: "MP-20261118-1015" } });
+    expect(res.status).toBe(200);
+    expect(res.body.printed).toEqual([e.id]);
+    const item = (await call(list, { query: { tab: "to_post" } })).body.items.find((i: { id: string }) => i.id === e.id);
+    expect(item.printedAt).toBe(res.body.printedAt);
+    expect(await prisma.event.findFirstOrThrow({ where: { name: "member_pack_printed" } })).toMatchObject({ actorType: "ADMIN", meta: expect.objectContaining({ engineerId: e.id, batchRef: "MP-20261118-1015" }) });
+    expect((await call(printed, { body: { engineerIds: [e.id], batchRef: "not a batch" } })).status).toBe(400);
   });
 
   it("can't be posted before the register check has passed", async () => {
@@ -94,14 +117,12 @@ describe("the print file's fields (6.2, 6.3)", () => {
       town: "Huddersfield",
       slug: "302-md",
       version: "Standard",
-      // 80% of £12.50 is £10.00 a month: £120 a year, × 20 and × 50 customers.
       firstPlan: { name: "Boiler Care", pricePence: 1250, yearly20Pence: 240_000, yearly50Pence: 600_000 },
       livePage: "http://localhost:3000/302-md",
       referralCode: expect.stringMatching(/^WOOD\d{2}$/),
       addressCheck: "ok",
     });
     expect(row.qrLink).toBe(`http://localhost:3000/r/${row.referralCode}`);
-    // Made once and kept.
     expect((await call(list)).body.items[0].referralCode).toBe(row.referralCode);
   });
 
@@ -113,7 +134,7 @@ describe("the print file's fields (6.2, 6.3)", () => {
 
 describe("posting a pack (6.4)", () => {
   it("tells the engineer it's on its way", async () => {
-    const e = await makeEngineer({ ...requested, ...checked, email: "matt@example.test", firstName: "Matt" });
+    const e = await withPlan(await makeEngineer({ ...requested, ...checked, email: "matt@example.test", firstName: "Matt" }));
     expect((await call(posted, { params: { engineerId: e.id }, body: {} })).status).toBe(200);
     expect(sent.push).toHaveBeenCalledWith(e.id, "Your member pack is on its way", expect.any(String), expect.anything());
     expect(sent.email).toHaveBeenCalledWith(expect.objectContaining({ to: "matt@example.test", subject: "Your member pack is on its way" }));

@@ -77,7 +77,7 @@ export async function buildStatement(engineerId: string, month: string, now = ne
   const lines: StatementLine[] = [];
   const refunds: RefundLine[] = [];
   for (const e of events) {
-    const meta = (e.meta ?? {}) as { planId?: string; amountPence?: number };
+    const meta = (e.meta ?? {}) as { planId?: string; amountPence?: number; feeKept?: boolean };
     const plan = meta.planId ? byId.get(meta.planId) : undefined;
     if (!plan) continue; // another engineer's refund event
     const customer = `${plan.customer.firstName} ${plan.customer.lastName}`;
@@ -85,15 +85,16 @@ export async function buildStatement(engineerId: string, month: string, now = ne
     if (e.name === "payment_confirmed") {
       lines.push({ date: ukDate(e.ts), customer, planRef: plan.ref, collectedPence: amount, feePence: computeApplicationFeePence(amount) });
     } else {
-      // Stripe refunds our fee in proportion (refund_application_fee), so
-      // the share comes from the yearly collection this refund is part of.
+      // Refunds made before terms 8.4.3 gave back our fee in proportion
+      // (refund_application_fee), so the share comes from the yearly
+      // collection this refund is part of; later ones keep it (feeKept).
       const charge = await prisma.event.findFirst({
         where: { name: "payment_confirmed", ts: { lt: e.ts }, meta: { path: ["planId"], equals: plan.id } },
         orderBy: { ts: "desc" },
         select: { meta: true },
       });
       const chargePence = (charge?.meta as { amountPence?: number } | null)?.amountPence ?? 0;
-      const feeRefundedPence = chargePence > 0 ? Math.round((computeApplicationFeePence(chargePence) * amount) / chargePence) : 0;
+      const feeRefundedPence = meta.feeKept ? 0 : chargePence > 0 ? Math.round((computeApplicationFeePence(chargePence) * amount) / chargePence) : 0;
       refunds.push({ date: ukDate(e.ts), customer, planRef: plan.ref, refundedPence: amount, feeRefundedPence });
     }
   }
