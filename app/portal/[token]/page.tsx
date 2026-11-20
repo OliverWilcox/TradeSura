@@ -133,6 +133,12 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
         </Card>
       )}
 
+      <Card>
+        <Link href={`/portal/${token}/safety`} className="block">
+          <RowLine left="Report a safety concern to TradeSura" right={<Pill tone="warn">SAFETY</Pill>} />
+        </Link>
+      </Card>
+
       {/* Section 4 — the home's service history, kept even after a plan ends. */}
       {plan.passport && (
         <Card>

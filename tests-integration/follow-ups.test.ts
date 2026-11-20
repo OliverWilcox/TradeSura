@@ -43,7 +43,7 @@ describe("the call list", () => {
 
     const res = await call(lists, { query: { tab: "calls" } });
     expect(res.status).toBe(200);
-    expect(res.body.counts).toEqual({ calls: 2, stripe: 0 });
+    expect(res.body.counts).toEqual({ calls: 2, stripe: 0, letters: 0 });
     expect(res.body.total).toBe(2);
     expect(res.body.items.map((r: { business: string; days: number; countingFrom: string }) => [r.business, r.days, r.countingFrom])).toEqual([
       ["Birch Heating", 60, "live"],

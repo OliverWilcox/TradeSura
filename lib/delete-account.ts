@@ -30,6 +30,8 @@ const scrubbedEngineer = (id: string) => ({
   gasSafeCategories: null,
   gasSafeCardUrl: null,
   gasSafeCardBackUrl: null,
+  gasSafeCardSource: null,
+  gasSafeCardBackSource: null,
   gasSafeCardReadId: null,
   gasSafeCardExpiresOn: null,
   setupTextConsentAt: null,

@@ -108,6 +108,8 @@ model Engineer {
   // gasSafeRejectedAt. Card photo lives in a private Blob store.
   gasSafeCardUrl                       String?
   gasSafeCardBackUrl                   String?
+  gasSafeCardSource                    String?
+  gasSafeCardBackSource                String?
   gasSafeCardReadId                    String?
   // The ID card's expiry date, given with the photo (client feedback 3.5,
   // engineer record 4). The next register re-check is due by then.
@@ -554,6 +556,7 @@ model ClaimCode {
   mobile                String? // E.164
   textConsentAt         DateTime? // "TradeSura can text me to help me finish setting up."
   codeTextedAt          DateTime?
+  reminderTextedAt      DateTime?
 
   @@index([letterBatch])
 }
@@ -997,6 +1000,19 @@ model GasSafeCardRead {
   createdAt      DateTime  @default(now())
 
   @@index([engineerId, createdAt])
+}
+
+model TpsScreen {
+  id          String    @id @default(cuid())
+  numbers     String[]
+  registered  String[]
+  createdById String?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  answeredAt  DateTime?
+  answeredBy  String?
+
+  @@index([answeredAt])
 }
 
 model LetterBatch {

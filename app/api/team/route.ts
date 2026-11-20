@@ -8,7 +8,7 @@ import { sendEmail } from "@/lib/email";
 import { normaliseUkPhone } from "@/lib/phone";
 import { uniqueSlug } from "@/lib/slug";
 import { GAS_SAFE_NO } from "@/lib/validate";
-import { storeGasSafeCard } from "@/lib/gas-safe-card";
+import { PhotoSource, storeGasSafeCard } from "@/lib/gas-safe-card";
 import { queueCardAlert } from "@/lib/card-alert";
 import { queueCardCheck } from "@/lib/admin/verifications";
 import { staffCheckStatus } from "@/lib/team";
@@ -56,6 +56,8 @@ const Body = z.object({
   cardMimeType: z.string().min(1),
   cardBackBase64: z.string().min(1).optional(),
   cardBackMimeType: z.string().min(1).optional(),
+  cardSource: PhotoSource.optional(),
+  cardBackSource: PhotoSource.optional(),
 });
 
 export async function POST(req: Request) {
@@ -115,6 +117,8 @@ export async function POST(req: Request) {
       gasSafeNo: b.gasSafeNo,
       gasSafeCardUrl: card.url,
       gasSafeCardBackUrl: back?.ok ? back.url : null,
+      gasSafeCardSource: b.cardSource ?? null,
+      gasSafeCardBackSource: back?.ok ? (b.cardBackSource ?? null) : null,
       gasSafeReviewRequestedAt: new Date(),
     },
   });

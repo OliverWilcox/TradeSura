@@ -10,7 +10,7 @@ import { claimCodeWhere, resolveClaimCode } from "@/lib/claim";
 import { sendEmail } from "@/lib/email";
 import { engineerWelcomeEmailHtml } from "@/lib/engineer-welcome-email";
 import { notifyEngineer } from "@/lib/sms";
-import { cardExpiry } from "@/lib/gas-safe-card";
+import { cardExpiry, photoSourceOf } from "@/lib/gas-safe-card";
 import { saveAddresses } from "@/lib/addresses";
 import { queueCardAlert } from "@/lib/card-alert";
 import { queueCardCheck } from "@/lib/admin/verifications";
@@ -95,7 +95,7 @@ const SignupData = z.object({
   // hidden when arriving from a claim/referral link (Blocks 2 & 4).
   attribution: z
     .object({
-      heardVia: z.enum(["letter", "email", "engineer", "online", "other"]).optional(),
+      heardVia: z.enum(["letter", "email", "engineer", "online", "job", "other"]).optional(),
       referralCode: z.string().max(40).optional(),
       letterBatch: z.string().max(40).optional(),
       variantCell: z.string().max(8).optional(),
@@ -347,6 +347,8 @@ export async function POST(req: Request) {
     // clear, actionable message instead of a raw 500.
     let gasSafeCardUrl: string | null = null;
     let gasSafeCardBackUrl: string | null = null;
+    let gasSafeCardSource: string | null = null;
+    let gasSafeCardBackSource: string | null = null;
     if (rest.gasSafeCardToken) {
       const card = await verifyToken(rest.gasSafeCardToken);
       if (!card?.cardUrl || card.phone !== phonePayload.phone) {
@@ -360,6 +362,8 @@ export async function POST(req: Request) {
       }
       gasSafeCardUrl = card.cardUrl;
       gasSafeCardBackUrl = typeof card.backUrl === "string" && card.backUrl ? card.backUrl : null;
+      gasSafeCardSource = photoSourceOf(card.source);
+      gasSafeCardBackSource = gasSafeCardBackUrl ? photoSourceOf(card.backSource) : null;
     }
 
     // Only an Apple id our own /api/auth/apple signed after checking Apple's
@@ -460,6 +464,8 @@ export async function POST(req: Request) {
           gasSafeRegistrationNo: rest.gasSafeRegistrationNo ?? null,
           gasSafeCardUrl,
           gasSafeCardBackUrl,
+          gasSafeCardSource,
+          gasSafeCardBackSource,
           gasSafeCardExpiresOn: gasSafeCardUrl && rest.gasSafeCardExpiresOn ? rest.gasSafeCardExpiresOn : null,
           // Into the admin queue — the badge is granted by a person
           // (app/admin/verifications), never by signup.

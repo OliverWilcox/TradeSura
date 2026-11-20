@@ -369,18 +369,20 @@ export type ConversionRow = {
   joinedLater: number;
 };
 
-export type ConversionReport = { from: string; to: string; joinedNowHours: number; rows: ConversionRow[] };
+export type ConversionTotals = Pick<ConversionRow, "offers" | "viewed" | "joined" | "thinking" | "joinedLater">;
+export type ConversionReport = { from: string; to: string; joinedNowHours: number; totals: ConversionTotals; rows: ConversionRow[] };
+export type ConversionScope = { engineerId: string } | { soldById: string };
 
-export async function conversionReport(range: { from: Date; to: Date }): Promise<ConversionReport> {
+export async function conversionReport(range: { from: Date; to: Date }, scope?: ConversionScope): Promise<ConversionReport> {
   const [sessions, marks, labels] = await Promise.all([
     prisma.offerSession.findMany({
-      where: { createdAt: { gte: range.from, lt: range.to } },
+      where: { createdAt: { gte: range.from, lt: range.to }, ...(scope ?? {}) },
       select: { engineerId: true, reason: true, variant: true, channel: true, createdAt: true, planId: true },
     }),
     testMarks(),
     listReasons(),
   ]);
-  const test = new Set(marks.engineers);
+  const test = new Set(scope ? [] : marks.engineers);
   const real = sessions.filter((s) => !test.has(s.engineerId));
   const planIds = real.map((s) => s.planId).filter((id): id is string => Boolean(id));
   const plans = new Map<string, { linkOpenedAt: Date | null; activatedAt: Date | null }>();
@@ -408,10 +410,15 @@ export async function conversionReport(range: { from: Date; to: Date }): Promise
     if (joinedAfterMs !== null && !joinedNow) row.joinedLater++;
   }
   const order = new Map(labels.map((l, i) => [l.reason, i]));
+  const totals = [...rows.values()].reduce<ConversionTotals>(
+    (t, r) => ({ offers: t.offers + r.offers, viewed: t.viewed + r.viewed, joined: t.joined + r.joined, thinking: t.thinking + r.thinking, joinedLater: t.joinedLater + r.joinedLater }),
+    { offers: 0, viewed: 0, joined: 0, thinking: 0, joinedLater: 0 },
+  );
   return {
     from: range.from.toISOString(),
     to: range.to.toISOString(),
     joinedNowHours: JOINED_NOW_HOURS,
+    totals,
     rows: [...rows.values()].sort((a, b) => (order.get(a.reason) ?? 99) - (order.get(b.reason) ?? 99) || a.reason.localeCompare(b.reason) || a.variant.localeCompare(b.variant)),
   };
 }

@@ -185,9 +185,47 @@ components:
           type: array
           items: { type: object, required: [date, customer, planRef, refundedPence, feeRefundedPence], properties: { date: { type: string }, customer: { type: string }, planRef: { type: string }, refundedPence: { type: integer }, feeRefundedPence: { type: integer } } }
         totals: { $ref: "#/components/schemas/StatementTotals" }
+    PhotoSources:
+      type: object
+      description: "Where each side of the card photo came from, as the app said when it was uploaded; null when it didn't say (builds before 20 Nov) or there's no such side"
+      required: [front, back]
+      properties:
+        front: { type: [string, "null"], enum: [camera, library, null] }
+        back: { type: [string, "null"], enum: [camera, library, null] }
+    TpsState:
+      type: [object, "null"]
+      description: "The number's screening against TPS and CTPS: registered or clear when a screening answered in the last 28 days had it; waiting when it's in one not answered yet; null when there's no number"
+      required: [status, screenedAt]
+      properties:
+        status: { type: string, enum: [clear, registered, waiting, not_screened] }
+        screenedAt: { type: [string, "null"], format: date-time }
+    TpsSummary:
+      type: object
+      required: [due, waiting, lastAnsweredAt, validDays]
+      properties:
+        due: { type: integer, description: "Numbers on the call lists not screened in the last validDays days (waiting ones included)" }
+        waiting: { type: [object, "null"], required: [id, createdAt, numbers], properties: { id: { type: string }, createdAt: { type: string, format: date-time }, numbers: { type: integer } } }
+        lastAnsweredAt: { type: [string, "null"], format: date-time }
+        validDays: { type: integer, description: 28 }
+    FollowUpLetter:
+      type: object
+      required: [code, business, owner, town, batch, claimedAt, phone, textConsent, remindedAt, optedOut, lastCall, tps]
+      properties:
+        code: { type: string }
+        business: { type: string, description: From our letter list }
+        owner: { type: string, description: The owner's first name from our letter list }
+        town: { type: [string, "null"], description: "The town of the trading address they gave, else the letter's" }
+        batch: { type: string }
+        claimedAt: { type: string, format: date-time }
+        phone: { type: string, description: "Masked; the full number comes from POST /letters/codes/{code}/contact" }
+        textConsent: { type: boolean }
+        remindedAt: { type: [string, "null"], format: date-time }
+        optedOut: { type: boolean, description: They replied STOP }
+        lastCall: { type: [object, "null"], properties: { at: { type: string, format: date-time }, by: { type: [string, "null"] }, note: { type: [string, "null"] } } }
+        tps: { $ref: "#/components/schemas/TpsState" }
     FollowUpPerson:
       type: object
-      required: [id, business, owner, town, phone, customersOnPlan, lastCall]
+      required: [id, business, owner, town, phone, customersOnPlan, lastCall, tps]
       properties:
         id: { type: string }
         business: { type: string }
@@ -196,6 +234,7 @@ components:
         phone: { type: [string, "null"], description: "Masked; the full number comes from POST /engineers/{engineerId}/contact" }
         customersOnPlan: { type: integer }
         lastCall: { type: [object, "null"], properties: { at: { type: string, format: date-time }, by: { type: [string, "null"] }, note: { type: [string, "null"] } } }
+        tps: { $ref: "#/components/schemas/TpsState" }
     FollowUpSend:
       type: object
       required: [step, channel, label, at, went]
@@ -291,9 +330,10 @@ components:
         registerSearch: { $ref: "#/components/schemas/RegisterSearch" }
         signals:
           type: object
-          required: [hasCard, cardExpiryFar, companyNotActive, typeMismatch, duplicates]
+          required: [hasCard, fromLibrary, cardExpiryFar, companyNotActive, typeMismatch, duplicates]
           properties:
             hasCard: { type: boolean }
+            fromLibrary: { type: boolean, description: "The app said a side of the card was chosen from the photo library, not taken with the camera (camera photos are safer)" }
             cardExpiryFar: { type: boolean, description: The card's expiry is more than 13 months away }
             companyNotActive: { type: boolean }
             typeMismatch: { oneOf: [{ $ref: "#/components/schemas/TypeMismatch" }, { type: "null" }] }
@@ -407,10 +447,11 @@ components:
           allOf:
             - $ref: "#/components/schemas/CardCheckResult"
             - type: object
-              required: [available, backAvailable, expiresOn, readId, newCard]
+              required: [available, backAvailable, expiresOn, readId, newCard, source]
               properties:
                 available: { type: boolean }
                 backAvailable: { type: boolean }
+                source: { $ref: "#/components/schemas/PhotoSources" }
                 expiresOn: { type: [string, "null"], format: date }
                 readId: { type: [string, "null"], description: "The reading shown and decided on: the newest complete reading of the current photo, else its newest reading" }
                 newCard: { type: boolean, description: "The card check passed on an earlier photo; the current one needs reading before the register check can pass" }
@@ -548,6 +589,7 @@ components:
             categoriesPublic: { type: boolean, description: "Whether they may show publicly: only once the register check has passed" }
             cardOnFile: { type: boolean }
             backOnFile: { type: boolean }
+            photoSource: { $ref: "#/components/schemas/PhotoSources" }
             cardExpiresOn: { type: [string, "null"], format: date }
             qualifications: { type: array, items: { type: object, properties: { code: { type: string }, title: { type: string }, confirmedAt: { type: string } } } }
             nextRegisterCheck: { type: [string, "null"], format: date, description: "14 days after the card's expiry, else 12 months after the last register check; null before the first (lib/admin/verifications.ts)" }
@@ -902,11 +944,12 @@ components:
             limits: { type: object, additionalProperties: { type: integer } }
     ConversionReport:
       type: object
-      required: [from, to, joinedNowHours, rows]
+      required: [from, to, joinedNowHours, totals, rows]
       properties:
         from: { type: string, format: date-time }
         to: { type: string, format: date-time }
         joinedNowHours: { type: integer }
+        totals: { type: object, required: [offers, viewed, joined, thinking, joinedLater], properties: { offers: { type: integer }, viewed: { type: integer }, joined: { type: integer }, thinking: { type: integer }, joinedLater: { type: integer } } }
         rows:
           type: array
           items:
@@ -1132,6 +1175,25 @@ paths:
       responses:
         "200": { description: Report, content: { application/json: { schema: { $ref: "#/components/schemas/ConversionReport" } } } }
         default: { $ref: "#/components/responses/Error" }
+  /dashboard/homeowner-funnel:
+    get:
+      summary: "The homeowner funnel for every installer (Matt, 4 Nov, 3.4): the conversion report of /content/report, with its totals, so the dashboard shows the split tests' results too. Needs dashboard:read."
+      parameters:
+        - { $ref: "#/components/parameters/from" }
+        - { $ref: "#/components/parameters/to" }
+      responses:
+        "200": { description: Report, content: { application/json: { schema: { $ref: "#/components/schemas/ConversionReport" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /engineers/{engineerId}/homeowner-funnel:
+    get:
+      summary: "One installer's homeowner funnel: the conversion report for the offers the business started (its staff's included), or a staff member's own (soldById). Their test mark doesn't hide them here. Needs engineers:read."
+      parameters:
+        - { $ref: "#/components/parameters/engineerId" }
+        - { $ref: "#/components/parameters/from" }
+        - { $ref: "#/components/parameters/to" }
+      responses:
+        "200": { description: Report, content: { application/json: { schema: { $ref: "#/components/schemas/ConversionReport" } } } }
+        default: { $ref: "#/components/responses/Error" }
   /dashboard/engineer-funnel:
     get:
       summary: "Matt's 14-step engineer funnel (4 Nov, 3.4), in his order: letters posted in the range (codes made then, opted-out ones left out), claim page scans, details form completed, store opened, store views › downloads (no source here: App Store Connect and Play Console, so count is null and noData says so), sign-ups with the code, Gas Safe card uploaded, card check passed (live), plans live + Stripe stage 1, first offer delivered, first customer, Stripe stage 2 done, first payout, register check passed. Each counted step keeps only those who reached it and every counted step before it, so none outgrows the one before. Engineers who signed up without a letter code aren't in it. Needs dashboard:read."
@@ -1142,6 +1204,7 @@ paths:
         - { name: code, in: query, schema: { type: string, maxLength: 20 }, description: One claim code }
         - { name: town, in: query, schema: { type: string, maxLength: 80 }, description: The town printed on the letter }
         - { name: reason, in: query, schema: { type: string, maxLength: 60 }, description: "A visit reason: the first offer and first customer count only offers made for it" }
+        - { name: channel, in: query, schema: { type: string, enum: [letter, referral, website, job, other, all], default: letter }, description: "letter (the default) is the funnel from the letters. Any other starts from the owners who signed up in the range that way (referral: heardVia engineer or a referral code; website: online; job: at a job; other: the rest without a claim code; all: everyone), the letter steps null with noData. batch and code are refused (400) with one; town is then the engineer's own town." }
       responses:
         "200":
           description: The funnel
@@ -1149,8 +1212,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [batches, letters, filters, options, steps]
+                required: [start, channel, batches, letters, signups, filters, options, steps]
                 properties:
+                  start: { type: string, enum: [letters, signups], description: What the first counted step is }
+                  channel: { type: string, enum: [letter, referral, website, job, other, all] }
+                  signups: { type: [integer, "null"], description: "From sign-ups: the owners who signed up in the range through the channel; null for the letter funnel" }
                   batches: { type: integer, description: Letter batches with letters posted in the range }
                   letters: { type: integer, description: "Letters posted in the range, by each batch's date posted (batches before 18 Nov: when their codes were made), opted-out ones left out: the first step" }
                   filters: { type: object, properties: { batch: { type: string }, code: { type: string }, town: { type: string }, reason: { type: string } } }
@@ -1160,6 +1226,8 @@ paths:
                     properties:
                       batches: { type: array, items: { type: object, required: [name, area], properties: { name: { type: string }, area: { type: [string, "null"] } } } }
                       towns: { type: array, items: { type: string } }
+                      engineerTowns: { type: array, items: { type: string }, description: "Owners' own towns, for a channel other than letter" }
+                      channels: { type: array, items: { type: string, enum: [letter, referral, website, job, other, all] } }
                       reasons: { type: array, items: { type: object, required: [reason, label], properties: { reason: { type: string }, label: { type: string } } } }
                   steps:
                     type: array
@@ -1413,7 +1481,7 @@ paths:
                     type: array
                     items:
                       type: object
-                      required: [name, area, postedOn, planned, reservedUntil, codes, claimed, signedUp, suppressed, unclaimed, secondLetterFrom, uploadedAt, uploadedBy]
+                      required: [name, area, postedOn, planned, reservedUntil, codes, claimed, signedUp, suppressed, unclaimed, notSignedUp, canText, texted, secondLetterFrom, uploadedAt, uploadedBy]
                       properties:
                         name: { type: string, description: "The name it was uploaded with (batches before 18 Nov: the month, then A, B…)" }
                         area: { type: [string, "null"] }
@@ -1425,6 +1493,9 @@ paths:
                         signedUp: { type: integer }
                         suppressed: { type: integer, description: Opted out; left out of the mail house's file }
                         unclaimed: { type: integer, description: "Not claimed, not signed up, not opted out: the second letter's list (Matt, 4 Nov, 3.5)" }
+                        notSignedUp: { type: integer, description: Claimed on the claim page and not signed up (not opted out) }
+                        canText: { type: integer, description: "Of those, the ones who gave a mobile, ticked \"TradeSura can text me to help me finish setting up\" and haven't had the reminder" }
+                        texted: { type: integer, description: Codes sent the reminder text }
                         secondLetterFrom: { type: string, format: date, description: "The day the second letter can go, 10 days after the date posted (or the upload, for older batches)" }
                         uploadedAt: { type: string, format: date-time }
                         uploadedBy: { type: [string, "null"] }
@@ -1463,6 +1534,29 @@ paths:
       responses:
         "200": { description: The batch, content: { application/json: { schema: { type: object, required: [name, area, postedOn, count, reservedUntil], properties: { name: { type: string }, area: { type: string }, postedOn: { type: string, format: date }, count: { type: integer }, reservedUntil: { type: string, format: date } } } } } }
         "409": { description: 26 batches this month already, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /letters/batches/{batch}/reminders:
+    post:
+      summary: "Texts the batch's claimed codes that haven't signed up a reminder with their code and personal link (Matt, 4 Nov, 3.5: texts only where they ticked consent on the claim page), once each, from 10 days after the date posted (409 before then, or when nobody is waiting for one). A number that replied STOP is skipped and marked done. Up to 200 a call; left says how many are still to send. Each send is a claim_step event (reminder_texted, delivered); the call is letter_reminders_sent. Needs letters:write."
+      parameters: [{ name: batch, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: What went, content: { application/json: { schema: { type: object, required: [sent, failed, optedOut, left], properties: { sent: { type: integer }, failed: { type: integer }, optedOut: { type: integer }, left: { type: integer } } } } } }
+        "409": { description: Too early, or nobody to text, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /letters/codes/{code}/contact:
+    post:
+      summary: The mobile given on the claim page for this code. Recorded every time (admin_contact_revealed, subjectType claim_code). Needs pii:reveal and letters:read.
+      parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: The mobile, content: { application/json: { schema: { type: object, required: [phone], properties: { phone: { type: [string, "null"] } } } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /letters/codes/{code}/calls:
+    post:
+      summary: "Log a call to a letter code's claimant with what came of it (claim_called): shown on the letters call list. Needs letters:write."
+      parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [note], properties: { note: { type: string, minLength: 3, maxLength: 1000 } } } } } }
+      responses:
+        "200": { description: Logged, content: { application/json: { schema: { type: object, required: [at, by], properties: { at: { type: string, format: date-time }, by: { type: string } } } } } }
         default: { $ref: "#/components/responses/Error" }
   /letters/batches/{batch}/mail-house:
     get:
@@ -1748,7 +1842,7 @@ paths:
     get:
       summary: "The team's call lists (Matt, 4 Nov, 3.5). calls: live owners in good standing whose last delivered offer (or going live) is at the ladder's call step (10 days) or past it, longest quiet first, with what the ladder sent them this spell (lib/follow-ups.ts: day 3 push, day 5 WhatsApp, day 7 email) and the last call logged. stripe: finished Stripe accounts Stripe still wants something from (stage 2 due), by Stripe's deadline (soonest first, unknown last; urgent within 7 days). Both counts come with every page. Needs engineers:read."
       parameters:
-        - { name: tab, in: query, schema: { type: string, enum: [calls, stripe], default: calls } }
+        - { name: tab, in: query, schema: { type: string, enum: [calls, stripe, letters], default: calls }, description: "letters: codes claimed with a mobile and not signed up, from 10 days after their letter, oldest claim first (needs letters:read, 403 otherwise)" }
         - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: Business, owner or town }
         - { $ref: "#/components/parameters/page" }
         - { $ref: "#/components/parameters/size" }
@@ -1761,11 +1855,30 @@ paths:
                 allOf:
                   - $ref: "#/components/schemas/Page"
                   - type: object
-                    required: [tab, counts]
+                    required: [tab, counts, tps]
                     properties:
-                      tab: { type: string, enum: [calls, stripe] }
-                      counts: { type: object, required: [calls, stripe], properties: { calls: { type: integer }, stripe: { type: integer } } }
-                      items: { type: array, items: { oneOf: [{ $ref: "#/components/schemas/FollowUpCall" }, { $ref: "#/components/schemas/FollowUpStripe" }] } }
+                      tab: { type: string, enum: [calls, stripe, letters] }
+                      counts: { type: object, required: [calls, stripe, letters], properties: { calls: { type: integer }, stripe: { type: integer }, letters: { type: [integer, "null"], description: Null without letters:read } } }
+                      tps: { $ref: "#/components/schemas/TpsSummary" }
+                      items: { type: array, items: { oneOf: [{ $ref: "#/components/schemas/FollowUpCall" }, { $ref: "#/components/schemas/FollowUpStripe" }, { $ref: "#/components/schemas/FollowUpLetter" }] } }
+        default: { $ref: "#/components/responses/Error" }
+  /follow-ups/tps-screens:
+    post:
+      summary: "Starts a TPS and CTPS screening: the call lists' numbers (the letters list's too with letters:read) not screened in the last 28 days, in the national form, for the team's screening service. An earlier screening not answered yet is replaced. 409 when there's none to screen. Recorded as tps_screen_started. Needs data:export."
+      responses:
+        "200": { description: The numbers, content: { application/json: { schema: { type: object, required: [id, createdAt, numbers], properties: { id: { type: string }, createdAt: { type: string, format: date-time }, numbers: { type: array, items: { type: string } } } } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /follow-ups/tps-screens/{screenId}/result:
+    post:
+      summary: "Answers a screening with what the service sent back: listed registered = the numbers on TPS or CTPS (the rest of the screening are clear); listed clear = the numbers clear to call (the rest are registered). Numbers in any UK form; ones not in the screening are left out and counted (ignored). 409 if it's already answered. Recorded as tps_screen_answered. Needs data:export."
+      parameters: [{ name: screenId, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [listed, numbers], properties: { listed: { type: string, enum: [registered, clear] }, numbers: { type: array, maxItems: 20000, items: { type: string, maxLength: 40 } } } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { type: object, required: [registered, clear, ignored, screenedAt], properties: { registered: { type: integer }, clear: { type: integer }, ignored: { type: integer }, screenedAt: { type: string, format: date-time } } } } } }
         default: { $ref: "#/components/responses/Error" }
   /engineers/{engineerId}/contact:
     post:
@@ -1954,6 +2067,14 @@ paths:
                   status: { type: string, enum: [sent, queued, not_sent] }
                   notSent: { type: [string, "null"], enum: [not_configured, refused, null] }
         "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /customers/{customerId}/safety-complaints:
+    post:
+      summary: "Logs a homeowner's safety complaint about their engineer (Matt, 4 Nov, 3: an ad hoc register re-check). When the engineer's register check has passed, they go on Re-check due with the complaint as the reason (requested), unless one was already due (already_due); otherwise their register check is still to do (not_checked). Recorded as safety_complaint (reason = the complaint) and the verification team is told (VERIFICATION_ALERT_EMAIL / _SMS). The homeowner can raise one themselves from their plan page (/portal/{token}/safety). Needs customers:notes."
+      parameters: [{ name: customerId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [message], properties: { message: { type: string, minLength: 10, maxLength: 2000 } } } } } }
+      responses:
+        "200": { description: Logged, content: { application/json: { schema: { type: object, required: [recheck, at], properties: { recheck: { type: string, enum: [requested, already_due, not_checked] }, at: { type: string, format: date-time } } } } } }
         default: { $ref: "#/components/responses/Error" }
   /customers/{customerId}/notes:
     get:
