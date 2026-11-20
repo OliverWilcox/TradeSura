@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
-import { bothSidesTooBig, cardExpiry, storeGasSafeCard } from "@/lib/gas-safe-card";
+import { bothSidesTooBig, cardExpiry, PhotoSource, storeGasSafeCard } from "@/lib/gas-safe-card";
 import { queueCardAlert } from "@/lib/card-alert";
 import { queueCardCheck } from "@/lib/admin/verifications";
 
@@ -11,8 +11,8 @@ export const maxDuration = 300;
 
 // The expiry is optional so builds that don't ask for it keep working; a new
 // photo without one clears the old card's date.
-const Photo = z.object({ base64: z.string().min(1), mimeType: z.string().min(1) });
-const Body = z.object({ base64: z.string().min(1), mimeType: z.string().min(1), expiresOn: cardExpiry.optional(), back: Photo.optional() });
+const Photo = z.object({ base64: z.string().min(1), mimeType: z.string().min(1), source: PhotoSource.optional() });
+const Body = z.object({ base64: z.string().min(1), mimeType: z.string().min(1), source: PhotoSource.optional(), expiresOn: cardExpiry.optional(), back: Photo.optional() });
 
 export async function POST(req: Request) {
   const engineerId = await getEngineerId();
@@ -39,6 +39,8 @@ export async function POST(req: Request) {
       ...(gasSafeVerifiedAt ? { gasSafeRecheckRequestedAt: new Date(), gasSafeRecheckReason: "New card uploaded" } : {}),
       gasSafeCardUrl: stored.url,
       gasSafeCardBackUrl: back?.ok ? back.url : null,
+      gasSafeCardSource: parsed.data.source ?? null,
+      gasSafeCardBackSource: back?.ok ? (parsed.data.back?.source ?? null) : null,
       gasSafeCardExpiresOn: parsed.data.expiresOn ?? null,
       gasSafeRejectedAt: null,
       gasSafeRejectReason: null,

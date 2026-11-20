@@ -3,14 +3,18 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { AddressInput, formatAddress, parseAddress } from "@/lib/addresses";
 import { adminEvent } from "@/lib/admin-api/audit";
-import { AdminApiError, notFound } from "@/lib/admin-api/route";
+import { AdminApiError, conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
-import { addDays, ukDay } from "@/lib/admin/time";
+import { addDays, formatUkDate, ukDay } from "@/lib/admin/time";
 import { foundingDeadline, foundingDeadlineKey } from "@/lib/founding";
 import { claimLink, letterCodeSuffix, printedLinkProblem } from "@/lib/letter-code";
 import { appUrl } from "@/lib/app-url";
 import { codeStem } from "@/lib/referral-code";
 import { townSlugOf } from "@/lib/town";
+import { claimAppLink, claimAppToken } from "@/lib/claim";
+import { sendPlatformText } from "@/lib/sms";
+import { isSuppressed } from "@/lib/suppression";
+import { track } from "@/lib/track";
 
 export const MAX_LETTERS_PER_BATCH = 5000;
 export const BATCH_NAME = /^[A-Za-z0-9][A-Za-z0-9 -]{0,39}$/;
@@ -38,12 +42,21 @@ export type LetterBatch = {
   signedUp: number;
   suppressed: number;
   unclaimed: number;
+  notSignedUp: number;
+  canText: number;
+  texted: number;
   secondLetterFrom: string;
   uploadedAt: string;
   uploadedBy: string | null;
 };
 
 export const SECOND_LETTER_DAYS = 10;
+export const REMINDERS_PER_SEND = 200;
+
+export const notSignedUpWhere = (batch?: string) =>
+  ({ ...(batch ? { letterBatch: batch } : {}), claimedAt: { not: null }, redeemedByEngineerId: null, suppressedAt: null }) satisfies Prisma.ClaimCodeWhereInput;
+
+export const textableWhere = (batch?: string) => ({ ...notSignedUpWhere(batch), mobile: { not: null }, textConsentAt: { not: null } }) satisfies Prisma.ClaimCodeWhereInput;
 
 export async function listLetterBatches(): Promise<{ items: LetterBatch[] }> {
   const groups = await prisma.claimCode.groupBy({
@@ -62,6 +75,13 @@ export async function listLetterBatches(): Promise<{ items: LetterBatch[] }> {
   const info = new Map((await prisma.letterBatch.findMany()).map((b) => [b.name, b]));
   const unclaimed = await prisma.claimCode.groupBy({ by: ["letterBatch"], where: { claimedAt: null, redeemedByEngineerId: null, suppressedAt: null }, _count: { _all: true } });
   const unclaimedOf = new Map(unclaimed.map((u) => [u.letterBatch, u._count._all]));
+  const [notSignedUp, canText, texted] = await Promise.all([
+    prisma.claimCode.groupBy({ by: ["letterBatch"], where: notSignedUpWhere(), _count: { _all: true } }),
+    prisma.claimCode.groupBy({ by: ["letterBatch"], where: { ...textableWhere(), reminderTextedAt: null }, _count: { _all: true } }),
+    prisma.claimCode.groupBy({ by: ["letterBatch"], where: { reminderTextedAt: { not: null } }, _count: { _all: true } }),
+  ]);
+  const countOf = (rows: { letterBatch: string; _count: { _all: number } }[]) => new Map(rows.map((r) => [r.letterBatch, r._count._all]));
+  const [notSignedUpOf, canTextOf, textedOf] = [countOf(notSignedUp), countOf(canText), countOf(texted)];
   const items = await Promise.all(
     groups.map(async (g): Promise<LetterBatch> => {
       const createdAt = g._min.createdAt!;
@@ -78,6 +98,9 @@ export async function listLetterBatches(): Promise<{ items: LetterBatch[] }> {
         signedUp: g._count.redeemedByEngineerId,
         suppressed: g._count.suppressedAt,
         unclaimed: unclaimedOf.get(g.letterBatch) ?? 0,
+        notSignedUp: notSignedUpOf.get(g.letterBatch) ?? 0,
+        canText: canTextOf.get(g.letterBatch) ?? 0,
+        texted: textedOf.get(g.letterBatch) ?? 0,
         secondLetterFrom: addDays(batch ? batch.postedOn.toISOString().slice(0, 10) : ukDay(createdAt), SECOND_LETTER_DAYS),
         uploadedAt: createdAt.toISOString(),
         uploadedBy: uploader.get(g.letterBatch) ?? null,
@@ -189,4 +212,70 @@ export async function mailHouseFile(batch: string, opts: { second?: boolean } = 
       mailingAddress: parseAddress(r.mailingAddress),
     })),
   };
+}
+
+async function followUpFrom(batch: string): Promise<string | null> {
+  const [info, first] = await Promise.all([
+    prisma.letterBatch.findUnique({ where: { name: batch }, select: { postedOn: true } }),
+    prisma.claimCode.findFirst({ where: { letterBatch: batch }, orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
+  ]);
+  if (!info && !first) return null;
+  return addDays(info ? info.postedOn.toISOString().slice(0, 10) : ukDay(first!.createdAt), SECOND_LETTER_DAYS);
+}
+
+export function reminderText(r: { code: string; town: string | null; deadline: Date; link: string }, now = new Date()) {
+  const held = r.town && now <= r.deadline ? `your Founding Member spot in ${r.town} is held until ${formatUkDate(r.deadline)}. ` : "your account is waiting. ";
+  return `TradeSura: ${held}Finish setting up with your code ${r.code}: ${r.link} Reply STOP to opt out.`;
+}
+
+export async function sendLetterReminders(admin: AdminPrincipal, batch: string, now = new Date()) {
+  const from = await followUpFrom(batch);
+  if (!from) throw notFound("There's no letter batch with that name.");
+  if (ukDay(now) < from) throw conflict(`Reminder texts go with the second letter, ${SECOND_LETTER_DAYS} days after the first: this batch's can go from ${from}.`);
+  const rows = await prisma.claimCode.findMany({
+    where: { ...textableWhere(batch), reminderTextedAt: null },
+    orderBy: { claimedAt: "asc" },
+    take: REMINDERS_PER_SEND,
+    select: { code: true, mobile: true, town: true, tradingTown: true, letterBatch: true, createdAt: true, reservedUntil: true, variantCell: true },
+  });
+  if (!rows.length) throw conflict("Nobody in this batch is waiting for a reminder: only those who gave their mobile and ticked the box on the claim page are texted, once.");
+  const base = appUrl();
+  const result = { sent: 0, failed: 0, optedOut: 0 };
+  for (const r of rows) {
+    if (await isSuppressed("sms", r.mobile!)) {
+      result.optedOut++;
+      await prisma.claimCode.update({ where: { code: r.code }, data: { reminderTextedAt: now } });
+      continue;
+    }
+    const link = claimAppLink(base, r.code, await claimAppToken(r.code));
+    const text = reminderText({ code: r.code, town: r.tradingTown?.trim() || r.town, deadline: await foundingDeadline(r), link }, now);
+    const went = await sendPlatformText(r.mobile!, text).catch(() => false);
+    if (went) {
+      result.sent++;
+      await prisma.claimCode.update({ where: { code: r.code }, data: { reminderTextedAt: now } });
+    } else result.failed++;
+    await track("claim_step", { type: "SYSTEM" }, { code: r.code, step: "reminder_texted", delivered: went, variantCell: r.variantCell });
+  }
+  const left = await prisma.claimCode.count({ where: { ...textableWhere(batch), reminderTextedAt: null } });
+  await adminEvent(admin, "letter_reminders_sent", { batch, ...result, left });
+  return { ...result, left };
+}
+
+async function claimRow(code: string) {
+  const row = await prisma.claimCode.findUnique({ where: { code }, select: { code: true, mobile: true, letterBatch: true } });
+  if (!row) throw notFound("There's no claim code like that.");
+  return row;
+}
+
+export async function revealClaimContact(admin: AdminPrincipal, code: string) {
+  const row = await claimRow(code);
+  await adminEvent(admin, "admin_contact_revealed", { subjectType: "claim_code", subjectId: row.code, batch: row.letterBatch, field: "phone" });
+  return { phone: row.mobile };
+}
+
+export async function logClaimCall(admin: AdminPrincipal, code: string, note: string) {
+  const row = await claimRow(code);
+  const at = new Date();
+  await adminEvent(admin, "claim_called", { code: row.code, batch: row.letterBatch, note });
+  return { at: at.toISOString(), by: admin.name };
 }

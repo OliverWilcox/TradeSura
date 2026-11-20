@@ -25,7 +25,7 @@ import { GAS_SAFE_REGISTER_URL, gasSafeRegisterSearch } from "@/lib/gas-safe-reg
 import { autoPassOn, cardCheckView, cardPassBlock, currentReads, detailsOf, readComplete, type CardCheckView, type CardDetails } from "@/lib/admin/card-check";
 import { cardReadConfigured, notSetUpReading, readGasSafeCard, type CardImage, type CardReading } from "@/lib/card-read";
 import type { GasSafeCardRead } from "@/lib/generated/prisma/client";
-import { isPrivateCardUrl, readPrivateCard } from "@/lib/gas-safe-card";
+import { isPrivateCardUrl, photoSourceOf, readPrivateCard } from "@/lib/gas-safe-card";
 
 export type CheckStage = "not_submitted" | "no_card" | "card" | "register" | "recheck" | "passed" | "card_failed" | "suspended";
 export type CardCheck = "waiting" | "passed" | "failed" | "no_card";
@@ -142,6 +142,8 @@ const lockOf = (c: { adminId: string; adminName: string; claimedAt: Date } | und
 const CHECK_SELECT = {
   gasSafeCardReadId: true,
   gasSafeCardBackUrl: true,
+  gasSafeCardSource: true,
+  gasSafeCardBackSource: true,
   pausedAt: true,
   bannedAt: true,
   gasSafeNo: true,
@@ -544,6 +546,7 @@ export async function listVerifications(q: {
       registerSearch: gasSafeRegisterSearch(searchable(view.details, own?.passed ?? null)),
       signals: {
         hasCard: Boolean(r.gasSafeCardUrl),
+        fromLibrary: fromLibrary(r),
         cardExpiryFar: cardExpiryFar(r.gasSafeCardExpiresOn, now),
         companyNotActive: Boolean(r.companyStatus && r.companyStatus !== "active"),
         typeMismatch: businessTypeMismatch(r),
@@ -552,6 +555,18 @@ export async function listVerifications(q: {
     };
   });
   return { items, page: q.page, size: q.size, total, counts };
+}
+
+export function photoSources(e: { gasSafeCardUrl: string | null; gasSafeCardBackUrl: string | null; gasSafeCardSource: string | null; gasSafeCardBackSource: string | null }) {
+  return {
+    front: e.gasSafeCardUrl ? photoSourceOf(e.gasSafeCardSource) : null,
+    back: e.gasSafeCardUrl && e.gasSafeCardBackUrl ? photoSourceOf(e.gasSafeCardBackSource) : null,
+  };
+}
+
+export function fromLibrary(e: Parameters<typeof photoSources>[0]): boolean {
+  const s = photoSources(e);
+  return s.front === "library" || s.back === "library";
 }
 
 function cardExpiryFar(expiresOn: Date | null, now = new Date()) {
@@ -672,7 +687,14 @@ export async function getVerification(engineerId: string, opts: { withContact?: 
     /** A chase can go by text: they have a mobile and agreed to texts about finishing setting up. */
     canTextChase: Boolean(row.phone && row.setupTextConsentAt),
     customersOnPlans: row.ownerId ? 0 : row._count.plans,
-    card: { available: Boolean(row.gasSafeCardUrl), backAvailable: Boolean(row.gasSafeCardUrl && row.gasSafeCardBackUrl), expiresOn: dateOnly(read?.expiresOn ?? null), readId: read?.id ?? null, newCard },
+    card: {
+      available: Boolean(row.gasSafeCardUrl),
+      backAvailable: Boolean(row.gasSafeCardUrl && row.gasSafeCardBackUrl),
+      expiresOn: dateOnly(read?.expiresOn ?? null),
+      readId: read?.id ?? null,
+      newCard,
+      source: photoSources(row),
+    },
     company:
       row.businessType === "ltd" || row.companyNumber
         ? {
