@@ -98,6 +98,10 @@ export const WHATSAPP_TEMPLATES = {
     example: [],
     sentAs: "We couldn't verify your Gas Safe number on TradeSura — open the app to check it and try again.",
   },
+  no_activity: {
+    text: "TradeSura: it's been a few days since your last plan offer. Every job is a chance to add a customer: pick the reason for the visit, hand over your phone and the app does the selling.",
+    example: [],
+  },
 } as const satisfies Record<string, { text: string; example: readonly string[]; sentAs?: string }>;
 
 export type WhatsAppTemplate = keyof typeof WHATSAPP_TEMPLATES;

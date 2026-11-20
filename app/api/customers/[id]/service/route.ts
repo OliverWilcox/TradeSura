@@ -5,7 +5,7 @@ import { getActor } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { passportForCustomer, passportState } from "@/lib/passport";
 import { requestRating } from "@/lib/ratings";
-import { inviteCustomerAfterFirstService } from "@/lib/trustpilot";
+import { inviteCustomerAfterFirstService } from "@/lib/trustpilot-customers";
 
 const Body = z.object({
   servicedOn: z.string().datetime().optional(),

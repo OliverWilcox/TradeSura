@@ -26,7 +26,15 @@ export type EngineerVerification = {
   gasSafeReviewRequestedAt: Date | null;
   gasSafeRejectedAt: Date | null;
   gasSafeRejectReason: string | null;
+  gasSafeRegisterCheckedAt?: Date | null;
 };
+
+const LIVE_TEXT = (registerChecked: boolean) =>
+  registerChecked ? "Gas Safe verified — you're live." : "Card checked — you're live. Your Verified badge goes on after our Gas Safe Register check.";
+
+export function badgePublic(e: { gasSafeVerifiedAt: Date | null; gasSafeCardReadId: string | null; gasSafeRegisterCheckedAt: Date | null; pausedAt: Date | null; bannedAt: Date | null }): boolean {
+  return Boolean(e.gasSafeVerifiedAt && e.gasSafeCardReadId && e.gasSafeRegisterCheckedAt && !e.pausedAt && !e.bannedAt);
+}
 
 export function standingState(e: EngineerVerification): StandingState {
   if (e.bannedAt) return "BANNED";
@@ -63,13 +71,13 @@ export function standingState(e: EngineerVerification): StandingState {
 export function gasSafeStatus(
   e: Pick<
     EngineerVerification,
-    "gasSafeNo" | "gasSafeVerifiedAt" | "gasSafeReviewRequestedAt" | "gasSafeRejectedAt"
+    "gasSafeNo" | "gasSafeVerifiedAt" | "gasSafeReviewRequestedAt" | "gasSafeRejectedAt" | "gasSafeRegisterCheckedAt"
   > & {
     /** Review 4 — pass it to have a missing ID photo named (null = none). */
     gasSafeCardUrl?: string | null;
   },
 ): { tone: StandingTone; text: string } {
-  if (e.gasSafeVerifiedAt) return { tone: "quiet", text: "Gas Safe verified — account active." };
+  if (e.gasSafeVerifiedAt) return { tone: "quiet", text: LIVE_TEXT(Boolean(e.gasSafeRegisterCheckedAt)) };
   // The check can't finish without the card, so say so rather than "in progress".
   if (e.gasSafeCardUrl === null && !e.gasSafeRejectedAt) {
     return { tone: "amber", text: "Photo needed · Add your Gas Safe ID so we can finish your check →" };
@@ -123,7 +131,7 @@ export function standingCopy(
     case "CHECK_PENDING":
       return { state, tone: "amber", text: "Gas Safe check in progress — we'll let you know within 24 hours." };
     case "ACTIVE":
-      return { state, tone: "quiet", text: "Gas Safe verified — account active." };
+      return { state, tone: "quiet", text: LIVE_TEXT(Boolean(e.gasSafeRegisterCheckedAt)) };
     default: {
       // Exhaustiveness check, not a real fallback: standingState() above can
       // only return one of the 6 StandingState values, so this line never

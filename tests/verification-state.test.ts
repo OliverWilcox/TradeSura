@@ -96,9 +96,12 @@ describe("standingState", () => {
 });
 
 describe("standingCopy", () => {
-  it("uses the Part 18 verbatim active string", () => {
+  it("says live, with the badge waiting on the register check until it's passed (13 Nov 1.3, 1.4)", () => {
     expect(standingCopy({ ...BASE, gasSafeNo: "1", gasSafeVerifiedAt: new Date() }).text).toBe(
-      "Gas Safe verified — account active.",
+      "Card checked — you're live. Your Verified badge goes on after our Gas Safe Register check.",
+    );
+    expect(standingCopy({ ...BASE, gasSafeNo: "1", gasSafeVerifiedAt: new Date(), gasSafeRegisterCheckedAt: new Date() }).text).toBe(
+      "Gas Safe verified — you're live.",
     );
   });
 

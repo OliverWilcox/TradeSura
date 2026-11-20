@@ -216,8 +216,8 @@ function Input({
   );
 }
 
-// Matt 16 Nov — the card is read the moment it's uploaded
-// (app/api/onboarding/gas-safe-card).
+// Matt 16 Nov — the card is read the moment the photo is taken
+// (app/api/onboarding/gas-safe-card/read, Muhammad's card reader).
 type CardReading = {
   licenceNumber: string | null;
   registrationNumber: string | null;
@@ -479,7 +479,6 @@ export default function SignUp() {
   const [cardToken, setCardToken] = useState<string | null>(null);
   // Matt 16 Nov — the back of the card, as a second photo.
   const [cardBack, setCardBack] = useState<IdCardState>({ phase: "empty" });
-  const [cardBackToken, setCardBackToken] = useState<string | null>(null);
   const [cardBackProblem, setCardBackProblem] = useState<CardProblem | null>(null);
   // The expiry printed on the card, typed as DD/MM/YYYY (or MM/YYYY).
   const [cardExpiry, setCardExpiry] = useState("");
@@ -892,7 +891,6 @@ export default function SignUp() {
   function changePhone() {
     resetVerification();
     setCardToken(null);
-    setCardBackToken(null);
   }
 
   async function sendOtp(): Promise<boolean> {
@@ -1015,15 +1013,17 @@ export default function SignUp() {
     goToStep(2);
   }
 
+  // Reads the front the moment it's taken. Nothing is stored until
+  // Continue, which sends both sides together (storeCard).
   async function uploadCard(photo: IdPhoto) {
-    const r = await api<{ cardToken: string; reading?: CardReading | null; problem?: CardProblem | null }>(
-      "/api/onboarding/gas-safe-card",
+    setCardToken(null);
+    const r = await api<{ reading?: CardReading | null; problem?: CardProblem | null }>(
+      "/api/onboarding/gas-safe-card/read",
       {
         method: "POST",
-        body: JSON.stringify({ phoneToken, base64: photo.base64, mimeType: photo.mimeType }),
+        body: JSON.stringify({ phoneToken, front: { base64: photo.base64, mimeType: photo.mimeType } }),
       },
     );
-    setCardToken(r.cardToken);
     const reading = r.reading ?? null;
     setCardRead(reading || r.problem ? { reading, problem: r.problem ?? null } : null);
     // Matt 16 Nov — pre-fill what the card shows; never overwrite what the
@@ -1049,19 +1049,42 @@ export default function SignUp() {
     }
   }
 
+  // The back is read with the front, to check it's the real card.
   async function uploadCardBack(photo: IdPhoto) {
-    const r = await api<{ cardToken: string; problem?: CardProblem | null }>("/api/onboarding/gas-safe-card", {
+    setCardToken(null);
+    if (card.phase !== "added" && card.phase !== "preview") return;
+    const front = card.photo;
+    const r = await api<{ problem?: CardProblem | null }>("/api/onboarding/gas-safe-card/read", {
       method: "POST",
-      body: JSON.stringify({ phoneToken, base64: photo.base64, mimeType: photo.mimeType, side: "back" }),
+      body: JSON.stringify({
+        phoneToken,
+        front: { base64: front.base64, mimeType: front.mimeType },
+        back: { base64: photo.base64, mimeType: photo.mimeType },
+      }),
     });
-    setCardBackToken(r.cardToken);
     setCardBackProblem(r.problem ?? null);
+  }
+
+  // Both sides go up together on Continue (Muhammad's upload API); the token
+  // names the stored photos for the new account.
+  async function storeCard(front: IdPhoto, back: IdPhoto) {
+    const r = await api<{ cardToken: string }>("/api/onboarding/gas-safe-card", {
+      method: "POST",
+      body: JSON.stringify({
+        phoneToken,
+        base64: front.base64,
+        mimeType: front.mimeType,
+        backBase64: back.base64,
+        backMimeType: back.mimeType,
+      }),
+    });
+    setCardToken(r.cardToken);
   }
 
   function onCardBackChange(next: IdCardState) {
     setCardBack(next);
     if (next.phase !== "added") {
-      setCardBackToken(null);
+      setCardToken(null);
       setCardBackProblem(null);
     }
     clearError("gasSafeCardBack");
@@ -1103,7 +1126,7 @@ export default function SignUp() {
       else if (cardBack.phase === "failed") backErr = "Upload failed — tap the photo to try again.";
     }
     if (fail({ gasSafeNo: noErr, gasSafeRegistrationNo: registrationErr, gasSafeCard: cardErr, cardExpiry: expiryErr, gasSafeCardBack: backErr })) return;
-    if (card.phase === "preview" || (card.phase === "added" && !cardToken)) {
+    if (card.phase === "preview") {
       const photo = card.photo;
       setStep2Busy(true);
       setCard({ phase: "uploading", photo });
@@ -1118,7 +1141,7 @@ export default function SignUp() {
         setStep2Busy(false);
       }
     }
-    if (cardBack.phase === "preview" || (cardBack.phase === "added" && !cardBackToken)) {
+    if (cardBack.phase === "preview") {
       const photo = cardBack.photo;
       setStep2Busy(true);
       setCardBack({ phase: "uploading", photo });
@@ -1128,6 +1151,19 @@ export default function SignUp() {
       } catch {
         setCardBack({ phase: "failed", photo });
         fail({ gasSafeCardBack: "Upload failed — tap the photo to try again." });
+        return;
+      } finally {
+        setStep2Busy(false);
+      }
+    }
+    if (!cardToken && card.phase !== "empty" && card.phase !== "denied" && cardBack.phase !== "empty" && cardBack.phase !== "denied") {
+      setStep2Busy(true);
+      try {
+        await storeCard(card.photo, cardBack.photo);
+      } catch (e) {
+        const message = e instanceof ApiError ? e.message : "Upload failed — tap the photo to try again.";
+        const onBack = e instanceof ApiError && (e.body as { field?: string } | undefined)?.field === "back";
+        fail(onBack ? { gasSafeCardBack: message } : { gasSafeCard: message });
         return;
       } finally {
         setStep2Busy(false);
@@ -1144,7 +1180,6 @@ export default function SignUp() {
     setCard({ phase: "empty" });
     setCardToken(null);
     setCardBack({ phase: "empty" });
-    setCardBackToken(null);
     goToStep(3);
   }
 
@@ -1233,7 +1268,6 @@ export default function SignUp() {
             gasSafeNo: gasSafeNo.replace(/\s/g, ""),
             gasSafeRegistrationNo: gasSafeRegistrationNo.replace(/\s/g, ""),
             gasSafeCardToken: cardToken ?? undefined,
-            gasSafeCardBackToken: cardToken ? (cardBackToken ?? undefined) : undefined,
             gasSafeCardExpiresOn: cardToken ? expiryIso(cardExpiry) : undefined,
             tradingName: tradingName.trim(),
             businessType,
@@ -1724,7 +1758,6 @@ export default function SignUp() {
                     </View>
                     <Hint>Tap any to register interest</Hint>
 
-                    {/* Matt, 4 Nov: both numbers, named as the Gas Safe ID card names them. */}
                     <View ref={fieldRef("gasSafeNo")} collapsable={false}>
                       <Text className={`${labelCls} mt-5`}>Licence number</Text>
                       <Input

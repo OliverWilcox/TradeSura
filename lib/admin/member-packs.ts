@@ -18,27 +18,22 @@ import { sendPushNotification } from "@/lib/push";
 
 // Founding-member packs for the admin API (Part 17.4). A pack is requested at
 // signup, but the Verified Member seal never ships to an unverified, paused or
-// banned account (Part 14 LAW), nor before the register check has passed
-// (Matt, 4 Nov: live first, register check behind, packs after it): those wait
-// in "held" until they can go. Someone posts the pack and marks it here; who
-// did is recorded. This replaces the old /admin/verifications?key= page.
 
 export type PackTab = "to_post" | "held" | "posted";
 
 const requested = { deletedAt: null, packRequestedAt: { not: null } } satisfies Prisma.EngineerWhereInput;
 
 const TAB_WHERE: Record<PackTab, Prisma.EngineerWhereInput> = {
-  to_post: { ...requested, packShippedAt: null, gasSafeVerifiedAt: { not: null }, gasSafeRegisterCheckedAt: { not: null }, pausedAt: null, bannedAt: null },
+  to_post: { ...requested, packShippedAt: null, gasSafeVerifiedAt: { not: null }, gasSafeCardReadId: { not: null }, gasSafeRegisterCheckedAt: { not: null }, pausedAt: null, bannedAt: null },
   held: {
     ...requested,
     packShippedAt: null,
-    OR: [{ gasSafeVerifiedAt: null }, { gasSafeRegisterCheckedAt: null }, { pausedAt: { not: null } }, { bannedAt: { not: null } }],
+    OR: [{ gasSafeVerifiedAt: null }, { gasSafeCardReadId: null }, { gasSafeRegisterCheckedAt: null }, { pausedAt: { not: null } }, { bannedAt: { not: null } }],
   },
   posted: { ...requested, packShippedAt: { not: null } },
 };
 
 const ORDER: Record<PackTab, Prisma.EngineerOrderByWithRelationInput[]> = {
-  // Longest-checked first, so nobody waits behind newer badges.
   to_post: [{ gasSafeRegisterCheckedAt: "asc" }, { id: "asc" }],
   held: [{ packRequestedAt: "asc" }, { id: "asc" }],
   posted: [{ packShippedAt: "desc" }, { id: "asc" }],
@@ -54,6 +49,7 @@ const SELECT = {
   packAddress: true,
   packRequestedAt: true,
   packShippedAt: true,
+  packPrintedAt: true,
   gasSafeVerifiedAt: true,
   gasSafeRegisterCheckedAt: true,
   referralCode: true,
@@ -62,21 +58,34 @@ const SELECT = {
   businessType: true,
   companyNumber: true,
   town: true,
+  gasSafeCardUrl: true,
+  gasSafeRejectedAt: true,
+  gasSafeSuspendedAt: true,
+  gasSafeCardReadId: true,
 } satisfies Prisma.EngineerSelect;
 
 type Row = Prisma.EngineerGetPayload<{ select: typeof SELECT }>;
 
-function heldBecause(r: Row): "not_verified" | "register_check_due" | "paused" | "banned" | null {
+export type HeldBecause = "no_card" | "card_check" | "card_failed" | "suspended" | "register_check_due" | "paused" | "banned";
+
+function heldBecause(r: Row): HeldBecause | null {
   if (r.packShippedAt) return null;
   if (r.bannedAt) return "banned";
   if (r.pausedAt) return "paused";
-  if (!r.gasSafeVerifiedAt) return "not_verified";
+  if (!r.gasSafeVerifiedAt || !r.gasSafeCardReadId) {
+    if (r.gasSafeSuspendedAt && !r.gasSafeVerifiedAt) return "suspended";
+    if (r.gasSafeRejectedAt && !r.gasSafeVerifiedAt) return "card_failed";
+    return r.gasSafeCardUrl ? "card_check" : "no_card";
+  }
   if (!r.gasSafeRegisterCheckedAt) return "register_check_due";
   return null;
 }
 
-const HELD_MESSAGE: Record<NonNullable<ReturnType<typeof heldBecause>>, string> = {
-  not_verified: "This pack can't go out until the engineer is live.",
+const HELD_MESSAGE: Record<HeldBecause, string> = {
+  no_card: "This pack can't go out until the engineer is live: there's no photo of their Gas Safe ID card yet.",
+  card_check: "This pack can't go out until the engineer is live: their card check hasn't passed.",
+  card_failed: "This pack can't go out until the engineer is live: their card check failed.",
+  suspended: "This pack can't go out while the engineer is suspended.",
   register_check_due: "This pack can't go out until their register check has passed.",
   paused: "This pack can't go out while the engineer is paused or banned.",
   banned: "This pack can't go out while the engineer is paused or banned.",
@@ -122,10 +131,8 @@ function searchWhere(q: string | undefined): Prisma.EngineerWhereInput {
   return { OR: [{ firstName: contains }, { lastName: contains }, { tradingName: contains }, { legalName: contains }, { packAddress: contains }] };
 }
 
-/** Customers on a plan for the cover letter's two earnings lines (Matt, 4 Nov: Yearly_20 and Yearly_50). */
 export const LETTER_CUSTOMERS = [20, 50] as const;
 
-/** Each engineer's first live plan, as their plan list orders them: what the cover letter's earnings lines are worked out from. */
 async function firstPlans(engineerIds: string[]) {
   const tiers = engineerIds.length
     ? await prisma.planTier.findMany({
@@ -137,14 +144,12 @@ async function firstPlans(engineerIds: string[]) {
   const first = new Map<string, { name: string; pricePence: number; yearly20Pence: number; yearly50Pence: number }>();
   for (const t of tiers) {
     if (first.has(t.engineerId)) continue;
-    // The engineer's share (80%, TradeSura's fee rounded down: lib/stripe.ts) × 12 months × customers.
     const yearly = engineerYearlyPence(t.priceMonthlyPence);
     first.set(t.engineerId, { name: t.name, pricePence: t.priceMonthlyPence, yearly20Pence: yearly * LETTER_CUSTOMERS[0], yearly50Pence: yearly * LETTER_CUSTOMERS[1] });
   }
   return first;
 }
 
-/** Codes for the rows that haven't one yet (Matt, 4 Nov: the cover letter prints it). */
 async function codesFor(rows: Row[]) {
   const made = await ensureReferralCodes(rows.filter((r) => !r.referralCode).map((r) => r.id));
   return new Map(rows.map((r) => [r.id, r.referralCode ?? made.get(r.id)!]));
@@ -184,9 +189,7 @@ export async function listMemberPacks(q: { tab: PackTab; q?: string; page: numbe
       town: r.town,
       address: r.packAddress,
       addressCheck: checks.get(r.id) ?? "ok",
-      /** Pack_version on the cover letter: "Founding · top spot", "Founding" or "Standard". */
       version: foundingLabel(founding.get(r.id)),
-      // What Ali's mail-merge template prints: their page, first plan, referral code and the QR to tradesura.com/r/{code}.
       slug: r.slug,
       livePage: profileUrl(r.slug),
       firstPlan: plans.get(r.id) ?? null,
@@ -196,13 +199,13 @@ export async function listMemberPacks(q: { tab: PackTab; q?: string; page: numbe
       verifiedAt: iso(r.gasSafeVerifiedAt),
       registerCheckedAt: iso(r.gasSafeRegisterCheckedAt),
       postedAt: iso(r.packShippedAt),
+      printedAt: iso(r.packPrintedAt),
       heldBecause: heldBecause(r),
     })),
     page: q.page,
     size: q.size,
     total,
     counts: { to_post: toPost, held, posted },
-    // An address that can't print, or no live plan for the cover letter's lines.
     wontPrint: matching ? await firstPlans(matching.map((r) => r.id)).then((p) => matching.filter((r) => checks.get(r.id) !== "ok" || !p.has(r.id)).length) : null,
   };
 }
@@ -229,18 +232,37 @@ async function tellPacksPosted(engineerIds: string[]) {
   }
 }
 
-/** Why an address check stops a pack going to the printer (QA-21: Mark posted refuses it too). */
 const ADDRESS_MESSAGE: Record<Exclude<AddressCheck, "ok">, string> = {
   missing: "There's no postal address for this pack. Add one on their record first.",
   registered_office: "The pack address is the company's registered office. Confirm where post should go on their record first.",
   unchecked: "Companies House couldn't be asked about this address. Confirm where post should go on their record first.",
 };
 
-/** The ids among these whose pack address can't be printed, with why. */
+const NO_PLAN_MESSAGE = "There's no live plan for this pack's cover letter yet. It can go once one of their plans is live.";
+
 async function unprintable(engineerIds: string[]) {
   const rows = engineerIds.length ? await prisma.engineer.findMany({ where: { id: { in: engineerIds }, deletedAt: null }, select: SELECT }) : [];
-  const checks = await addressChecks(rows);
-  return new Map([...checks].filter(([, c]) => c !== "ok").map(([id, c]) => [id, ADDRESS_MESSAGE[c as Exclude<AddressCheck, "ok">]]));
+  const [checks, plans] = await Promise.all([addressChecks(rows), firstPlans(rows.map((r) => r.id))]);
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    const check = checks.get(r.id) ?? "ok";
+    if (check !== "ok") out.set(r.id, ADDRESS_MESSAGE[check as Exclude<AddressCheck, "ok">]);
+    else if (!plans.has(r.id)) out.set(r.id, NO_PLAN_MESSAGE);
+  }
+  return out;
+}
+
+/** 6.1: records the packs that went into a print file, so the next "Download all" leaves them out. */
+export async function markPacksPrinted(admin: AdminPrincipal, engineerIds: string[], batchRef: string) {
+  const now = new Date();
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.$queryRaw<{ id: string }[]>`
+      UPDATE "Engineer" SET "packPrintedAt" = ${now}, "updatedAt" = now()
+      WHERE id = ANY(${engineerIds}) AND "deletedAt" IS NULL AND "packRequestedAt" IS NOT NULL AND "packShippedAt" IS NULL
+      RETURNING id`;
+    await adminEvents(admin, "member_pack_printed", updated.map((u) => ({ engineerId: u.id, batchRef })), tx);
+    return { printed: updated.map((u) => u.id), printedAt: now.toISOString() };
+  });
 }
 
 /** Marks a pack as posted. Only one that may go out and hasn't yet: two admins can't both post it. */
@@ -254,7 +276,7 @@ export async function markPackPosted(admin: AdminPrincipal, engineerId: string) 
       if (!row) throw notFound("There's no engineer with that ID.");
       if (!row.packRequestedAt) throw conflict("This engineer hasn't asked for a member pack.");
       if (row.packShippedAt) throw conflict("This pack has already been marked as posted.");
-      throw conflict(heldBecause(row) ? HELD_MESSAGE[heldBecause(row)!] : (blocked ?? HELD_MESSAGE.not_verified));
+      throw conflict(heldBecause(row) ? HELD_MESSAGE[heldBecause(row)!] : (blocked ?? HELD_MESSAGE.card_check));
     }
     await adminEvent(admin, "member_pack_shipped", { engineerId }, tx);
   });
@@ -267,7 +289,7 @@ function notPostable(row: Row | undefined): string {
   if (!row) return "There's no engineer with that ID.";
   if (!row.packRequestedAt) return "This engineer hasn't asked for a member pack.";
   if (row.packShippedAt) return "This pack has already been marked as posted.";
-  return HELD_MESSAGE[heldBecause(row) ?? "not_verified"];
+  return HELD_MESSAGE[heldBecause(row) ?? "card_check"];
 }
 
 /**
@@ -283,7 +305,7 @@ export async function markPacksPosted(admin: AdminPrincipal, engineerIds: string
     const updated = await tx.$queryRaw<{ id: string }[]>`
       UPDATE "Engineer" SET "packShippedAt" = ${at}, "updatedAt" = now()
       WHERE id = ANY(${printable}) AND "deletedAt" IS NULL AND "packRequestedAt" IS NOT NULL AND "packShippedAt" IS NULL
-        AND "gasSafeVerifiedAt" IS NOT NULL AND "gasSafeRegisterCheckedAt" IS NOT NULL AND "pausedAt" IS NULL AND "bannedAt" IS NULL
+        AND "gasSafeVerifiedAt" IS NOT NULL AND "gasSafeCardReadId" IS NOT NULL AND "gasSafeRegisterCheckedAt" IS NOT NULL AND "pausedAt" IS NULL AND "bannedAt" IS NULL
       RETURNING id`;
     const posted = new Set(updated.map((u) => u.id));
     await adminEvents(admin, "member_pack_shipped", [...posted].map((engineerId) => ({ engineerId, ...(postedOn ? { postedOn } : {}) })), tx);
@@ -295,7 +317,6 @@ export async function markPacksPosted(admin: AdminPrincipal, engineerIds: string
       postedAt: at.toISOString(),
       skipped: others.map((id) => {
         const row = byId.get(id);
-        // Why it can't go at all comes first; an address that won't print, only for one that otherwise could.
         const postable = row && row.packRequestedAt && !row.packShippedAt && !heldBecause(row);
         return { id, reason: (postable && blocked.get(id)) || notPostable(row) };
       }),

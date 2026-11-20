@@ -35,7 +35,6 @@ export default function AddId() {
             check the card matches it. */}
         {me?.gasSafeNo && (
           <View className="mt-4 flex-row items-center justify-between rounded-2xl border border-line-strong px-4 py-3">
-            {/* Before sign-up asked for both, the one number given could be either. */}
             <Text className="text-[14px] text-muted">{/^\d{7}$/.test(me.gasSafeNo) ? "Licence number" : "Business registration number"}</Text>
             <Text className="tabular-nums text-[16px] font-semibold text-ink">{me.gasSafeNo}</Text>
           </View>
@@ -64,11 +63,8 @@ export default function AddId() {
                 setExpiryError(checked.error);
                 throw new Error(checked.error);
               }
-              await api("/api/settings/gas-safe-card", {
-                method: "POST",
-                body: JSON.stringify({ base64: photo.base64, mimeType: photo.mimeType, expiresOn: checked.iso }),
-              });
-              await refreshMe();
+              // Sent with the back, in one go (Muhammad's upload API).
+              setBack({ phase: "empty" });
             }}
           />
         </View>
@@ -82,10 +78,22 @@ export default function AddId() {
               onChange={setBack}
               side="back"
               upload={async (photo) => {
+                if (card.phase !== "added") throw new Error("Add the front of your card first.");
+                const checked = cardExpiryOf(expiry);
+                if ("error" in checked) {
+                  setExpiryError(checked.error);
+                  throw new Error(checked.error);
+                }
                 await api("/api/settings/gas-safe-card", {
                   method: "POST",
-                  body: JSON.stringify({ base64: photo.base64, mimeType: photo.mimeType, side: "back" }),
+                  body: JSON.stringify({
+                    base64: card.photo.base64,
+                    mimeType: card.photo.mimeType,
+                    expiresOn: checked.iso,
+                    back: { base64: photo.base64, mimeType: photo.mimeType },
+                  }),
                 });
+                await refreshMe();
               }}
             />
           </View>

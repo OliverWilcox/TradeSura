@@ -18,7 +18,6 @@ type Invitee = {
   ratePercent: number;
 };
 type Data = {
-  /** The short code printed on the cover letter (SMITH25); the link is tradesura.com/r/{code}. */
   code?: string;
   link: string;
   qrDataUrl: string;

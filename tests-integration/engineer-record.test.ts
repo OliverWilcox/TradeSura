@@ -10,7 +10,7 @@ import { saveAddresses } from "@/lib/addresses";
 import { applyAddressCopy, planAddressCopy } from "@/lib/admin/address-copy";
 import { deleteOwnerAccount } from "@/lib/delete-account";
 import { call, resetDb, SUPER_ADMIN, withPermissions } from "./helpers";
-import { makeCustomer, makeEngineer, makePlan } from "./factories";
+import { makeCustomer, makeEngineer, makePlan, readCard } from "./factories";
 
 // The client's revised engineer record (31 Oct): three addresses, contact and
 // source, Founding and activity, and the Gas Safe card.
@@ -192,7 +192,6 @@ describe("ER.3: Founding, the follow-up ladder and the cancel rate", () => {
     await prisma.topSpot.create({ data: { townSlug: "holmfirth", engineerId: lapsed.id, heldFrom: daysAgo(90), releasedAt: daysAgo(30), releaseReason: "no_customer" } });
     const spot = await prisma.topSpot.create({ data: { townSlug: "holmfirth", engineerId: newest.id, heldFrom: daysAgo(35) } });
     await prisma.event.create({ data: { name: "top_spot_reminder", actorType: "SYSTEM", meta: { spotId: spot.id, engineerId: newest.id, days: 30 } } });
-    // The lapsed engineer claimed their letter in time: still a Founding Member.
     await prisma.claimCode.create({ data: { code: "TS-11111", firstName: "Dave", businessName: "Lapsed", letterBatch: "B1", variantCell: "A", redeemedByEngineerId: lapsed.id, redeemedAt: daysAgo(91), claimedAt: daysAgo(91), createdAt: daysAgo(92) } });
 
     // The first engineer: an offer by text three days ago (delivered), an
@@ -216,7 +215,6 @@ describe("ER.3: Founding, the follow-up ladder and the cancel rate", () => {
     expect(a.offersLast7Days).toBe(1);
     expect(a.chase).toMatchObject({ countingFrom: "last_offer", days: 3, step: { step: 1, label: "Push" } });
     expect(c.chase).toMatchObject({ countingFrom: "live", lastDeliveredOfferAt: null, days: 40, step: { step: 4, label: "Call list" } });
-    // 50% is the average here, and 2 customers is under the 10 the flag needs.
     expect(a.cancelRate).toMatchObject({ cancelled: 1, live: 1, percent: 50, windowDays: 90, averagePercent: 50, flagged: false });
 
     const versions = Object.fromEntries((await call(packs)).body.items.map((i: { id: string; version: unknown }) => [i.id, i.version]));
@@ -232,7 +230,6 @@ describe("ER.3: Founding, the follow-up ladder and the cancel rate", () => {
     for (let i = 0; i < 7; i++) await makePlan(leaky.id, (await makeCustomer(leaky.id)).id);
     for (let i = 0; i < 3; i++) await makePlan(leaky.id, (await makeCustomer(leaky.id)).id, { status: "CANCELLED", activatedAt: daysAgo(60), cancelledAt: daysAgo(5) });
     const rate = async (id: string) => (await call(detail, { params: { engineerId: id } })).body.cancelRate;
-    // 4 of 29 overall (13.8%); leaky is 3 of 10 (30%), more than double.
     expect(await rate(leaky.id)).toMatchObject({ percent: 30, averagePercent: 13.8, flagged: true });
     expect(await rate(steady.id)).toMatchObject({ percent: 5.3, flagged: false });
   });
@@ -258,14 +255,25 @@ describe("ER.4: the Gas Safe card", () => {
       qualificationConfirmations: { GAS_FIRE_SERVICE: "2026-06-02" },
     });
     const r = (await call(detail, { params: { engineerId: e.id } })).body;
-    expect(r.gasSafe).toEqual({
+    expect(r.gasSafe).toMatchObject({
       licenceNo: "1234567",
       registrationNo: "584123",
-      categories: "Domestic natural gas",
+      categories: null,
+      categoriesPublic: true,
       cardOnFile: true,
+      backOnFile: false,
       cardExpiresOn: "2027-01-31",
       qualifications: [{ code: "GAS_FIRE_SERVICE", title: expect.any(String), confirmedAt: "2026-06-02" }],
       nextRegisterCheck: "2027-02-14",
     });
+    expect(r.gasSafe.read).toMatchObject({ licenceNo: "1234567", registrationNo: "584123", source: "automatic" });
+    expect(JSON.stringify(r)).not.toContain("Domestic natural gas");
+  });
+
+  it("shows gas categories only as read from the back of the card", async () => {
+    const e = await makeEngineer({ gasSafeCardUrl: "https://x.public.blob.vercel-storage.com/card.png", gasSafeCardBackUrl: "https://x.public.blob.vercel-storage.com/back.png", gasSafeVerifiedAt: new Date() }, { cardRead: false });
+    await readCard(e.id, { backUrl: "https://x.public.blob.vercel-storage.com/back.png", categories: ["Boilers", "Gas fires"] });
+    const r = (await call(detail, { params: { engineerId: e.id } })).body;
+    expect(r.gasSafe).toMatchObject({ categories: ["Boilers", "Gas fires"], categoriesPublic: false, backOnFile: true });
   });
 });

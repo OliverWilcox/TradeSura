@@ -1,13 +1,16 @@
 import type { ReasonContent } from "@/lib/visit-reasons";
+import { VisitGraphic } from "@/components/visit-graphic";
 
 // 30 Oct update §6 — the top of the customer's page when the installer
 // hands over the phone: written for why they were there (Matt's admin
 // content, lib/visit-reasons.ts). The page's own header (engineer, badges,
-// "not a call centre") sits above it; its plans follow.
 export function VisitReasonIntro({ content }: { content: ReasonContent }) {
   return (
     <section className="bg-paper border border-line rounded-xl p-4" data-visit-reason={content.reason} data-variant={content.variant}>
-      <h2 className="font-sans font-semibold text-lg leading-snug">{content.headline}</h2>
+      <div className="flex items-center gap-3">
+        <VisitGraphic graphicKey={content.graphicKey} />
+        <h2 className="font-sans font-semibold text-lg leading-snug">{content.headline}</h2>
+      </div>
       {content.worries.length > 0 && (
         <ul className="mt-3 space-y-1.5">
           {content.worries.map((w) => (

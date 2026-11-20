@@ -39,7 +39,7 @@ export function verifiedEmail(v: VerifiedEmailInput): { subject: string; html: s
   const open = (to: string) => `${appUrl()}/api/open?to=${to}`;
   const link = (href: string, label: string) => `<a href="${href}" style="color:${EMAIL.link};font-weight:700;">${label}</a>`;
   const name = v.firstName?.trim();
-  const title = name ? `You're verified, ${name}!` : "You're verified!";
+  const title = name ? `You're live, ${name}!` : "You're live!";
   const p = (html: string, extra = "") =>
     `<p style="margin:0;font-size:15px;line-height:22px;color:${EMAIL.body};${extra}">${html}</p>`;
 
@@ -72,9 +72,9 @@ export function verifiedEmail(v: VerifiedEmailInput): { subject: string; html: s
   const rows = `
   <tr><td align="center" style="padding:28px 32px 4px;">
     <img src="${emailAssetBase()}/brand/verified-member-badge.png" width="96" height="96" alt="TradeSura Verified Member" style="display:block;border:0;">
-    <div style="margin-top:14px;font-size:11px;letter-spacing:1.4px;font-weight:700;color:${EMAIL.money};">GAS SAFE CHECK PASSED</div>
+    <div style="margin-top:14px;font-size:11px;letter-spacing:1.4px;font-weight:700;color:${EMAIL.money};">GAS SAFE CARD CHECKED</div>
     <div style="margin-top:6px;font-size:24px;line-height:30px;font-weight:700;color:${EMAIL.ink};">${escapeHtml(title)}</div>
-    ${p("Your Gas Safe card is checked, so you can send plan offers now. Your <b>Verified Member</b> badge goes on your page and every plan you send once we've confirmed you on the Gas Safe Register, usually the same day.", "margin-top:10px;")}
+    ${p("Your account is live: you can send plans from today. Your <b>Verified Member</b> badge goes on your page and every plan you send once we've checked you on the Gas Safe Register.", "margin-top:10px;")}
   </td></tr>
   ${founding ? `<tr><td style="padding:18px 32px 4px;"><div style="background:${EMAIL.navy};border-radius:12px;padding:16px 18px;font-size:14px;line-height:21px;color:#ffffff;">${founding.replace("<b>FOUNDING", '<b style="font-size:11px;letter-spacing:1.2px;color:#3DD68C;">FOUNDING')}${foundingTag}</div></td></tr>` : ""}
   <tr><td align="center" style="padding:20px 32px 10px;">${p("The fastest way to your first customer: <b>you're already sat on them.</b>")}</td></tr>
@@ -92,7 +92,7 @@ export function verifiedEmail(v: VerifiedEmailInput): { subject: string; html: s
   </div></td></tr>`;
 
   const footerExtra = `You're getting this because you have a TradeSura engineer account. <a href="${appUrl()}/privacy" style="color:${EMAIL.muted};">Privacy policy</a><br>`;
-  return { subject: title, html: emailShell({ title, preheader: "Your Gas Safe card is checked: you can send plan offers now.", rows, footerExtra }) };
+  return { subject: title, html: emailShell({ title, preheader: "Your account is live: send your first plans today.", rows, footerExtra }) };
 }
 
 /**

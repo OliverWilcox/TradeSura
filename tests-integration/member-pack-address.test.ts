@@ -55,7 +55,6 @@ it("counts the packs matching the search that won't print, past the page, only w
 
   const asked = await call(list, { query: { count: "wont_print", q: "Holme", size: "1" } });
   expect(asked.body).toMatchObject({ total: 3, wontPrint: 2 });
-  // No live plan for the cover letter's lines: that won't print either (Matt, 4 Nov).
   await prisma.planTier.update({ where: { id: plan.id }, data: { status: "STOPPED" } });
   expect((await call(list, { query: { count: "wont_print", q: "Holme" } })).body.wontPrint).toBe(3);
   await prisma.planTier.update({ where: { id: plan.id }, data: { status: "LIVE" } });

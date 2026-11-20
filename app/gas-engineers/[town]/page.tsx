@@ -7,6 +7,8 @@ import { ratingSummary } from "@/lib/ratings";
 import { isWebsitePartner, loadTown, markTownPublished } from "@/lib/town";
 import { foundingMemberIds, rankingFacts, syncTownSpots, topSpotHolders, townPageOrder } from "@/lib/founding";
 import { townPageUrl } from "@/lib/public-url";
+import { showsVerifiedBadge } from "@/lib/public-badge";
+import { VerifiedMemberBadge } from "@/components/verified-badge";
 import { RingMark } from "@/components/ring-mark";
 import { PartnerBadge, RatingLine, RecruitBanner } from "@/components/engineer-profile";
 import { FoundingBadge } from "@/components/founding-badge";
@@ -29,9 +31,10 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const name = townName(page, engineers, town);
   const from = Math.min(...engineers.flatMap((e) => e.tiers.map((t) => t.priceMonthlyPence)));
   const n = engineers.length;
+  const verified = engineers.filter(showsVerifiedBadge).length;
   return {
     title: { absolute: `Gas engineers in ${name} | TradeSura` },
-    description: `${n} Gas Safe verified gas engineer${n === 1 ? "" : "s"} in ${name} on TradeSura. Boiler care plans from ${pounds(from)} a month, ratings from verified customers.`,
+    description: `${n} gas engineer${n === 1 ? "" : "s"} in ${name} on TradeSura${verified ? `, ${verified} Gas Safe verified` : ""}. Boiler care plans from ${pounds(from)} a month, ratings from verified customers.`,
     alternates: { canonical: townPageUrl(town) },
   };
 }
@@ -67,6 +70,7 @@ export default async function TownPage({ params }: Params) {
           area: e.serviceArea?.trim() || null,
           partner: isWebsitePartner(e),
           founding: founding.has(e.id),
+          verified: showsVerifiedBadge(e),
           rating,
           topSpotFrom: holders.get(e.id) ?? null,
           payingCustomers: f?.payingCustomers ?? 0,
@@ -84,6 +88,7 @@ export default async function TownPage({ params }: Params) {
   const typical = allPrices[Math.floor((allPrices.length - 1) / 2)];
   const ratingCount = rows.reduce((n, r) => n + r.ratingCount, 0);
   const n = rows.length;
+  const verified = rows.filter((r) => r.verified).length;
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -113,7 +118,7 @@ export default async function TownPage({ params }: Params) {
         <div>
           <h1 className="font-sans font-bold text-xl">Gas engineers in {name}</h1>
           <p className="text-sm text-muted mt-1">
-            {n} Gas Safe verified engineer{n === 1 ? "" : "s"} on TradeSura · care plans from{" "}
+            {n} gas engineer{n === 1 ? "" : "s"} on TradeSura{verified ? ` · ${verified} Gas Safe verified` : ""} · care plans from{" "}
             <b className="text-ink">{pounds(from)}</b> a month
           </p>
           <a href="#ordering" className="mt-1 inline-block text-[12px] text-flame underline">
@@ -130,6 +135,7 @@ export default async function TownPage({ params }: Params) {
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-[15px]">{r.name}</span>
+                  {r.verified && <VerifiedMemberBadge />}
                   {r.founding && <FoundingBadge />}
                   {r.partner && <PartnerBadge />}
                 </div>
@@ -152,7 +158,8 @@ export default async function TownPage({ params }: Params) {
             cooling-off period and no minimum term.
             {ratingCount > 0 &&
               ` Engineers in ${name} have ${ratingCount} rating${ratingCount === 1 ? "" : "s"} from verified TradeSura customers.`}{" "}
-            Every engineer listed is on the Gas Safe Register, checked by us.
+            We check every engineer&apos;s Gas Safe ID card before they&apos;re listed here. The Verified Member
+            badge shows once we&apos;ve also checked them on the Gas Safe Register.
           </p>
         </div>
 

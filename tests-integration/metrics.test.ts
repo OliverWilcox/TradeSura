@@ -53,7 +53,7 @@ describe("the client's dashboard", () => {
     // 2.3: a cohort, in the spec's order, each step inside the one before.
     expect(steps(funnel.body)).toEqual([
       ["Signed up", 4],
-      ["Gone live", 3],
+      ["Card check passed", 3],
       ["First plan live", 3],
       ["Payments set up", 2],
       ["First payment", 1],
@@ -62,7 +62,7 @@ describe("the client's dashboard", () => {
 
     // 2.4: the cards are the funnel's first steps; deleted, staff and test accounts count nowhere.
     expect(stats.body.signups).toBe(funnel.body[0].count);
-    expect(stats.body.verified).toEqual({ ofSignups: funnel.body[1].count, total: 3 });
+    expect(stats.body.live).toEqual({ atEnd: 3, wentLive: funnel.body[1].count });
     expect(signups.body.byDay.reduce((n: number, d: { count: number }) => n + d.count, 0)).toBe(4);
 
     // 2.1 and 5.6: £12 collected is the first payment; the £0 trial invoices aren't payments.
@@ -74,7 +74,7 @@ describe("the client's dashboard", () => {
     expect(computeApplicationFeePence(1200)).toBe(240);
 
     // 2 plans live, 2 customers; 2.2: one engineer sent a delivered offer in the last 7 days.
-    expect(stats.body).toMatchObject({ plansLive: 2, customers: 2, active: 1, activeWindowDays: 7 });
+    expect(stats.body).toMatchObject({ plansLive: 2, customers: 2, active: 1 });
 
     // 2.5: the WhatsApp offer that never went isn't in the headline.
     expect(stats.body.offers).toEqual({ delivered: 2, failed: 0, unconfirmed: 1 });
@@ -192,7 +192,6 @@ describe("an offer's delivery and a customer's status", () => {
 
 describe("the client's lists", () => {
   it("agree with the dashboard on customers, payments and who's active", async () => {
-    // The fixture is the client's data on 31 October 2026: "the last 7 days" is counted from then.
     vi.useFakeTimers({ now: new Date("2026-10-31T12:00:00Z"), toFake: ["Date"] });
     onTestFinished(() => {
       vi.useRealTimers();
@@ -210,10 +209,10 @@ describe("the client's lists", () => {
     // Customers on plan (2) and plans live (2) are Oliver and Sam.
     expect(customers.filter((c: { status: string }) => ["active", "dd_started"].includes(c.status))).toHaveLength(2);
 
-    // 2.2: only 302 MD LTD sent a delivered offer in the last 7 days.
     const engineers = (await call(engineersRoute, { query: { size: "50" } })).body.items;
-    const active = engineers.filter((e: { status: string }) => e.status === "active").map((e: { id: string }) => e.id);
+    const active = engineers.filter((e: { active: boolean }) => e.active).map((e: { id: string }) => e.id);
     expect(active).toEqual([f.md.id]);
+    expect(engineers.filter((e: { status: string; isTest: boolean; ownerId?: string }) => e.status === "live" && !e.isTest).length).toBeGreaterThanOrEqual(3);
     // Test data is listed, labelled.
     expect(engineers.filter((e: { isTest: boolean }) => e.isTest).map((e: { id: string }) => e.id).sort()).toEqual(f.testers.map((t) => t.id).sort());
 
@@ -243,7 +242,6 @@ describe("a customer's record", () => {
     expect(sam.firstPaymentAt).toBeNull();
     const oliver = (await call(customerRoute, { params: { customerId: f.oliver.id } })).body;
     expect(oliver.payments.map((p: { amountPence: number }) => p.amountPence)).toEqual([1200]);
-    // Added at the door, but joined from the engineer's offer link (Matt, 4 Nov: Matthew Wood).
     expect(oliver).toMatchObject({ status: "active", source: "offer_link", firstPaymentAt: "2026-10-29T09:00:00.000Z" });
   });
 
@@ -261,7 +259,6 @@ describe("a customer's record", () => {
     await prisma.cancelRequest.create({ data: { planId: f.oliverPlan.id, engineerId: f.md.id, reason: "too_expensive", offer: "cheaper_plan", outcome: "cancelled", createdAt: new Date("2026-10-29T12:00:00Z") } });
     const items = (await call(customerActivityRoute, { params: { customerId: f.oliver.id } })).body.items;
     // The payment is the invoice (the £0 trial left out); "plan started" comes from the plan.
-    // The engineer is alerted the moment a customer starts to cancel (Matt, 4 Nov).
     expect(items.map((i: { name: string }) => i.name)).toEqual(["plan_cancelled", "engineer_alerted", "cancel_requested", "payment_confirmed", "mandate_active", "plan_live", "signup_opened", "offer_sent"]);
     expect(items[2].detail).toMatchObject({ reason: "too_expensive", offer: "cheaper_plan", outcome: "cancelled" });
     expect(items[3]).toMatchObject({ id: "invoice:in_oliver_1", detail: { amountPence: 1200 } });

@@ -15,8 +15,8 @@ const MAX_DAYS = 400;
 const EARLIEST = new Date("2000-01-01T00:00:00Z");
 const LATEST = new Date("2100-01-01T00:00:00Z");
 
-export function parseRange(req: Request) {
-  const q = parseQuery(req, RangeQuery);
+export function parseRange(req: Request, extra: z.ZodRawShape = {}) {
+  const q = parseQuery(req, RangeQuery.extend(extra)) as z.output<typeof RangeQuery>;
   const from = new Date(q.from);
   const to = new Date(q.to);
   if (from < EARLIEST || to > LATEST) {

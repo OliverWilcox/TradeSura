@@ -43,7 +43,6 @@ export function foundingDeadlineFrom(setting: string | null | undefined, codesLo
   return (setting && endOfUkDay(setting.trim())) || new Date(codesLoadedAt.getTime() + DEFAULT_FOUNDING_WINDOW_DAYS * DAY);
 }
 
-/** The code's own reservation date (printed on its letter), else the batch's letter date, else the default window. */
 export async function foundingDeadline(code: { letterBatch: string; createdAt: Date; reservedUntil?: Date | null }): Promise<Date> {
   const own = code.reservedUntil && endOfUkDay(code.reservedUntil.toISOString().slice(0, 10));
   if (own) return own;
@@ -289,7 +288,6 @@ async function emailTo(engineerId: string) {
   return prisma.engineer.findUnique({ where: { id: engineerId }, select: { email: true, deletedAt: true } });
 }
 
-/** Tells an engineer they hold a top spot, and the date they need a customer by. */
 export async function tellAwarded(engineerId: string, town: string, endsAt: Date) {
   const line = `You've got a top spot in ${town}: your business now sits at the top of the ${town} page. Sign your first customer by ${longUkDate(endsAt)} to keep it.`;
   await sendPushNotification(engineerId, `Top spot in ${town}`, line, { url: "/" }).catch(() => {});

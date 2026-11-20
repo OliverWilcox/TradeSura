@@ -38,7 +38,7 @@ const VALUE_PROPS = [
   },
   {
     title: "Gas Safe verified, on every plan",
-    body: "Your registration is checked once and shown to every customer before they sign up.",
+    body: "We check your Gas Safe card and the Gas Safe Register, then show your Verified Member badge to every customer before they sign up.",
   },
   {
     title: "Plan wording you don't have to think about",

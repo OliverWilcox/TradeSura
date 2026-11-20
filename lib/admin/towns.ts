@@ -22,33 +22,20 @@ import { ratingSummary } from "@/lib/ratings";
 import { LISTED_ENGINEER_WHERE } from "@/lib/town";
 import { DEFAULT_FOUNDING_FIRST_MINUTES, FOUNDING_FIRST_MINUTES_KEY, foundingFirstMinutesFrom } from "@/lib/town-leads";
 
-// Founding Members and town pages for the admin API (Matt, 4 Nov, section
-// 3.2). The rules are the app's own (lib/founding.ts): the badge, the top 3
-// per town, the 60-day clock and its reminders, the town page order. This
-// shows them per town (each spot taken, live or released), lets an admin
-// override them with a reason, and sets how long Founding Members get first
-// pick of a town page's homeowner requests (lib/town-leads.ts).
-
 export const TOWN_RULES = { spotsPerTown: TOP_SPOTS_PER_TOWN, spotDays: TOP_SPOT_DAYS, reminderDays: [...TOP_SPOT_REMINDER_DAYS] };
 
-/** Public: on the web. Held: an admin is holding it back. Not public: no engineer listed there yet. */
 export type TownPageState = "public" | "held" | "not_public";
 
 export type TownSummary = {
   slug: string;
   name: string;
   page: TownPageState;
-  /** The town's top spots (TOP_SPOTS_PER_TOWN). */
   spots: number;
-  /** Held now. */
   taken: number;
-  /** Held spots showing on the public town page. */
   live: number;
   released: number;
-  /** Complete Founding Members who'd get the next free spot, in order. */
   nextInLine: number;
   foundingMembers: number;
-  /** Engineers the town page lists. */
   listed: number;
 };
 
@@ -58,7 +45,6 @@ const pageState = (heldAt: Date | null | undefined, listed: number): TownPageSta
 const named = (e: { id: string; tradingName: string | null; legalName: string | null; slug: string }) => ({ id: e.id, name: brandName(e) });
 const NAME_SELECT = { id: true, tradingName: true, legalName: true, slug: true } as const;
 
-/** Every town with a page, an engineer or a spot, A–Z, with its spots and who's waiting for one. */
 export async function listTowns(q: { q?: string; page: number; size: number }): Promise<Page<TownSummary>> {
   const [pages, engineers, listed, spots] = await Promise.all([
     prisma.townPage.findMany({ select: { slug: true, name: true, heldAt: true } }),
@@ -121,12 +107,9 @@ export type TownDetail = {
     heldFrom: string;
     endsAt: string;
     daysLeft: number;
-    /** Signed a customer: the spot is theirs to keep. */
     customerSigned: boolean;
     remindersSent: number[];
-    /** On the public town page now. */
     live: boolean;
-    /** Given by an admin rather than in turn. */
     given: { by: string | null; reason: string | null } | null;
   }[];
   released: {
@@ -134,27 +117,23 @@ export type TownDetail = {
     engineer: Person;
     heldFrom: string;
     releasedAt: string;
-    /** no_customer | left_town | account_closed | admin */
     reason: string | null;
     by: string | null;
     note: string | null;
   }[];
   nextInLine: (Person & { completedAt: string })[];
-  /** The town page as it's ordered (lib/founding.ts townPageOrder), with what each place rests on. */
   order: (Person & {
     position: number;
     group: "top_spot" | "most_active" | "reviews";
     payingCustomers: number;
     reviews: { count: number; average: number | null; lastAt: string | null };
   })[];
-  /** Who an admin can give a spot to: in this town, trading, not holding one. Next in line first. The owner tells apart businesses with the same name. */
   eligible: (Person & { owner: string | null; founding: boolean; nextInLine: boolean })[];
   leadWindowMinutes: number;
 };
 
 type SpotEvent = { by: string | null; note: string | null };
 
-/** What admins said when they gave or released spots, by spot. */
 async function adminSpotNotes(names: string[], spotIds: string[]): Promise<Map<string, SpotEvent>> {
   if (!spotIds.length) return new Map();
   const rows = await prisma.event.findMany({
@@ -278,8 +257,6 @@ export async function townDetail(slug: string, now = new Date()): Promise<TownDe
   };
 }
 
-// ---------- the manual override ----------
-
 const lockTown = (tx: Prisma.TransactionClient, slug: string) => tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`top_spots:${slug}`}))`;
 
 async function townName(slug: string): Promise<string> {
@@ -287,7 +264,6 @@ async function townName(slug: string): Promise<string> {
   return p?.name ?? titleCase(slug);
 }
 
-/** Gives a free spot in this town to an engineer who works here and holds none, recorded as the app records an award. */
 async function giveIn(tx: Prisma.TransactionClient, admin: AdminPrincipal, slug: string, engineerId: string, note: string, now: Date) {
   const e = await tx.engineer.findFirst({
     where: { id: engineerId, townSlug: slug, ...OWNERS_HERE, bannedAt: null, leftAt: null },
@@ -303,7 +279,6 @@ async function giveIn(tx: Prisma.TransactionClient, admin: AdminPrincipal, slug:
   return { spotId: spot.id, engineer: named(e) };
 }
 
-/** Gives a free spot to someone in particular. Its 60-day clock starts now, as any spot's does. */
 export async function giveSpot(admin: AdminPrincipal, slug: string, input: { engineerId: string; reason: string }, now = new Date()) {
   const given = await prisma.$transaction(async (tx) => {
     await lockTown(tx, slug);
@@ -313,12 +288,6 @@ export async function giveSpot(admin: AdminPrincipal, slug: string, input: { eng
   return { spotId: given.spotId, givenTo: given.engineer };
 }
 
-/**
- * Releases a spot before its time. It passes to the next in line, as when
- * the app releases one, or straight to someone the admin chose. Released by
- * an admin, they don't get it back in turn (the app never re-awards a town's
- * spot to someone who held one there).
- */
 export async function releaseSpot(admin: AdminPrincipal, slug: string, spotId: string, input: { reason: string; to: string | null }, now = new Date()) {
   const done = await prisma.$transaction(async (tx) => {
     await lockTown(tx, slug);
@@ -335,7 +304,6 @@ export async function releaseSpot(admin: AdminPrincipal, slug: string, spotId: s
   if (done.given) {
     await tellAwarded(done.given.engineer.id, await townName(slug), spotEndsAt(now)).catch((err) => console.error("[admin-towns] award message failed:", err));
   } else {
-    // As the app does after any release: the next in line gets it, and is told.
     const plan = await syncTownSpots(slug, now);
     const next = plan.award[0];
     if (next) givenTo = named(await prisma.engineer.findUniqueOrThrow({ where: { id: next }, select: NAME_SELECT }));
@@ -343,14 +311,11 @@ export async function releaseSpot(admin: AdminPrincipal, slug: string, spotId: s
   return { released: done.released, givenTo };
 }
 
-// ---------- first pick of homeowner requests ----------
-
 export async function leadWindowMinutes(): Promise<number> {
   const row = await prisma.appSetting.findUnique({ where: { key: FOUNDING_FIRST_MINUTES_KEY } });
   return foundingFirstMinutesFrom(row?.value);
 }
 
-/** How long a town's Founding Members see a town page request before everyone else. New requests only. */
 export async function setLeadWindow(admin: AdminPrincipal, minutes: number) {
   return prisma.$transaction(async (tx) => {
     const row = await tx.appSetting.findUnique({ where: { key: FOUNDING_FIRST_MINUTES_KEY } });

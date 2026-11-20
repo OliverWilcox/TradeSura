@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { addMonths, passportBoiler } from "@/lib/passport";
 import { requestRating } from "@/lib/ratings";
-import { inviteCustomerAfterFirstService } from "@/lib/trustpilot";
+import { inviteCustomerAfterFirstService } from "@/lib/trustpilot-customers";
 import { isOwnPhotoUrl, livePlanId, passportAccess } from "../access";
 
 const Body = z.object({

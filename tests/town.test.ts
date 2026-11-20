@@ -45,13 +45,14 @@ describe("town slug derivation", () => {
 describe("town publish rule", () => {
   const real: TownEngineer = {
     gasSafeVerifiedAt: new Date(),
+    gasSafeCardReadId: "read1",
     gasSafeRegisterCheckedAt: new Date(),
-    gasSafeSuspendedAt: null,
     companyRoleFlaggedAt: null,
     profilePublishedAt: new Date(),
     liveTiers: 1,
     leftAt: null,
     bannedAt: null,
+    pausedAt: null,
     deletedAt: null,
     ownerId: null,
   };
@@ -65,7 +66,7 @@ describe("town publish rule", () => {
 
   it("waits for the Gas Safe Register check, like the public badge (Matt, 13 Nov)", () => {
     expect(listedOnTownPage({ ...real, gasSafeRegisterCheckedAt: null })).toBe(false);
-    expect(listedOnTownPage({ ...real, gasSafeSuspendedAt: new Date() })).toBe(false);
+    expect(listedOnTownPage({ ...real, gasSafeCardReadId: null })).toBe(false);
     // Matt 16 Nov — flagged by the impersonation check.
     expect(listedOnTownPage({ ...real, companyRoleFlaggedAt: new Date() })).toBe(false);
   });

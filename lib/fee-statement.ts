@@ -84,20 +84,17 @@ export async function buildStatement(engineerId: string, month: string, now = ne
     const amount = meta.amountPence ?? 0;
     if (e.name === "payment_confirmed") {
       lines.push({ date: ukDate(e.ts), customer, planRef: plan.ref, collectedPence: amount, feePence: computeApplicationFeePence(amount) });
-    } else if (meta.feeKept) {
-      // Matt, 13 Nov: yearly refunds come out of the engineer's share and
-      // our 20% is kept, so none of the fee comes back.
-      refunds.push({ date: ukDate(e.ts), customer, planRef: plan.ref, refundedPence: amount, feeRefundedPence: 0 });
     } else {
-      // Refunds from before 13 Nov returned our fee in proportion
-      // (refund_application_fee), from the yearly collection it was part of.
+      // Refunds made before terms 8.4.3 gave back our fee in proportion
+      // (refund_application_fee), so the share comes from the yearly
+      // collection this refund is part of; later ones keep it (feeKept).
       const charge = await prisma.event.findFirst({
         where: { name: "payment_confirmed", ts: { lt: e.ts }, meta: { path: ["planId"], equals: plan.id } },
         orderBy: { ts: "desc" },
         select: { meta: true },
       });
       const chargePence = (charge?.meta as { amountPence?: number } | null)?.amountPence ?? 0;
-      const feeRefundedPence = chargePence > 0 ? Math.round((computeApplicationFeePence(chargePence) * amount) / chargePence) : 0;
+      const feeRefundedPence = meta.feeKept ? 0 : chargePence > 0 ? Math.round((computeApplicationFeePence(chargePence) * amount) / chargePence) : 0;
       refunds.push({ date: ukDate(e.ts), customer, planRef: plan.ref, refundedPence: amount, feeRefundedPence });
     }
   }
@@ -126,7 +123,7 @@ export function statementHtml(s: Statement): string {
   const refunds = s.refunds.length
     ? `<h2>Refunds</h2><table><thead><tr><th>Date</th><th>Customer</th><th>Plan</th><th style="text-align:right">Refunded</th><th style="text-align:right">Fee refunded</th></tr></thead><tbody>${s.refunds
         .map((r) => row([escapeHtml(r.date), escapeHtml(r.customer), escapeHtml(r.planRef), gbp(r.refundedPence), gbp(r.feeRefundedPence)]))
-        .join("")}</tbody></table><p style="color:#5B6B82;font-size:13px;">A yearly customer who cancels gets back the whole months they haven't used. That refund comes out of your share, and TradeSura's 20% isn't refunded.</p>`
+        .join("")}</tbody></table>`
     : "";
   const t = s.totals;
   return `<!doctype html>

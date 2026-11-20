@@ -6,7 +6,6 @@
 // send it twice. The badge-live email goes out when the Gas Safe check is
 // approved.
 import { prisma } from "@/lib/db";
-import { inviteEngineerAfterFirstPayout } from "@/lib/trustpilot";
 import { appUrl } from "@/lib/app-url";
 import { sendEmail } from "@/lib/email";
 import { EMAIL, SUPPORT_EMAIL, emailButton, emailShell, escapeHtml } from "@/lib/email-layout";
@@ -29,16 +28,16 @@ function wholePounds(pence: number): string {
   return `£${Math.floor(pence / 100).toLocaleString("en-GB")}`;
 }
 
-function accountEmail(opts: {
+export function accountEmail(opts: {
   firstName: string | null;
   title: string;
   preheader: string;
   paragraphs: string[];
-  button: { to: string; label: string };
+  button: { to: string; label: string } | { href: string; label: string };
   /** Extra rows under the button (the happy-moment asks). */
   after?: string;
 }) {
-  const open = `${appUrl()}/api/open?to=${opts.button.to}`;
+  const open = "href" in opts.button ? opts.button.href : `${appUrl()}/api/open?to=${opts.button.to}`;
   const body = opts.paragraphs
     .map((p) => `<p style="margin:0 0 14px;font-size:15px;line-height:22px;color:${EMAIL.body};">${p}</p>`)
     .join("");
@@ -267,8 +266,6 @@ export async function sendPayoutEmail(engineerId: string, payoutId: string, amou
   if (!e.firstPayoutEmailAt) {
     await sendFirstPayoutEmail(engineerId, amountPence);
     await track("payout_email_sent", { type: "SYSTEM" }, { engineerId, payoutId, first: true });
-    // Matt, 12 Nov — Trustpilot invite after the first Friday payout.
-    await inviteEngineerAfterFirstPayout(engineerId);
     return;
   }
   const seen = await prisma.event.findFirst({

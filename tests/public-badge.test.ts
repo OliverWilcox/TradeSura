@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { showsVerifiedBadge } from "@/lib/public-badge";
 
-const checked = { gasSafeVerifiedAt: new Date(), gasSafeRegisterCheckedAt: new Date(), gasSafeSuspendedAt: null, pausedAt: null, bannedAt: null, companyRoleFlaggedAt: null };
+const checked = { gasSafeVerifiedAt: new Date(), gasSafeCardReadId: "read1", gasSafeRegisterCheckedAt: new Date(), pausedAt: null, bannedAt: null, companyRoleFlaggedAt: null };
 
 describe("the public Verified Member badge", () => {
   it("shows once the card check and the register check have both passed", () => {
@@ -12,9 +12,12 @@ describe("the public Verified Member badge", () => {
   it("waits while only the card check has passed", () => {
     expect(showsVerifiedBadge({ ...checked, gasSafeRegisterCheckedAt: null })).toBe(false);
   });
+  it("needs a read card (Muhammad's card check)", () => {
+    expect(showsVerifiedBadge({ ...checked, gasSafeCardReadId: null })).toBe(false);
+  });
   it("comes down when suspended, paused or banned", () => {
-    expect(showsVerifiedBadge({ ...checked, gasSafeVerifiedAt: null, gasSafeSuspendedAt: new Date() })).toBe(false);
-    expect(showsVerifiedBadge({ ...checked, gasSafeSuspendedAt: new Date() })).toBe(false);
+    // A suspension clears gasSafeVerifiedAt.
+    expect(showsVerifiedBadge({ ...checked, gasSafeVerifiedAt: null })).toBe(false);
     expect(showsVerifiedBadge({ ...checked, pausedAt: new Date() })).toBe(false);
     expect(showsVerifiedBadge({ ...checked, bannedAt: new Date() })).toBe(false);
   });

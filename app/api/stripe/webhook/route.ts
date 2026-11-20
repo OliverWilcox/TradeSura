@@ -97,6 +97,7 @@ async function handleEvent(event: Stripe.Event) {
           stripeDetailsSubmitted: s.detailsSubmitted,
           stripeChargesEnabled: s.chargesEnabled,
           stripePayoutsEnabled: s.payoutsEnabled,
+          stripeRequirementsDeadline: s.deadlineAt ?? null,
         },
       });
       if (s.chargesEnabled && !engineer.stripeChargesEnabled) {

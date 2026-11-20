@@ -8,7 +8,8 @@ import { adminEvent } from "@/lib/admin-api/audit";
 import { bounded, likeTerm } from "@/lib/admin-api/db";
 import { conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
-import { checksOf, dateOnly, gasSafeNumbers, nextRegisterCheck, personName, qualificationsOf, verificationStatus } from "@/lib/admin/verifications";
+import { badgeOf, cardCheckPassed, checksOf, dateOnly, gasSafeNumbers, nextRegisterCheck, personName, qualificationsOf, verificationStatus, type CheckStage } from "@/lib/admin/verifications";
+import { currentReads, detailsOf } from "@/lib/admin/card-check";
 import { stripeLive, stripeStages } from "@/lib/admin/stripe-account";
 import { ensureReferralCode, referralLink } from "@/lib/referral-code";
 import { REFERRAL_FIRST_YEAR_MONTHS, referralRatePercent } from "@/lib/referral";
@@ -18,6 +19,9 @@ import {
   FUNNEL_STEPS,
   STEP_LABELS,
   activeEngineerIds,
+  isLive,
+  liveWhere,
+  payingCustomerCounts,
   cancelRateOf,
   cancelRates,
   customerStatus,
@@ -45,10 +49,10 @@ import { notifyEngineer } from "@/lib/sms";
 import { sendPushNotification } from "@/lib/push";
 import { emailConfigured, sendEmail } from "@/lib/email";
 import { noticeEmail } from "@/lib/admin/notice-email";
+import { withFollowUpHistory } from "@/lib/admin/follow-ups";
+import { engineerDisputes } from "@/lib/disputes";
 
-/** The yearly price-rise cap when PRICE_REVIEW_CAP_PERCENT isn't set (Matt: 10% a year). */
 export const PRICE_RISE_CAP_PERCENT = 10;
-/** Included benefits (the annual service and the rest) start with this monthly payment (Plan.paymentsCleared). */
 export const BENEFITS_FROM_PAYMENT = 3;
 import { companyProfile } from "@/lib/admin/companies";
 
@@ -61,13 +65,9 @@ import { companyProfile } from "@/lib/admin/companies";
 /** The account's standing: what pause and ban change. */
 export type EngineerStanding = "active" | "paused" | "banned" | "left";
 
-/**
- * What the admin shows as an engineer's status: banned, left or paused when
- * the standing says so, otherwise active or inactive by the metrics layer's
- * definition (a delivered offer in the last ACTIVE_WINDOW_DAYS), so a list
- * and the dashboard's Active engineers agree.
- */
-export type EngineerStatus = Exclude<EngineerStanding, "active"> | "active" | "inactive";
+export type EngineerStatus = "live" | "not_live" | "paused" | "banned" | "left";
+
+export type NotLiveBecause = "paused" | "banned" | "left" | "suspended" | "card_failed" | "card_check" | "no_card" | "not_submitted";
 
 const live = { deletedAt: null } satisfies Prisma.EngineerWhereInput;
 
@@ -78,12 +78,14 @@ export const STATUS_WHERE: Record<EngineerStanding, Prisma.EngineerWhereInput> =
   left: { leftAt: { not: null } },
 };
 
-/** The list's Gas Safe filter, by the card check and the register check (Matt, 4 Nov). */
+const READ = { gasSafeCardReadId: { not: null } } satisfies Prisma.EngineerWhereInput;
+const NOT_PASSED = { OR: [{ gasSafeVerifiedAt: null, gasSafeRejectedAt: null, gasSafeNo: { not: null } }, { gasSafeVerifiedAt: { not: null }, gasSafeCardReadId: null }] } satisfies Prisma.EngineerWhereInput;
+
 const VERIFICATION_WHERE = {
-  live: { gasSafeVerifiedAt: { not: null } },
-  register_due: { gasSafeVerifiedAt: { not: null }, gasSafeRegisterCheckedAt: null },
-  card_waiting: { gasSafeNo: { not: null }, gasSafeCardUrl: { not: null }, gasSafeVerifiedAt: null, gasSafeRejectedAt: null },
-  no_card: { gasSafeNo: { not: null }, gasSafeCardUrl: null, gasSafeVerifiedAt: null, gasSafeRejectedAt: null },
+  live: { gasSafeVerifiedAt: { not: null }, ...READ },
+  register_due: { gasSafeVerifiedAt: { not: null }, gasSafeRegisterCheckedAt: null, ...READ },
+  card_waiting: { gasSafeCardUrl: { not: null }, ...NOT_PASSED },
+  no_card: { gasSafeCardUrl: null, ...NOT_PASSED },
   card_failed: { gasSafeVerifiedAt: null, gasSafeRejectedAt: { not: null }, gasSafeSuspendedAt: null },
   suspended: { gasSafeVerifiedAt: null, gasSafeSuspendedAt: { not: null } },
   not_submitted: { gasSafeNo: null, gasSafeVerifiedAt: null },
@@ -98,10 +100,27 @@ export function engineerStatus(e: { bannedAt: Date | null; pausedAt: Date | null
   return "active";
 }
 
-/** The status the admin shows, given who's active now (activeEngineerIds). */
-export function displayStatus(e: { id: string; bannedAt: Date | null; pausedAt: Date | null; leftAt: Date | null }, active: Set<string>): EngineerStatus {
-  const standing = engineerStatus(e);
-  return standing !== "active" ? standing : active.has(e.id) ? "active" : "inactive";
+export function liveStatus(
+  e: { gasSafeVerifiedAt: Date | null; gasSafeCardReadId: string | null; bannedAt: Date | null; pausedAt: Date | null; leftAt: Date | null },
+  stage: CheckStage,
+): { status: "live" | "not_live"; notLiveBecause: NotLiveBecause | null } {
+  if (isLive(e)) return { status: "live", notLiveBecause: null };
+  const because: NotLiveBecause = e.bannedAt
+    ? "banned"
+    : e.leftAt
+      ? "left"
+      : e.pausedAt
+        ? "paused"
+        : stage === "suspended"
+          ? "suspended"
+          : stage === "card_failed"
+            ? "card_failed"
+            : stage === "no_card"
+              ? "no_card"
+              : stage === "not_submitted"
+                ? "not_submitted"
+                : "card_check";
+  return { status: "not_live", notLiveBecause: because };
 }
 
 /** The furthest step an engineer has reached, taking the steps in order (as the funnel does). */
@@ -146,8 +165,8 @@ const LIST_SELECT = {
   stripeChargesEnabled: true,
   stripePayoutsEnabled: true,
   stripeOnboardingStartedAt: true,
-  // Staff sit under their business: the list names the owner's (Matt, 4 Nov).
   owner: { select: { tradingName: true, legalName: true, slug: true } },
+  gasSafeCardReadId: true,
   createdAt: true,
   _count: {
     select: {
@@ -168,6 +187,7 @@ export type EngineerSort = "joined" | "name" | "business" | "plans" | "tiers" | 
 export type EngineerListQuery = {
   q?: string;
   status?: EngineerStatus;
+  active?: "yes" | "no";
   verification?: VerificationFilter;
   step?: FunnelStep;
   town?: string;
@@ -189,9 +209,11 @@ export type EngineerListQuery = {
  */
 async function listWhere(q: EngineerListQuery, marks: TestMarks, active: Set<string>): Promise<Prisma.EngineerWhereInput> {
   const and: Prisma.EngineerWhereInput[] = [live];
-  if (q.status === "active" || q.status === "inactive") {
-    and.push(STATUS_WHERE.active, q.status === "active" ? { id: { in: [...active] } } : { id: { notIn: [...active] } });
-  } else if (q.status) and.push(STATUS_WHERE[q.status]);
+  const now = new Date();
+  if (q.status === "live") and.push(liveWhere(now));
+  else if (q.status === "not_live") and.push({ NOT: liveWhere(now) });
+  else if (q.status) and.push(STATUS_WHERE[q.status]);
+  if (q.active) and.push(q.active === "yes" ? { id: { in: [...active] } } : { id: { notIn: [...active] } });
   if (q.verification) and.push(VERIFICATION_WHERE[q.verification]);
   if (q.type) and.push({ businessType: q.type });
   if (q.town) and.push({ town: { equals: q.town, mode: "insensitive" } });
@@ -207,7 +229,6 @@ async function listWhere(q: EngineerListQuery, marks: TestMarks, active: Set<str
   return { AND: and };
 }
 
-/** What every list answer needs: who's test data, and who's active now. */
 async function listContext() {
   const marks = await testMarks();
   return { marks, active: await activeEngineerIds(marks, new Date()) };
@@ -218,8 +239,12 @@ export function engineerSearch(term: string): Prisma.EngineerWhereInput {
   const contains = { contains: likeTerm(term), mode: "insensitive" as const };
   const digits = term.replace(/\D/g, "");
   const contact = exactContactSearch(term);
+  const words = term.trim().split(/\s+/).filter(Boolean);
   return {
     OR: [
+      ...(words.length > 1
+        ? [{ AND: words.map((w) => ({ OR: [{ firstName: { contains: likeTerm(w), mode: "insensitive" as const } }, { lastName: { contains: likeTerm(w), mode: "insensitive" as const } }] })) }]
+        : []),
       { firstName: contains },
       { lastName: contains },
       { tradingName: contains },
@@ -316,15 +341,13 @@ export async function listEngineers(q: EngineerListQuery) {
 
 type ListRow = Prisma.EngineerGetPayload<{ select: typeof LIST_SELECT }>;
 
-/** The follow-up ladder step: days since the last delivered offer, or since going live; null for staff, or anyone not live and in good standing. */
-function followUpOf(e: { gasSafeVerifiedAt: Date | null; ownerId: string | null; bannedAt: Date | null; pausedAt: Date | null; leftAt: Date | null }, lastOfferAt: Date | null, now: Date) {
+function followUpOf(e: { gasSafeVerifiedAt: Date | null; gasSafeCardReadId: string | null; ownerId: string | null; bannedAt: Date | null; pausedAt: Date | null; leftAt: Date | null }, lastOfferAt: Date | null, now: Date) {
   const from = lastOfferAt ?? e.gasSafeVerifiedAt;
-  if (!from || !e.gasSafeVerifiedAt || e.ownerId || engineerStatus(e) !== "active") return null;
+  if (!from || !cardCheckPassed(e) || e.ownerId || engineerStatus(e) !== "active") return null;
   const days = daysBetween(from, now);
   return { lastDeliveredOfferAt: lastOfferAt?.toISOString() ?? null, countingFrom: lastOfferAt ? ("last_offer" as const) : ("live" as const), days, step: ladderStep(days) };
 }
 
-/** Each engineer's letter: the claim code they redeemed and its batch, or the batch their link carried. */
 async function lettersOf(rows: { id: string; attribution: unknown }[]) {
   const claims = rows.length
     ? await prisma.claimCode.findMany({ where: { redeemedByEngineerId: { in: rows.map((r) => r.id) } }, select: { redeemedByEngineerId: true, code: true, letterBatch: true } })
@@ -343,13 +366,15 @@ async function lettersOf(rows: { id: string; attribution: unknown }[]) {
 async function listItems(rows: ListRow[], ctx: { marks: TestMarks; active: Set<string> }) {
   const ids = rows.map((r) => r.id);
   const now = new Date();
-  const [lastOffers, onPlans, founding, delivered, rates, letters] = await Promise.all([
+  const [lastOffers, onPlans, founding, delivered, rates, letters, paying, reads] = await Promise.all([
     rows.length ? prisma.plan.groupBy({ by: ["engineerId"], where: { engineerId: { in: ids } }, _max: { createdAt: true } }) : [],
     customersOnPlans(ids),
     foundingFor(ids, now),
     lastDeliveredOffers(ctx.marks, ids),
     cancelRates(ctx.marks, ids, now),
     lettersOf(rows),
+    payingCustomerCounts(ctx.marks, now, ids),
+    currentReads(rows),
   ]);
   const lastOfferBy = new Map(lastOffers.map((l) => [l.engineerId, l._max.createdAt]));
   return rows.map((r) => ({
@@ -362,10 +387,14 @@ async function listItems(rows: ListRow[], ctx: { marks: TestMarks; active: Set<s
     channel: channelOf(r.attribution),
     isStaff: Boolean(r.ownerId),
     isTest: ctx.marks.engineers.includes(r.id),
-    status: displayStatus(r, ctx.active),
+    ...liveStatus(r, checksOf(r, now).stage),
+    active: ctx.active.has(r.id),
+    payingCustomers: paying.get(r.id) ?? 0,
     verification: verificationStatus(r),
     checks: (({ card, register }) => ({ card, register }))(checksOf(r, now)),
-    nextRecheck: dateOnly(nextRegisterCheck(r.gasSafeRegisterCheckedAt, r.gasSafeCardExpiresOn)),
+    cardRead: reads.get(r.id)?.read?.outcome ?? null,
+    badge: badgeOf(r),
+    nextRecheck: cardCheckPassed(r) ? dateOnly(nextRegisterCheck(r.gasSafeRegisterCheckedAt, r.gasSafeCardExpiresOn)) : null,
     founding: foundingSummary(founding.get(r.id)),
     followUp: followUpOf(r, delivered.get(r.id) ?? null, now)?.step?.label ?? null,
     cancelRate: (({ percent, flagged }) => ({ percent, flagged }))(rates.get(r.id)!),
@@ -465,7 +494,7 @@ export async function getEngineer(id: string) {
     prisma.engineer.findMany({
       where: { referrerId: id, deletedAt: null },
       orderBy: { createdAt: "desc" },
-      select: { id: true, tradingName: true, legalName: true, slug: true, createdAt: true, bannedAt: true, pausedAt: true, leftAt: true, _count: { select: { plans: { where: { activatedAt: { not: null } } } } } },
+      select: { id: true, tradingName: true, legalName: true, slug: true, createdAt: true, bannedAt: true, pausedAt: true, leftAt: true, gasSafeVerifiedAt: true, gasSafeCardReadId: true, _count: { select: { plans: { where: { activatedAt: { not: null } } } } } },
     }),
     milestones(marks, { ids: [id] }),
     offers(marks, { engineerIds: [id], from: weekAgo, to: now }),
@@ -482,12 +511,11 @@ export async function getEngineer(id: string) {
     lastDeliveredOffers(marks, [id]),
     cancelRateOf(marks, id, now),
   ]);
-  const [active, recentOffers, recentPaid, reasons, tierEvents, rises] = await Promise.all([
-    activeEngineerIds(marks, new Date(), [id, ...invitees.map((i) => i.id)]),
+  const [active, recentOffers, recentPaid, reasons, tierEvents, rises, paying, reads] = await Promise.all([
+    activeEngineerIds(marks, new Date(), [id]),
     recentPlanIds.length ? offers(EVERYONE, { planIds: recentPlanIds }) : [],
     recentPlanIds.length ? payments(EVERYONE, { planIds: recentPlanIds }) : [],
     reasonList().then((list) => new Map(list.map((r) => [r.reason, r.label]))),
-    // When each plan was published and edited: its version is one more than its edits.
     tiers.length
       ? prisma.event.findMany({
           where: { name: { in: ["plan_live", "plan_edited", "plan_taken_down"] }, OR: tiers.map((t) => ({ meta: { path: ["tierId"], equals: t.id } })) },
@@ -495,9 +523,11 @@ export async function getEngineer(id: string) {
           select: { name: true, ts: true, meta: true },
         })
       : [],
-    // Price rises on customers' plans, by the plan they're on.
     prisma.priceReview.findMany({ where: { plan: { engineerId: id } }, orderBy: { noticeSentAt: "desc" }, select: { oldPence: true, newPence: true, noticeSentAt: true, effectiveAt: true, appliedAt: true, voidedAt: true, plan: { select: { tierId: true } } } }),
+    payingCustomerCounts(marks, now, [id]),
+    currentReads([e]),
   ]);
+  const read = detailsOf(reads.get(id)?.read ?? null);
   const cap = priceReviewCapPercent() ?? PRICE_RISE_CAP_PERCENT;
   const offerByPlan = new Map(recentOffers.map((o) => [o.planId, o]));
   const paidPlans = new Set(recentPaid.map((p) => p.planId));
@@ -511,7 +541,7 @@ export async function getEngineer(id: string) {
       : [],
     prisma.referralEarning.aggregate({ where: { referrerId: id, transferId: { not: null } }, _sum: { amountPence: true } }),
     ensureReferralCode(id),
-    stripeLive(e.stripeAccountId),
+    stripeLive(e.stripeAccountId, id),
   ]);
   const earnedBy = new Map(byInvitee.map((r) => [r.inviteeId, r._sum.amountPence ?? 0]));
   const paidBy = new Map(paidByInvitee.map((r) => [r.inviteeId, r._sum.amountPence ?? 0]));
@@ -584,7 +614,10 @@ export async function getEngineer(id: string) {
       : attribution.letterBatch
         ? { code: null, batch: attribution.letterBatch, variant: attribution.variantCell ?? null, redeemedAt: null }
         : null,
-    status: displayStatus(e, active),
+    ...liveStatus(e, checks.stage),
+    active: active.has(id),
+    payingCustomers: paying.get(id) ?? 0,
+    badge: badgeOf(e),
     standing: standingState(e),
     test,
     pause: e.pausedAt ? { at: e.pausedAt.toISOString(), reason: e.pauseReason } : null,
@@ -592,29 +625,29 @@ export async function getEngineer(id: string) {
     leftAt: e.leftAt?.toISOString() ?? null,
     verification: {
       status: verificationStatus(e),
-      /** The card check (passed = live) and the register check behind it (Matt, 4 Nov). */
       card: checks.card,
       register: checks.register,
-      liveSince: e.gasSafeVerifiedAt?.toISOString() ?? null,
-      registerCheckedAt: e.gasSafeRegisterCheckedAt?.toISOString() ?? null,
+      liveSince: cardCheckPassed(e) ? e.gasSafeVerifiedAt!.toISOString() : null,
+      registerCheckedAt: cardCheckPassed(e) ? (e.gasSafeRegisterCheckedAt?.toISOString() ?? null) : null,
       suspendedAt: e.gasSafeSuspendedAt?.toISOString() ?? null,
       recheckRequested: e.gasSafeRecheckRequestedAt ? { at: e.gasSafeRecheckRequestedAt.toISOString(), reason: e.gasSafeRecheckReason } : null,
       rejectedAt: e.gasSafeRejectedAt?.toISOString() ?? null,
       rejectReason: e.gasSafeRejectReason,
     },
-    /** The Gas Safe ID card: the engineer's licence number and the business's registration number, each on its own. */
     gasSafe: {
       licenceNo: gasSafeNumbers(e).licenceNo,
       registrationNo: gasSafeNumbers(e).registrationNo ?? (e.owner ? gasSafeNumbers(e.owner).registrationNo : null),
-      categories: e.gasSafeCategories,
+      read,
+      categories: read?.categories.length ? read.categories : null,
+      categoriesPublic: badgeOf(e) === "public",
       cardOnFile: Boolean(e.gasSafeCardUrl),
+      backOnFile: Boolean(e.gasSafeCardUrl && e.gasSafeCardBackUrl),
       cardExpiresOn: dateOnly(e.gasSafeCardExpiresOn),
       qualifications: qualificationsOf(e.qualificationConfirmations),
       nextRegisterCheck: dateOnly(nextRegisterCheck(e.gasSafeRegisterCheckedAt, e.gasSafeCardExpiresOn)),
     },
     founding: foundingDto(founding.get(id)!),
-    /** Days since their last delivered offer and the follow-up ladder step; null unless live and in good standing. */
-    chase: followUpOf(e, lastOffer.get(id) ?? null, now),
+    ...(await withFollowUpHistory(id, followUpOf(e, lastOffer.get(id) ?? null, now))),
     cancelRate,
     payments: {
       accountId: e.stripeAccountId,
@@ -624,7 +657,6 @@ export async function getEngineer(id: string) {
       payoutsEnabled: e.stripePayoutsEnabled,
       needsInfo: Boolean(e.stripeAccountId && e.stripeDetailsSubmitted && !e.stripeChargesEnabled),
       ...stripeStages(e),
-      /** Asked of Stripe live; null when it couldn't be. */
       live: stripe,
     },
     activation: {
@@ -656,7 +688,6 @@ export async function getEngineer(id: string) {
       earnedPence: earnings._sum.amountPence ?? 0,
       paidPence: paidOut._sum.amountPence ?? 0,
       owedPence: Math.max(0, (earnings._sum.amountPence ?? 0) - (paidOut._sum.amountPence ?? 0)),
-      /** Per referred engineer: plans they've sold, the rate now (25% for 12 months, then 10%) and the months left at 25%. */
       people: invitees.map((i) => {
         const firstYearEnds = new Date(i.createdAt);
         firstYearEnds.setMonth(firstYearEnds.getMonth() + REFERRAL_FIRST_YEAR_MONTHS);
@@ -665,7 +696,7 @@ export async function getEngineer(id: string) {
           id: i.id,
           business: displayName(i),
           joinedAt: i.createdAt.toISOString(),
-          status: displayStatus(i, active),
+          status: isLive(i) ? ("live" as const) : ("not_live" as const),
           plansSold: i._count.plans,
           ratePercent: referralRatePercent(i.createdAt, now),
           monthsLeftAtFirstRate: Math.max(0, Math.ceil((firstYearEnds.getTime() - now.getTime()) / (30.44 * 86_400_000))),
@@ -687,10 +718,8 @@ export async function getEngineer(id: string) {
         customersOnIt: t._count.plans,
         publishedAt: mine.find((ev) => ev.name === "plan_live")?.ts.toISOString() ?? null,
         editedAt: edits.at(-1)?.ts.toISOString() ?? null,
-        /** Customers keep the version they signed; an edit only reaches new customers. */
         version: edits.length + 1,
         takenDown: takenDown ? { at: takenDown.ts.toISOString(), reason: (takenDown.meta as { reason?: string }).reason ?? null, by: (takenDown.meta as { adminName?: string }).adminName ?? null } : null,
-        /** Price rises on customers' plans, against the yearly cap. */
         priceRises: rises
           .filter((r) => r.plan.tierId === t.id)
           .map((r) => {
@@ -699,7 +728,6 @@ export async function getEngineer(id: string) {
           }),
       };
     }),
-    /** The plan rules the record states: the yearly price-rise cap, and when included benefits start (lib/plan-rules). */
     planRules: { priceRiseCapPercent: cap, benefitsFromPayment: BENEFITS_FROM_PAYMENT },
     recentCustomers: recentCustomers.map((c) => {
       const plan = currentPlan(c.plans);
@@ -720,6 +748,7 @@ export async function getEngineer(id: string) {
     }),
     payouts: payouts.recent,
     lifetimePayoutsPence: payouts.totalPence,
+    disputes: await engineerDisputes(id),
     /** The activation steps, in the funnel's order, from the same source as the funnel. */
     steps: FUNNEL_STEPS.map((step) => ({ key: step, label: STEP_LABELS[step], reached: reached[step].reached, at: reached[step].at?.toISOString() ?? null })),
     /** Delivered offers in the last ACTIVE_WINDOW_DAYS: what makes them active. */
@@ -733,7 +762,6 @@ export async function getEngineer(id: string) {
 
 export type EngineerDetail = NonNullable<Awaited<ReturnType<typeof getEngineer>>>;
 
-/** A Founding status as the API sends it, with the rules the app works it out by. */
 function foundingDto(f: FoundingStatus) {
   const spot = f.spot;
   return {
@@ -749,11 +777,9 @@ function foundingDto(f: FoundingStatus) {
   };
 }
 
-/** The list's Founding column: badge, top spot (with days left of 60) or released, worded as the record words it. */
 function foundingSummary(f: FoundingStatus | undefined) {
   if (!f) return null;
   if (f.spot?.state === "holding") return { label: foundingLabel(f), daysLeft: f.spot.kept ? null : f.spot.daysLeft };
-  // The badge is permanent: a released spot doesn't take it away.
   if (f.spot?.state === "released") return { label: f.member ? "Founding · spot released" : "Spot released", daysLeft: null };
   return f.member ? { label: foundingLabel(f), daysLeft: null } : null;
 }
@@ -816,17 +842,8 @@ async function cancelReasonCounts(engineerId: string) {
   return [...counts].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason));
 }
 
-/** How far back the activity tab reads: the newest events and texts, merged. */
 const ACTIVITY_WINDOW = 300;
 
-/**
- * What happened to an engineer, newest first: their own actions, anything
- * done to them or their customers, and the texts TradeSura sent them
- * (Matt, 4 Nov). Each row names who did it ("Matt (admin)", "Matt Wood
- * (engineer)"), the customer and plan it was about, and for an edited plan
- * what it was before. A plan going live is "Plan published" when the
- * engineer put one on sale, "Customer joined" when a customer's started.
- */
 export async function engineerActivity(id: string, q: { page: number; size: number }) {
   const e = await prisma.engineer.findFirst({ where: { id, ...live }, select: { firstName: true, lastName: true, phone: true, staff: { select: { id: true, firstName: true, lastName: true } } } });
   if (!e) throw notFound("There's no engineer with that ID.");
@@ -840,7 +857,6 @@ export async function engineerActivity(id: string, q: { page: number; size: numb
   ]);
   const meta = (ev: { meta: unknown }) => (ev.meta ?? {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" ? v : null);
-  // The customers, plans and plan names the events point at, looked up once.
   const planIds = [...new Set(events.map((ev) => str(meta(ev).planId)).filter((v): v is string => !!v))];
   const customerIds = [...new Set(events.map((ev) => str(meta(ev).customerId)).filter((v): v is string => !!v))];
   const tierIds = [...new Set(events.map((ev) => str(meta(ev).tierId)).filter((v): v is string => !!v))];
@@ -853,7 +869,6 @@ export async function engineerActivity(id: string, q: { page: number; size: numb
   const customerName = new Map([...customers.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()] as const), ...plans.map((p) => [p.customerId, `${p.customer.firstName} ${p.customer.lastName}`.trim()] as const)]);
   const tierName = new Map(tiers.map((t) => [t.id, t.name]));
   const people = new Map([[id, personName(e)], ...e.staff.map((st) => [st.id, personName(st)] as const)]);
-  // An edited plan's "before" is the same plan's previous published or edited state.
   const chronological = [...events].reverse();
   const before = new Map<string, { name: string | null; priceMonthlyPence: number | null }>();
   const lastState = new Map<string, { name: string | null; priceMonthlyPence: number | null }>();
@@ -985,11 +1000,6 @@ export const setWidget = (admin: AdminPrincipal, id: string, disabled: boolean, 
     disabled ? "The website widget is already switched off." : "The website widget is already on.",
   );
 
-/**
- * Take a plan that breaks the rules off sale (Matt, 4 Nov): no new
- * customers; those already on it keep the plan they signed. The engineer is
- * told why, by text, push and email, and the reason is recorded.
- */
 export async function takeDownTier(admin: AdminPrincipal, engineerId: string, tierId: string, reason: string) {
   const tier = await prisma.planTier.findFirst({ where: { id: tierId, engineerId, engineer: live }, select: { id: true, name: true, status: true } });
   if (!tier) throw notFound("There's no such plan on this engineer's account.");

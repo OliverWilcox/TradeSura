@@ -10,19 +10,12 @@ import { createTownLead } from "@/lib/town-leads";
 import { call, CHECKER, resetDb, withPermissions } from "./helpers";
 import { makeCustomer, makeEngineer, makePlan } from "./factories";
 
-// Founding Members and town pages (Matt, 4 Nov, section 3.2): the admin's
-// view per town (spots taken, live, released), the manual override with a
-// reason, and the first-pick window for town page requests. The rules are
-// the app's (lib/founding.ts); these check the admin reads and changes them
-// the way the app does.
-
 beforeEach(resetDb);
 
 const DAY = 86_400_000;
 const daysAgo = (n: number) => new Date(Date.now() - n * DAY);
 let codes = 0;
 
-/** An engineer in a town: listed on its page, a Founding Member, complete — as each test needs. */
 async function engineerIn(
   townSlug: string,
   { founding = false, listed = true, completedDaysAgo = null as number | null, ...data }: { founding?: boolean; listed?: boolean; completedDaysAgo?: number | null } & Partial<Prisma.EngineerUncheckedCreateInput> = {},
@@ -39,7 +32,6 @@ async function engineerIn(
   if (listed) await prisma.planTier.create({ data: { engineerId: e.id, name: "Care", priceMonthlyPence: 1500, sortOrder: 1, status: "LIVE" } });
   if (founding) {
     codes += 1;
-    // Claimed in time: the batch's window is 28 days from its codes being loaded.
     await prisma.claimCode.create({
       data: { code: `TS-${20000 + codes}`, firstName: "Dave", businessName: e.tradingName!, letterBatch: "B1", variantCell: "A", redeemedByEngineerId: e.id, redeemedAt: daysAgo(100), claimedAt: daysAgo(100), createdAt: daysAgo(101) },
     });
@@ -47,11 +39,6 @@ async function engineerIn(
   return e;
 }
 
-/**
- * Holmfirth: three spots held (kept, on the clock, and one whose holder isn't
- * on the page), one released, two Founding Members waiting, two engineers
- * without the badge, and a member of staff.
- */
 async function holmfirth() {
   await prisma.townPage.create({ data: { slug: "holmfirth", name: "Holmfirth", publishedAt: daysAgo(80) } });
   await prisma.townPage.create({ data: { slug: "marsden", name: "Marsden" } });
@@ -75,7 +62,6 @@ async function holmfirth() {
   const spotC = await spot(c.id, 5);
   await prisma.event.create({ data: { name: "top_spot_reminder", actorType: "SYSTEM", meta: { spotId: spotB.id, engineerId: b.id, days: 30 } } });
 
-  // A signed a customer; Glen has two paying (one cancelling, which doesn't count); Holly has reviews.
   await makePlan(a.id, (await makeCustomer(a.id)).id);
   for (let i = 0; i < 2; i++) await makePlan(g.id, (await makeCustomer(g.id)).id);
   await makePlan(g.id, (await makeCustomer(g.id)).id, { cancelRequestedAt: daysAgo(1) });
@@ -112,16 +98,14 @@ describe("a town", () => {
     const res = await call(detail, at("holmfirth"));
     expect(res.status).toBe(200);
     const town = res.body;
-    expect(town).toMatchObject({ slug: "holmfirth", name: "Holmfirth", page: "public", url: expect.stringMatching(/\/gas-engineers\/holmfirth$/), rules: { spotsPerTown: 3, spotDays: 60, reminderDays: [30, 14, 7, 2] }, leadWindowMinutes: 120 });
+    expect(town).toMatchObject({ slug: "holmfirth", name: "Holmfirth", page: "public", url: expect.stringMatching(/\/gas-engineers\/holmfirth$/), rules: { spotsPerTown: 3, spotDays: 60, reminderDays: [30, 14, 7, 2] }, leadWindowMinutes: 1440 });
     expect(town.spots).toMatchObject([
       { position: 1, engineer: { id: t.a.id, name: "Ash Gas" }, customerSigned: true, live: true, given: null },
       { position: 2, engineer: { id: t.b.id }, customerSigned: false, daysLeft: 20, remindersSent: [30], live: true },
-      // Holds a spot but isn't on the page: taken, not live.
       { position: 3, engineer: { id: t.c.id }, live: false },
     ]);
     expect(town.released).toMatchObject([{ engineer: { id: t.f.id }, reason: "no_customer", by: null, note: null }]);
     expect(town.nextInLine.map((e: { id: string }) => e.id)).toEqual([t.d.id, t.e.id]);
-    // Top spots in the order they got them › paying customers › reviews (number, average, recency), then A–Z.
     expect(town.order.map((r: { name: string; group: string }) => `${r.name} (${r.group})`)).toEqual([
       "Ash Gas (top_spot)",
       "Birch Heating (top_spot)",
@@ -133,7 +117,6 @@ describe("a town", () => {
     ]);
     expect(town.order[2]).toMatchObject({ position: 3, payingCustomers: 2 });
     expect(town.order[3]).toMatchObject({ reviews: { count: 2, average: 4.5, lastAt: expect.any(String) } });
-    // Anyone trading here without a spot, the next in line first. Never staff.
     expect(town.eligible.map((e: { name: string }) => e.name)).toEqual(["Dale Gas", "Elm Heating", "Fern Gas", "Glen Heating", "Holly Gas"]);
     expect(town.eligible[0]).toMatchObject({ owner: expect.stringMatching(/^Dave Smith\d+$/), founding: true, nextInLine: true });
 
@@ -152,13 +135,11 @@ describe("the manual override", () => {
     expect(await prisma.topSpot.findFirst({ where: { engineerId: t.d.id, releasedAt: null } })).toMatchObject({ townSlug: "holmfirth" });
     const released = await prisma.event.findFirstOrThrow({ where: { name: "top_spot_released", actorType: "ADMIN" } });
     expect(released.meta).toMatchObject({ spotId: t.spotB.id, engineerId: t.b.id, reason: "admin", note: "Off sick for three months", adminName: "Test Super" });
-    // The next in line got it the way the app hands spots out.
     expect(await prisma.event.count({ where: { name: "top_spot_awarded", actorType: "SYSTEM", meta: { path: ["engineerId"], equals: t.d.id } } })).toBe(1);
 
     const town = (await call(detail, at("holmfirth"))).body;
     expect(town.released[0]).toMatchObject({ engineer: { id: t.b.id }, reason: "admin", by: "Test Super", note: "Off sick for three months" });
     expect(town.spots.map((s: { engineer: { id: string } }) => s.engineer.id)).toEqual([t.a.id, t.c.id, t.d.id]);
-    // Released by an admin, they aren't next in line for it again.
     expect(town.nextInLine.map((e: { id: string }) => e.id)).toEqual([t.e.id]);
 
     expect((await call(release, { params: { slug: "holmfirth", spotId: t.spotB.id }, body: { reason: "Again, by mistake", to: null } })).status).toBe(409);
@@ -174,10 +155,8 @@ describe("the manual override", () => {
     const spot = (await call(detail, at("holmfirth"))).body.spots.find((s: { engineer: { id: string } }) => s.engineer.id === t.h.id);
     expect(spot).toMatchObject({ position: 3, daysLeft: 60, given: { by: "Test Super", reason: "Moving to Halifax next month" } });
 
-    // Full: a spot has to be released first.
     expect((await call(give, { params: { slug: "holmfirth" }, body: { engineerId: t.g.id, reason: "Busiest engineer in town" } })).status).toBe(409);
 
-    // Marsden has room: a spot for an engineer there, not for one from elsewhere.
     const m = await engineerIn("marsden");
     expect((await call(give, { params: { slug: "marsden" }, body: { engineerId: t.g.id, reason: "Busiest engineer in town" } })).status).toBe(400);
     const ok = await call(give, { params: { slug: "marsden" }, body: { engineerId: m.id, reason: "First engineer in Marsden" } });
@@ -188,12 +167,10 @@ describe("the manual override", () => {
 
   it("refuses what would break the rules", async () => {
     const t = await holmfirth();
-    // Back to the engineer releasing it, someone already holding one, staff, or no reason.
     expect((await call(release, { params: { slug: "holmfirth", spotId: t.spotA.id }, body: { reason: "Restart the clock", to: t.a.id } })).status).toBe(400);
     expect((await call(release, { params: { slug: "holmfirth", spotId: t.spotA.id }, body: { reason: "Give it to Birch", to: t.b.id } })).status).toBe(409);
     expect((await call(release, { params: { slug: "holmfirth", spotId: t.spotA.id }, body: { to: null } })).status).toBe(400);
     expect((await call(release, { params: { slug: "marsden", spotId: t.spotA.id }, body: { reason: "Wrong town", to: null } })).status).toBe(404);
-    // Nothing changed.
     expect(await prisma.topSpot.count({ where: { townSlug: "holmfirth", releasedAt: null } })).toBe(3);
 
     const reader = withPermissions("towns:read");
@@ -203,13 +180,13 @@ describe("the manual override", () => {
 });
 
 describe("first pick of town page requests", () => {
-  it("is 2 hours until an admin changes it, and new requests use the new window", async () => {
-    expect((await call(leadWindow)).body).toEqual({ minutes: 120, defaultMinutes: 120, maxMinutes: 1440 });
+  it("is 24 hours until an admin changes it, and new requests use the new window", async () => {
+    expect((await call(leadWindow)).body).toEqual({ minutes: 1440, defaultMinutes: 1440, maxMinutes: 1440 });
     const res = await call(setLeadWindow, { method: "PUT", body: { minutes: 45 } });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ minutes: 45, before: 120 });
+    expect(res.body).toEqual({ minutes: 45, before: 1440 });
     expect((await call(leadWindow)).body.minutes).toBe(45);
-    expect((await prisma.event.findFirstOrThrow({ where: { name: "town_lead_window_changed" } })).meta).toMatchObject({ before: 120, after: 45, adminName: "Test Super" });
+    expect((await prisma.event.findFirstOrThrow({ where: { name: "town_lead_window_changed" } })).meta).toMatchObject({ before: 1440, after: 45, adminName: "Test Super" });
 
     await prisma.townPage.create({ data: { slug: "holmfirth", name: "Holmfirth" } });
     await engineerIn("holmfirth", { founding: true, completedDaysAgo: 10 });

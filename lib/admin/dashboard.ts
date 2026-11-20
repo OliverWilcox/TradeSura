@@ -3,10 +3,10 @@ import { Prisma } from "@/lib/generated/prisma/client";
 import { addDays, daysBetween, ukDay, ukMidnight, weekStart } from "@/lib/admin/time";
 import { bounded, shared } from "@/lib/admin-api/db";
 import {
-  ACTIVE_WINDOW_DAYS,
   FUNNEL_STEPS,
   activeEngineerIds,
   funnelOf,
+  liveEngineerCount,
   milestones,
   offerCounts,
   offers,
@@ -14,7 +14,7 @@ import {
   payments,
   realPlanWhere,
   testMarks,
-  verifiedEngineerCount,
+  wentLiveCount,
   type FunnelStep,
   type Range,
   type TestMarks,
@@ -63,7 +63,7 @@ export async function core(now: Date, weeks = 12) {
   const ends = starts.map((w, i) => (i === weeks ? now : ukMidnight(addDays(w, 7))));
   const [sent, engineers] = await Promise.all([
     offers(marks, { from: ukMidnight(starts[0]), to: now }),
-    Promise.all(ends.map((end) => verifiedEngineerCount(marks, end))),
+    Promise.all(ends.map((end) => liveEngineerCount(marks, end))),
   ]);
   const delivered = sent.filter((o) => o.delivery === "delivered");
   const values: WeekValue[] = starts.map((w, i) => {
@@ -86,9 +86,10 @@ export async function core(now: Date, weeks = 12) {
  */
 export async function stats(range: Range) {
   const marks = await testMarks();
-  const [cohort, verifiedTotal, active, plansLive, customers, sent] = await Promise.all([
+  const [cohort, liveAtEnd, wentLive, active, plansLive, customers, sent] = await Promise.all([
     milestones(marks, { signedUp: range }),
-    verifiedEngineerCount(marks, range.to),
+    liveEngineerCount(marks, range.to),
+    wentLiveCount(marks, range),
     activeEngineerIds(marks, range.to),
     prisma.plan.count({ where: { ...liveAt(range.to), ...realPlanWhere(marks) } }),
     customersOnPlans(range.to, marks),
@@ -100,9 +101,8 @@ export async function stats(range: Range) {
     : 0;
   return {
     signups: cohort.size,
-    verified: { ofSignups: [...cohort.values()].filter((m) => m.verified.reached).length, total: verifiedTotal },
+    live: { atEnd: liveAtEnd, wentLive },
     active: active.size,
-    activeWindowDays: ACTIVE_WINDOW_DAYS,
     plansLive,
     customers,
     offers: offerCounts(sent),
@@ -178,7 +178,6 @@ async function moneyFrom(range: Range, firstMonth: string, months: number) {
     d.setUTCMonth(d.getUTCMonth() + i);
     return d.toISOString().slice(0, 7);
   });
-  // Real referrals only: neither side test data.
   const realReferral = { referrerId: { notIn: marks.engineers }, inviteeId: { notIn: marks.engineers } };
   const [earned, owed] = await Promise.all([
     prisma.referralEarning.aggregate({ where: { ...realReferral, createdAt: { gte: range.from, lt: range.to } }, _sum: { amountPence: true } }),
@@ -187,12 +186,10 @@ async function moneyFrom(range: Range, firstMonth: string, months: number) {
   return {
     months: keys.map((month) => ({ month, ...withShares(paymentTotals(paid.filter((p) => ukDay(p.paidAt).slice(0, 7) === month))) })),
     period: withShares(paymentTotals(paid.filter((p) => p.paidAt >= range.from && p.paidAt < range.to))),
-    /** Referral payments (Matt, 4 Nov): earned in the range, and owed now (earned, not yet transferred). */
     referrals: { earnedPence: earned._sum.amountPence ?? 0, owedPence: owed._sum.amountPence ?? 0 },
   };
 }
 
-/** What went to engineers: collected after refunds and claims, less TradeSura's fee (their 80%). */
 const withShares = <T extends { netPence: number; feePence: number }>(t: T) => ({ ...t, engineersPence: t.netPence - t.feePence });
 
 // --- Health: cancellations and failed payments -----------------------------------
@@ -250,7 +247,9 @@ export async function health({ from, to }: Range) {
 export async function waiting() {
   const [verifications, memberPacks, cancelRequests] = await Promise.all([
     prisma.engineer.count({ where: { deletedAt: null, gasSafeNo: { not: null }, gasSafeVerifiedAt: null, gasSafeRejectedAt: null } }),
-    prisma.engineer.count({ where: { packRequestedAt: { not: null }, packShippedAt: null, gasSafeVerifiedAt: { not: null }, pausedAt: null, bannedAt: null, deletedAt: null } }),
+    prisma.engineer.count({
+      where: { packRequestedAt: { not: null }, packShippedAt: null, gasSafeVerifiedAt: { not: null }, gasSafeCardReadId: { not: null }, gasSafeRegisterCheckedAt: { not: null }, pausedAt: null, bannedAt: null, deletedAt: null },
+    }),
     prisma.cancelRequest.count({ where: { outcome: "pending" } }),
   ]);
   return { verifications, memberPacks, cancelRequests };

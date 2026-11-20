@@ -26,9 +26,6 @@ export function checkEmail(v: string): string | null {
     : "That email doesn't look right — check for typos.";
 }
 
-// The engineer's own licence number: 7 digits on the front of the Gas Safe
-// ID card (Matt, 4 Nov). The business registration number is asked for
-// separately, below.
 export function checkGasSafeNo(v: string): string | null {
   const d = v.replace(/\s/g, "");
   if (!d) return "Enter your licence number.";
@@ -36,7 +33,6 @@ export function checkGasSafeNo(v: string): string | null {
   return d.length === 7 ? null : "Your licence number is 7 digits.";
 }
 
-// The business's Gas Safe registration number, from the same card.
 export function checkRegistrationNo(v: string): string | null {
   const d = v.replace(/\s/g, "");
   if (!d) return "Enter your business registration number.";

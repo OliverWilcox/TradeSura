@@ -7,25 +7,35 @@ import { letterCodeOf } from "@/lib/letter-code";
 const cleanCode = (input: string) => input.toUpperCase().replace(/[^A-Z0-9]/g, "");
 const tsCode = (cleaned: string) => cleaned.match(/^TS(\d{4,8})$/)?.[1];
 
-/** How codes were read before letter codes (12 Nov): TS-48217, else letters and digits only. */
 function earlierForm(cleaned: string): string {
   const ts = tsCode(cleaned);
   return ts ? `TS-${ts}` : cleaned;
 }
 
-// Forgiving of case, spaces and dashes: "ts 48217" → "TS-48217", "smith 7k3q" → "SMITH-7K3Q".
 export function normaliseClaimCode(input: string): string {
   const cleaned = cleanCode(input);
   return tsCode(cleaned) ? earlierForm(cleaned) : (letterCodeOf(cleaned) ?? cleaned);
 }
 
-/**
- * Finds a code row however the code was typed: as it reads now, and as it
- * read before letter codes, so a code that was found then (one loaded without
- * a dash, say) still is.
- */
+const DIGIT_AS_LETTERS: Record<string, string[]> = { "0": ["O"], "1": ["I", "L"], "5": ["S"], "8": ["B"], "2": ["Z"], "6": ["G"] };
+const MAX_FORMS = 16;
+
+function surnameForms(cleaned: string): string[] {
+  if (cleaned.length <= 4) return [];
+  const stem = cleaned.slice(0, -4);
+  if (!/\d/.test(stem)) return [];
+  let forms = [""];
+  for (const ch of stem) {
+    const options = /\d/.test(ch) ? (DIGIT_AS_LETTERS[ch] ?? []) : [ch];
+    forms = forms.flatMap((f) => options.map((o) => f + o)).slice(0, MAX_FORMS);
+    if (!forms.length) return [];
+  }
+  return forms.map((f) => letterCodeOf(f + cleaned.slice(-4))).filter((c): c is string => !!c);
+}
+
 export function claimCodeWhere(input: string) {
-  return { code: { in: [...new Set([normaliseClaimCode(input), earlierForm(cleanCode(input))])] } };
+  const cleaned = cleanCode(input);
+  return { code: { in: [...new Set([normaliseClaimCode(input), earlierForm(cleaned), ...surnameForms(cleaned)])] } };
 }
 
 export type ResolvedClaim =
@@ -95,8 +105,6 @@ export async function resolveClaimCode(input: string, appToken?: string | null):
   };
 }
 
-// Codes are short (SMITH-7K3Q, and TS-48217 before it), so every lookup by
-// code — the claim page, the resolver, the claim APIs — counts against the caller's IP. A letter
 // recipient scans a handful of times; a guesser hits this fast.
 export const CLAIM_LOOKUPS_PER_WINDOW = 30;
 export const CLAIM_LOOKUP_WINDOW_MINUTES = 10;

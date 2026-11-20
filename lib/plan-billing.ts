@@ -149,19 +149,14 @@ async function latestPaidPayment(subscriptionId: string): Promise<{
   };
 }
 
-// The refund always comes back from the engineer's share (reverse_transfer:
-// a destination charge transferred them the whole payment). Our 20% comes
-// back too only when keepOurFee is false: cooling-off refunds return
-// everything; yearly cancellations keep it (Matt, 13 Nov: "We keep our full
-// 20% when a yearly customer cancels, and the engineer covers the refund").
-async function refundPayment(paymentIntentId: string, amount: number, key: string, keepOurFee = false) {
+async function refundPayment(paymentIntentId: string, amount: number, key: string, opts: { refundFee: boolean } = { refundFee: true }) {
   if (amount <= 0) return;
   await getStripe().refunds.create(
     {
       payment_intent: paymentIntentId,
       amount,
       reverse_transfer: true,
-      refund_application_fee: !keepOurFee,
+      refund_application_fee: opts.refundFee,
       metadata: { kind: key.split(":")[0] },
     },
     { idempotencyKey: key },
@@ -305,8 +300,8 @@ export async function settleEndedSubscription(planId: string, sub: Stripe.Subscr
   const months = unusedYearlyMonths(period.start, endedAt);
   const amount = yearlyRefundPence(paid.amountPaid, months);
   if (amount <= 0) return;
-  await refundPayment(paid.paymentIntentId, amount, `yearly-refund:${paid.invoiceId}`, true);
-  await track("yearly_refund", { type: "SYSTEM" }, { planId: plan.id, unusedMonths: months, amountPence: amount, feeKept: true });
+  await refundPayment(paid.paymentIntentId, amount, `yearly-refund:${paid.invoiceId}`, { refundFee: false });
+  await track("yearly_refund", { type: "SYSTEM" }, { planId: plan.id, unusedMonths: months, amountPence: amount, paidPence: paid.amountPaid, feeKept: true });
   await emailYearlyRefund(plan.id, amount, months);
 }
 
