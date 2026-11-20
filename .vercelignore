@@ -1,3 +1,5 @@
 # Local-only tooling, not needed in the deployed build.
 .bin/
 mobile/
+tests/
+tests-integration/
