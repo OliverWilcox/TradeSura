@@ -87,8 +87,8 @@ const PACK: { icon: IconName; label: string }[] = [
   { icon: "qr", label: "QR labels" },
 ];
 
-// Matt 16 Nov — no script to learn: the app explains the plans.
-const HAND_OVER = "Just pick why you were there and hand them your phone — the app explains the plans for you.";
+// Member pack cover letter v7.1's key message, word for word (19 Nov list).
+const HAND_OVER = "No selling needed. Pick why you were there, hand the customer your phone, and the app does the selling for you.";
 
 const TIPS = [
   "Offer at every job, while you're still there.",

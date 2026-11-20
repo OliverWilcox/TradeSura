@@ -75,7 +75,7 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
   const rows = `
   <tr><td bgcolor="${EMAIL.navy}" style="background:${EMAIL.navy};padding:4px 32px 30px;">
     <div style="font-size:28px;line-height:34px;font-weight:700;color:#ffffff;">You're in, ${firstName} &#128075;</div>
-    <div style="font-size:16px;line-height:24px;color:#C5D0E0;padding-top:10px;"><b style="color:#ffffff;">${brand}</b> now has a free TradeSura account. Sell your own care plans at the end of every job. Customers pay monthly or yearly by Direct Debit, you keep <b style="color:#3DD68C;">80%</b>, paid every Friday.</div>
+    <div style="font-size:16px;line-height:24px;color:#C5D0E0;padding-top:10px;"><b style="color:#ffffff;">${brand}</b> now has a free TradeSura account. Sell your own care plans at the end of every job. <b style="color:#ffffff;">No selling needed. Pick why you were there, hand the customer your phone, and the app does the selling for you.</b> Customers pay monthly or yearly by Direct Debit, you keep <b style="color:#3DD68C;">80%</b>, paid every Friday.</div>
   </td></tr>
 
   <tr><td style="padding:24px 32px 6px;">

@@ -275,8 +275,8 @@ export default function Welcome() {
                   <Text className="text-[30px] text-copper">every month.</Text>
                 </Text>
                 <Text className="mt-3 text-[15px] leading-[21px] text-white/85">
-                  Sell your own care plans at the end of the job. We collect the Direct Debit, you
-                  keep 80%, paid every Friday.
+                  {/* Member pack cover letter v7.1's key message, word for word. */}
+                  {"No selling needed. Pick why you were there, hand the customer your phone, and the app does the selling for you."} We collect the Direct Debit, you keep 80%, paid every Friday.
                   {referrerName ? `\n\n${referrerName} recommended TradeSura.` : ""}
                 </Text>
                 {/* 4 Oct notes 3.4 — the figure comes from lib/earnings.ts

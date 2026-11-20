@@ -481,6 +481,21 @@ function OwnerHome() {
               </Card>
             )}
 
+            {/* 19 Nov list — the customer's plan page shows the engineer's
+                initial until there's a photo or logo, so ask for one. */}
+            {me?.role !== "staff" && isLive && !me?.logoUrl && (
+              <Card>
+                <Micro>Your plan page</Micro>
+                <Text className="mt-1.5 text-[19px] font-bold text-ink">Add your photo or logo</Text>
+                <Text className="mt-1 text-[14px] text-muted">
+                  Customers see it at the top of your plan page. Until then they just see your initial.
+                </Text>
+                <Button variant="ghost" className="mt-4" onPress={() => router.push("/more")}>
+                  Add a photo or logo
+                </Button>
+              </Card>
+            )}
+
             {/* After going live, the optional Grow steps live here. */}
             {me?.role !== "staff" && isLive && !preSale && growDone < grow.length && (
               <Card>

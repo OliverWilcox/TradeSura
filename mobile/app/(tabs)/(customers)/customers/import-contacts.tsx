@@ -182,7 +182,7 @@ export default function ImportContacts() {
           <Route
             icon="document"
             title={csvBusy ? "Importing…" : "From a spreadsheet"}
-            sub="A CSV file with first_name, last_name and phone columns (email, postcode optional)."
+            sub="A CSV file with a name and a mobile number for each customer (email and address optional)."
             disabled={!confirmed || csvBusy}
             onPress={pickCsv}
           />

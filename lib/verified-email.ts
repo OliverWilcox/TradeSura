@@ -82,7 +82,7 @@ export function verifiedEmail(v: VerifiedEmailInput): { subject: string; html: s
   <tr><td align="center" style="padding:0 32px 14px;font-size:12px;color:${EMAIL.muted};">Takes about a minute. We send them for you.</td></tr>
   ${sell}
   <tr><td style="padding:18px 32px 4px;font-size:11px;letter-spacing:1.2px;font-weight:700;color:${EMAIL.muted};">TWO MORE WAYS TO WIN CUSTOMERS</td></tr>
-  ${item(`<b>Offer a plan at your next job.</b> No selling needed: pick why you were there, hand them your phone, and the app does the selling. ${link(open("offer"), "Open the app")}`)}
+  ${item(`<b>Offer a plan at your next job.</b> No selling needed. Pick why you were there, hand the customer your phone, and the app does the selling for you. ${link(open("offer"), "Open the app")}`)}
   ${item(`<b>Share your page</b> on Facebook, WhatsApp or your invoices: ${link(canonicalProfileUrl({ slug: v.slug }), escapeHtml(canonicalProfileDisplay({ slug: v.slug })))}`)}
   ${small(`📦 <b>Your member pack</b> is being posted this week.`)}
   ${small(`🤝 <b>Know another engineer?</b> Share your code <b>${escapeHtml(v.slug)}</b>. You earn ${REFERRAL_FIRST_YEAR_PERCENT}% of our fee on every plan they sell for 12 months, then ${REFERRAL_LIFETIME_PERCENT}% for life.`)}

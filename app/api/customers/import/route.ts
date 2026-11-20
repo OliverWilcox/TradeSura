@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { parse } from "csv-parse/sync";
 import { getEngineerId } from "@/lib/auth";
 import { importCustomers } from "@/lib/import-customers";
+import { columnMap, missingColumns, rowFrom } from "@/lib/csv-columns";
 import { track } from "@/lib/track";
 
 export async function POST(req: Request) {
@@ -30,10 +31,14 @@ export async function POST(req: Request) {
 
   let rows: Record<string, string>[];
   try {
-    rows = parse(await file.text(), { columns: true, skip_empty_lines: true, trim: true });
+    rows = parse(await file.text(), { columns: true, skip_empty_lines: true, trim: true, bom: true });
   } catch {
     return NextResponse.json({ error: "Couldn't read that CSV — check the format." }, { status: 400 });
   }
+  // Headings as job software exports them (lib/csv-columns.ts).
+  const map = columnMap(rows[0] ? Object.keys(rows[0]) : []);
+  const missing = rows.length ? missingColumns(map) : null;
+  if (missing) return NextResponse.json({ error: missing }, { status: 400 });
 
   await track("import_consent_confirmed", { type: "ENGINEER", id: engineerId }, {
     source: "csv",
@@ -42,18 +47,7 @@ export async function POST(req: Request) {
 
   const result = await importCustomers(
     engineerId,
-    rows.map((r) => ({
-      firstName: r.first_name ?? "",
-      lastName: r.last_name ?? "",
-      phone: r.phone ?? "",
-      email: r.email,
-      addressLine1: r.address_line1,
-      town: r.town,
-      postcode: r.postcode,
-      applianceMake: r.appliance_make,
-      applianceModel: r.appliance_model,
-      lastServiced: r.last_serviced,
-    })),
+    rows.map((r) => rowFrom(r, map)),
   );
   return NextResponse.json(result);
 }
