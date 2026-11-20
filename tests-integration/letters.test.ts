@@ -65,7 +65,7 @@ describe("letter batches", () => {
     const res = await call(list);
     expect(res.status).toBe(200);
     expect(res.body.items).toEqual([
-      { name: NAME, area: "Leeds and York", postedOn: today, planned: 3, reservedUntil, codes: 3, claimed: 1, signedUp: 1, suppressed: 1, unclaimed: 1, secondLetterFrom: addDays(today, 10), uploadedAt: expect.any(String), uploadedBy: "Test Super" },
+      { name: NAME, area: "Leeds and York", postedOn: today, planned: 3, reservedUntil, codes: 3, claimed: 1, signedUp: 1, suppressed: 1, unclaimed: 1, notSignedUp: 0, canText: 0, texted: 0, secondLetterFrom: addDays(today, 10), uploadedAt: expect.any(String), uploadedBy: "Test Super" },
     ]);
   });
 

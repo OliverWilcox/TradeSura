@@ -5,7 +5,25 @@ import Link from "next/link";
 import { Card, btnClass } from "@/components/ui";
 import { EmergencyStop } from "@/components/emergency-stop";
 
-export function ReportForm({ token }: { token: string }) {
+const COPY = {
+  problem: {
+    path: "report",
+    heading: "What's the problem?",
+    placeholder: "e.g. Radiators cold downstairs since yesterday…",
+    min: 5,
+    done: "Your engineer has been notified and will be in touch.",
+  },
+  safety: {
+    path: "safety",
+    heading: "What happened?",
+    placeholder: "Tell us what your engineer did or left that you think isn't safe",
+    min: 10,
+    done: "TradeSura has your report. We'll look into it and may contact you.",
+  },
+} as const;
+
+export function ReportForm({ token, kind = "problem" }: { token: string; kind?: keyof typeof COPY }) {
+  const copy = COPY[kind];
   const [message, setMessage] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [showStop, setShowStop] = useState(false);
@@ -16,7 +34,7 @@ export function ReportForm({ token }: { token: string }) {
   async function submit(withAck: boolean) {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/portal/${token}/report`, {
+    const res = await fetch(`/api/portal/${token}/${copy.path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, acknowledged: withAck }),
@@ -54,7 +72,7 @@ export function ReportForm({ token }: { token: string }) {
           <div className="text-2xl">✓</div>
           <p className="font-semibold mt-1">Report sent</p>
           <p className="text-xs text-muted mt-1">
-            Your engineer has been notified and will be in touch.
+            {copy.done}
           </p>
         </Card>
         <Link href={`/portal/${token}`} className={btnClass("ghost")}>
@@ -66,18 +84,18 @@ export function ReportForm({ token }: { token: string }) {
 
   return (
     <Card>
-      <h2 className="text-sm font-semibold mb-2">What&apos;s the problem?</h2>
+      <h2 className="text-sm font-semibold mb-2">{copy.heading}</h2>
       <textarea
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         rows={5}
-        placeholder="e.g. Radiators cold downstairs since yesterday…"
+        placeholder={copy.placeholder}
         className="w-full border border-line rounded-[10px] px-3 py-2.5 text-sm bg-paper"
       />
       {error && <p className="text-sm text-danger mt-2">{error}</p>}
       <button
         onClick={() => submit(acknowledged)}
-        disabled={busy || message.trim().length < 5}
+        disabled={busy || message.trim().length < copy.min}
         className={`${btnClass()} mt-3`}
       >
         {busy ? "Sending…" : "Send report"}

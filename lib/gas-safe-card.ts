@@ -81,6 +81,11 @@ const YEARS_AHEAD = 5;
  * The card's expiry date as the app sends it (YYYY-MM-DD), as a UTC date. A
  * date that's passed, or more than five years off (a typo), is refused.
  */
+export const PhotoSource = z.enum(["camera", "library"]);
+export type PhotoSource = z.infer<typeof PhotoSource>;
+
+export const photoSourceOf = (v: unknown): PhotoSource | null => (v === "camera" || v === "library" ? v : null);
+
 export const cardExpiry = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)

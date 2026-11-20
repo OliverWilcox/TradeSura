@@ -8,7 +8,7 @@ import { adminEvent } from "@/lib/admin-api/audit";
 import { bounded, likeTerm } from "@/lib/admin-api/db";
 import { conflict, notFound } from "@/lib/admin-api/route";
 import type { AdminPrincipal } from "@/lib/admin-api/token";
-import { badgeOf, cardCheckPassed, checksOf, dateOnly, gasSafeNumbers, nextRegisterCheck, personName, qualificationsOf, verificationStatus, type CheckStage } from "@/lib/admin/verifications";
+import { badgeOf, cardCheckPassed, checksOf, dateOnly, gasSafeNumbers, nextRegisterCheck, personName, photoSources, qualificationsOf, verificationStatus, type CheckStage } from "@/lib/admin/verifications";
 import { currentReads, detailsOf } from "@/lib/admin/card-check";
 import { stripeLive, stripeStages } from "@/lib/admin/stripe-account";
 import { ensureReferralCode, referralLink } from "@/lib/referral-code";
@@ -642,6 +642,7 @@ export async function getEngineer(id: string) {
       categoriesPublic: badgeOf(e) === "public",
       cardOnFile: Boolean(e.gasSafeCardUrl),
       backOnFile: Boolean(e.gasSafeCardUrl && e.gasSafeCardBackUrl),
+      photoSource: photoSources(e),
       cardExpiresOn: dateOnly(e.gasSafeCardExpiresOn),
       qualifications: qualificationsOf(e.qualificationConfirmations),
       nextRegisterCheck: dateOnly(nextRegisterCheck(e.gasSafeRegisterCheckedAt, e.gasSafeCardExpiresOn)),

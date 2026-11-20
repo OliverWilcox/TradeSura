@@ -47,19 +47,23 @@ export async function loadEngineerPage(slug: string) {
 
 type Loaded = NonNullable<Awaited<ReturnType<typeof loadEngineerPage>>>;
 
+export const cardChecked = (e: { gasSafeVerifiedAt: Date | null; pausedAt: Date | null; bannedAt: Date | null; leftAt: Date | null }) =>
+  Boolean(e.gasSafeVerifiedAt && !e.pausedAt && !e.bannedAt && !e.leftAt);
+
 export function engineerPageMetadata(data: Loaded | null, opts: { profile?: boolean } = {}): Metadata {
   if (!data) return { title: "Care plans" };
   const { engineer } = data;
   const area = engineer.serviceArea?.trim();
   const published = Boolean(engineer.profilePublishedAt);
   const town = engineer.town?.trim();
+  const who = cardChecked(engineer) ? "a Gas Safe registered engineer" : "an engineer";
   if (opts.profile && town) {
     // Section 6 — "Dave's Heating: Gas Engineer in Huddersfield | TradeSura".
     return {
       title: { absolute: `${engineer.tradingName}: Gas Engineer in ${town} | TradeSura` },
       description: (
         engineer.profileBio?.trim() ||
-        `${engineer.tradingName} is a Gas Safe registered engineer in ${town}${area ? ` covering ${area}` : ""}. Boiler care plans paid monthly by Direct Debit, ratings from verified customers, call or message direct.`
+        `${engineer.tradingName} is ${who} in ${town}${area ? ` covering ${area}` : ""}. Boiler care plans paid monthly by Direct Debit, ratings from verified customers, call or message direct.`
       ).slice(0, 160),
       alternates: { canonical: canonicalProfileUrl(engineer) },
       robots: published ? { index: true, follow: true } : { index: false, follow: false },
@@ -71,7 +75,7 @@ export function engineerPageMetadata(data: Loaded | null, opts: { profile?: bool
       : `${engineer.tradingName} Care Plans`,
     description:
       engineer.profileBio?.trim().slice(0, 160) ||
-      `Monthly boiler care plans from ${engineer.tradingName}, a Gas Safe registered engineer${area ? ` covering ${area}` : ""}.`,
+      `Monthly boiler care plans from ${engineer.tradingName}, ${who}${area ? ` covering ${area}` : ""}.`,
     alternates: { canonical: canonicalProfileUrl(engineer) },
     // Plan links work from day one; search engines only see a profile the
     // engineer has chosen to publish.
@@ -191,7 +195,7 @@ export async function EngineerPage({
         <div className="bg-paper border border-line rounded-xl p-4 text-center">
           <h1 className="font-sans font-semibold text-base mb-1.5">{brand}&apos;s care plans</h1>
           <p className="text-sm text-muted">
-            Monthly boiler care plans from a Gas Safe registered engineer. Plans are being set up
+            Monthly boiler care plans from {cardChecked(engineer) ? "a Gas Safe registered engineer" : brand}. Plans are being set up
             now; check back soon, or ask {brand} directly.
           </p>
         </div>
@@ -241,7 +245,7 @@ export async function EngineerPage({
               })),
             }
           : {}),
-        makesOffer: tiers.map((t) => ({
+        makesOffer: mode === "closed" ? undefined : tiers.map((t) => ({
           "@type": "Offer",
           name: t.name,
           priceSpecification: {

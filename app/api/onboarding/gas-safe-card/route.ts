@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { signToken, verifyToken } from "@/lib/auth";
-import { bothSidesTooBig, storeGasSafeCard } from "@/lib/gas-safe-card";
+import { bothSidesTooBig, PhotoSource, storeGasSafeCard } from "@/lib/gas-safe-card";
 
 const Body = z.object({
   phoneToken: z.string().min(1),
@@ -9,6 +9,8 @@ const Body = z.object({
   mimeType: z.string().min(1),
   backBase64: z.string().min(1).optional(),
   backMimeType: z.string().min(1).optional(),
+  source: PhotoSource.optional(),
+  backSource: PhotoSource.optional(),
 });
 
 // Signup step 2 — the Gas Safe ID-card photo, one of the two legs of the
@@ -32,13 +34,16 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const { base64, mimeType, backBase64, backMimeType } = parsed.data;
+  const { base64, mimeType, backBase64, backMimeType, source, backSource } = parsed.data;
   const together = bothSidesTooBig(base64, backBase64);
   if (together) return NextResponse.json({ error: together, field: "back" }, { status: 400 });
   const front = await storeGasSafeCard(base64, mimeType);
   if (!front.ok) return NextResponse.json({ error: front.error }, { status: 400 });
   const back = backBase64 && backMimeType ? await storeGasSafeCard(backBase64, backMimeType) : null;
   if (back && !back.ok) return NextResponse.json({ error: back.error, field: "back" }, { status: 400 });
-  const cardToken = await signToken({ cardUrl: front.url, ...(back?.ok ? { backUrl: back.url } : {}), phone: phone.phone }, "2h");
+  const cardToken = await signToken(
+    { cardUrl: front.url, ...(source ? { source } : {}), ...(back?.ok ? { backUrl: back.url, ...(backSource ? { backSource } : {}) } : {}), phone: phone.phone },
+    "2h",
+  );
   return NextResponse.json({ cardToken });
 }
