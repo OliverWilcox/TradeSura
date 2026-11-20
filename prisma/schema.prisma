@@ -112,6 +112,9 @@ model Engineer {
   // queue (app/admin/verifications), which sets gasSafeVerifiedAt or
   // gasSafeRejectedAt. Card photo lives in Blob under an unguessable path.
   gasSafeCardUrl             String?
+  // Matt 16 Nov — the back of the card too (gas categories, licence no.
+  // repeated). Same Blob store and rules as the front.
+  gasSafeCardBackUrl         String?
   // The ID card's expiry date, given with the photo (client feedback 3.5,
   // engineer record 4). The next register re-check is due by then.
   gasSafeCardExpiresOn       DateTime?         @db.Date
@@ -195,6 +198,14 @@ model Engineer {
   // "Are you the only owner of the company?" — yes sends the representative
   // to Stripe as owner and director, so those steps disappear.
   soleOwner                  Boolean?
+  // Matt 16 Nov — impersonation check. Anyone can pick any Ltd at sign-up,
+  // so their name is checked against the company's officers and PSCs.
+  // companyRoleCheck: "listed" | "not_listed" (null: not a company, or
+  // Companies House couldn't answer). Not listed sets companyRoleFlaggedAt:
+  // no badge, no town page, no Founding Member spot until an admin clears it.
+  companyRoleCheck           String?
+  companyRoleCheckedAt       DateTime?
+  companyRoleFlaggedAt       DateTime?
   // R5 — prices are shown "including VAT" on customer pages when set.
   vatRegistered              Boolean           @default(false)
   // R12 — { CLAUSE_CODE: ISO date } for options needing a qualification the

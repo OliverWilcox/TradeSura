@@ -106,6 +106,8 @@ export async function GET() {
     gasSafeName: engineer.gasSafeName,
     gasSafeCompany: engineer.gasSafeCompany,
     gasSafeCategories: engineer.gasSafeCategories,
+    // Matt, 12 Nov — the first-payout screen's Trustpilot button; null until set.
+    trustpilotUrl: process.env.TRUSTPILOT_REVIEW_URL?.trim() || null,
     stripeConnected: engineer.stripeChargesEnabled,
     stripeDetailsSubmitted: engineer.stripeDetailsSubmitted,
     stripePayoutsEnabled: engineer.stripePayoutsEnabled,

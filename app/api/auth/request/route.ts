@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { findReferrer } from "@/lib/referral-code";
@@ -13,6 +13,8 @@ import { notifyEngineer } from "@/lib/sms";
 import { cardExpiry } from "@/lib/gas-safe-card";
 import { saveAddresses } from "@/lib/addresses";
 import { queueCardAlert } from "@/lib/card-alert";
+import { autoCheckStoredCard } from "@/lib/card-check";
+import { runCompanyRoleCheck } from "@/lib/company-role-check";
 import { sendPushNotification } from "@/lib/push";
 import {
   COMPANY_NUMBER,
@@ -61,6 +63,7 @@ const SignupData = z.object({
     .pipe(z.string().regex(GAS_SAFE_REGISTRATION_NO))
     .optional(),
   gasSafeCardToken: z.string().max(2000).optional(),
+  gasSafeCardBackToken: z.string().max(2000).optional(),
   // The ID card's expiry, given with the photo (YYYY-MM-DD, not yet passed).
   gasSafeCardExpiresOn: cardExpiry.optional(),
   // Build Review 3, section 2 — required for a sole trader; a limited
@@ -325,7 +328,7 @@ export async function POST(req: Request) {
     const legalName = rest.businessType !== "sole_trader" ? rest.legalName || null : null;
     const tradingName =
       rest.tradingName.length >= 2 ? rest.tradingName : legalName ?? rest.tradingName;
-    const slug = await uniqueSlug(tradingName);
+    const slug = await uniqueSlug(tradingName, undefined, rest.town || null);
 
     // Resolve a claim code (C5): fold the letter cell into attribution so it
     // reaches the account, even if the client didn't pass it explicitly.
@@ -358,6 +361,13 @@ export async function POST(req: Request) {
         );
       }
       gasSafeCardUrl = card.cardUrl;
+    }
+    // Matt 16 Nov — the back of the card, when they added it. A stale or
+    // someone else's token is just dropped: the front is what counts.
+    let gasSafeCardBackUrl: string | null = null;
+    if (gasSafeCardUrl && rest.gasSafeCardBackToken) {
+      const backCard = await verifyToken(rest.gasSafeCardBackToken);
+      if (backCard?.cardBackUrl && backCard.phone === phonePayload.phone) gasSafeCardBackUrl = backCard.cardBackUrl;
     }
 
     // Only an Apple id our own /api/auth/apple signed after checking Apple's
@@ -457,6 +467,7 @@ export async function POST(req: Request) {
           gasSafeNo: rest.gasSafeNo,
           gasSafeRegistrationNo: rest.gasSafeRegistrationNo ?? null,
           gasSafeCardUrl,
+          gasSafeCardBackUrl,
           gasSafeCardExpiresOn: gasSafeCardUrl && rest.gasSafeCardExpiresOn ? rest.gasSafeCardExpiresOn : null,
           // Into the admin queue — the badge is granted by a person
           // (app/admin/verifications), never by signup.
@@ -523,6 +534,20 @@ export async function POST(req: Request) {
 
     // 3.2: tell the team there's a card to check.
     if (gasSafeCardUrl) await queueCardAlert(engineer.id, "signup");
+    // Matt: AI reads the card and a clear match makes them live straight
+    // away (lib/card-check.ts); after the response, so sign-up never waits.
+    if (gasSafeCardUrl) {
+      const cardUrl = gasSafeCardUrl;
+      const backUrl = gasSafeCardBackUrl;
+      const newId = engineer.id;
+      after(() => autoCheckStoredCard(newId, cardUrl, backUrl));
+    }
+    // Matt 16 Nov — impersonation check for a limited company: the name
+    // against its officers and PSCs (lib/company-role-check.ts).
+    if (rest.businessType === "ltd") {
+      const newId = engineer.id;
+      after(() => runCompanyRoleCheck(newId));
+    }
 
     engineerWelcomeEmailHtml(engineer.id)
       .then(({ subject, html }) => sendEmail({ to: email, subject, html }))

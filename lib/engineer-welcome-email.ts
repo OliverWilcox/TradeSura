@@ -9,10 +9,11 @@ import { REFERRAL_FIRST_YEAR_PERCENT, REFERRAL_LIFETIME_PERCENT } from "@/lib/re
 import { computeApplicationFeePence } from "@/lib/stripe";
 
 // Build Review 3, P1 — earnings use the engineer's 80% (after TradeSura's
-// fee, rounded down in their favour), never the customer's price: a £12
-// plan is £115 a year to the engineer, not £144.
-const EXAMPLE_PLAN_PENCE = 1200;
-const EXAMPLE_CUSTOMERS = 10;
+// fee, rounded down in their favour), never the customer's price. Matt 13 Nov:
+// match the member pack letter everywhere — 20 customers at £15 a month =
+// £2,880 a year, always labelled as an example.
+const EXAMPLE_PLAN_PENCE = 1500;
+const EXAMPLE_CUSTOMERS = 20;
 export function engineerYearlyPence(planPence: number): number {
   return (planPence - computeApplicationFeePence(planPence)) * 12;
 }
@@ -61,26 +62,26 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
   const goLive: Item[] = [
     { done: liveTiers > 0, title: "Build your first plan", hint: "pick what's included and set your own price" },
     { done: Boolean(e.gasSafeVerifiedAt), title: "Gas Safe check", hint: e.gasSafeCardUrl ? "your number and ID photo are in, we're checking them" : "add a photo of your Gas Safe ID card" },
-    { done: e.stripeChargesEnabled && e.stripePayoutsEnabled, title: "Get paid", hint: "about 3 minutes with Stripe" },
+    { done: e.stripeChargesEnabled && e.stripePayoutsEnabled, title: "Get paid", hint: "about 3 minutes" },
   ];
   const grow: Item[] = [
     { done: Boolean(e.profilePublishedAt), title: "Get found on Google", hint: "your free profile page" },
     { done: Boolean(e.websiteConnectedAt), title: "Connect your website", hint: "sell plans there too" },
-    { done: customerCount > 0, title: "Bring in your customers", hint: `each one worth up to ${wholePounds(perCustomer)} a year to you` },
-    { done: Boolean(e.inviteSharedAt) || referralCount > 0, title: "Invite engineers you know", hint: `earn ${REFERRAL_FIRST_YEAR_PERCENT}% of our fee on their plans` },
+    { done: customerCount > 0, title: "Bring in your customers", hint: `e.g. ${wholePounds(perCustomer)} a year on a ${examplePounds} plan` },
+    { done: Boolean(e.inviteSharedAt) || referralCount > 0, title: "Invite engineers you know", hint: `earn ${REFERRAL_FIRST_YEAR_PERCENT}% of our fee for 12 months, then ${REFERRAL_LIFETIME_PERCENT}% for life` },
   ];
   const doneCount = goLive.filter((i) => i.done).length;
 
   const rows = `
   <tr><td bgcolor="${EMAIL.navy}" style="background:${EMAIL.navy};padding:4px 32px 30px;">
     <div style="font-size:28px;line-height:34px;font-weight:700;color:#ffffff;">You're in, ${firstName} &#128075;</div>
-    <div style="font-size:16px;line-height:24px;color:#C5D0E0;padding-top:10px;"><b style="color:#ffffff;">${brand}</b> now has a free TradeSura account. Sell your own care plans at the end of every job. Customers pay monthly by Direct Debit, you keep <b style="color:#3DD68C;">80%</b>, paid every Friday.</div>
+    <div style="font-size:16px;line-height:24px;color:#C5D0E0;padding-top:10px;"><b style="color:#ffffff;">${brand}</b> now has a free TradeSura account. Sell your own care plans at the end of every job. Customers pay monthly or yearly by Direct Debit, you keep <b style="color:#3DD68C;">80%</b>, paid every Friday.</div>
   </td></tr>
 
   <tr><td style="padding:24px 32px 6px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F2FBF6;border:1px solid #BDEBD3;border-radius:12px;">
       <tr><td style="padding:16px 18px;font-size:15px;line-height:22px;color:${EMAIL.ink};">
-        Just <b>${EXAMPLE_CUSTOMERS} customers</b> on a ${examplePounds} plan =<br>
+        <span style="color:${EMAIL.muted};">Example:</span> <b>${EXAMPLE_CUSTOMERS} customers</b> at ${examplePounds} a month =<br>
         <span style="font-size:26px;line-height:34px;font-weight:700;color:${EMAIL.money};">${wholePounds(perCustomer * EXAMPLE_CUSTOMERS)} a year</span> <span style="color:${EMAIL.muted};">in your pocket</span>
       </td></tr>
     </table>

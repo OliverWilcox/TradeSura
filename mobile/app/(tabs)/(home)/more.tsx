@@ -6,8 +6,7 @@ import * as ImagePicker from "expo-image-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, apiUrl, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { getConnectLinkWithRetry, stripeResultError } from "@/lib/stripe";
-import { AppHeader, Avatar, Card, Pill, RowLine, Button, Chevron, OpeningStripe } from "@/components/ui";
+import { AppHeader, Avatar, Card, Pill, RowLine, Button, Chevron } from "@/components/ui";
 import { Skeleton, TextBone, RowBone, LoadingImage } from "@/components/skeleton";
 import { StaffAccount } from "@/components/staff-account";
 import { Toggle } from "@/components/toggle";
@@ -104,8 +103,6 @@ function OwnerAccount() {
   const [logoBusy, setLogoBusy] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
 
-  const [stripeBusy, setStripeBusy] = useState(false);
-  const [stripeError, setStripeError] = useState<string | null>(null);
 
   const [vatBusy, setVatBusy] = useState(false);
   const [vatError, setVatError] = useState<string | null>(null);
@@ -242,28 +239,7 @@ function OwnerAccount() {
     }
   }
 
-  async function connectStripe() {
-    setStripeBusy(true);
-    setStripeError(null);
-    try {
-      // Build Guide v2 review 17 Sept, B3 — single retry; see
-      // lib/stripe.ts's getConnectLinkWithRetry for the reasoning.
-      const { url } = await getConnectLinkWithRetry();
-      // Build Guide v2 Part 17.1 — ephemeral session, no shared-cookie
-      // "wants to use stripe.com" popup. See onboarding.tsx's connectStripe
-      // for the same fix on this screen's other entry point into Connect.
-      const result = await WebBrowser.openAuthSessionAsync(url, "tradesura://onboarding", {
-        preferEphemeralSession: true,
-      });
-      const err = stripeResultError(result);
-      if (err) setStripeError(err);
-      else if (result.type === "success") await refreshMe();
-    } catch (e) {
-      setStripeError(e instanceof ApiError ? e.message : "Couldn't start payment setup.");
-    } finally {
-      setStripeBusy(false);
-    }
-  }
+
 
   // R5 (Build Review 3) — customer pages show "£X a month including VAT"
   // while this is on. Saved straight away, like any iOS switch.
@@ -409,15 +385,10 @@ function OwnerAccount() {
                 (settings.payments.tone === "quiet" ? (
                   <StatusLine status={settings.payments} />
                 ) : (
-                  <Pressable onPress={connectStripe} disabled={stripeBusy}>
-                    {stripeBusy ? (
-                      <OpeningStripe />
-                    ) : (
-                      <Text className="font-sans text-sm text-warn">{settings.payments.text}</Text>
-                    )}
+                  <Pressable onPress={() => router.push("/get-paid")}>
+                    <Text className="font-sans text-sm text-warn">{settings.payments.text}</Text>
                   </Pressable>
                 ))}
-              {stripeError && <Text className="font-sans text-xs text-danger">{stripeError}</Text>}
             </View>
           )}
         </Card>
@@ -737,8 +708,21 @@ function OwnerAccount() {
             <RowLine left="Enquiries — messages and calls from your page" right={<Chevron />} />
           </Pressable>
           <Pressable onPress={() => router.push("/referral")}>
-            <RowLine left="Invite an engineer · earn 25% of our fee" right={<Chevron />} />
+            <RowLine left="Invite an engineer · 25% of our fee for 12 months, then 10% for life" right={<Chevron />} />
           </Pressable>
+          {/* Home keeps these out of the way until the first plan is sold
+              (Matt, 16 Nov), so they always live here too. */}
+          <Pressable onPress={() => router.push("/website")}>
+            <RowLine left="Your website" right={<Chevron />} />
+          </Pressable>
+          <Pressable onPress={() => router.push("/your-numbers")}>
+            <RowLine left="Your numbers" right={<Chevron />} />
+          </Pressable>
+          {me?.gasSafeVerifiedAt && (
+            <Pressable onPress={() => router.push("/membership-shop")}>
+              <RowLine left="Membership Shop" right={<Chevron />} />
+            </Pressable>
+          )}
           <Pressable onPress={openSupportChat}>
             <RowLine left="WhatsApp support" right={<Chevron />} />
           </Pressable>

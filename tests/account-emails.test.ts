@@ -28,7 +28,7 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/lib/email", () => ({ sendEmail: m.email }));
 vi.mock("@/lib/engineer-welcome-email", () => ({
-  // 20% rounded down, so a £12 plan is £9.60 a month / £115 a year.
+  // 20% rounded down, so a £15 plan is £12 a month / £144 a year.
   engineerYearlyPence: (p: number) => (p - Math.floor(p * 0.2)) * 12,
 }));
 
@@ -87,9 +87,9 @@ describe("account emails", () => {
   });
 
   it("copy uses the engineer's 80% and links into the app", () => {
-    expect(paymentsNudgeEmail("Dave").html).toContain("£9.60");
+    expect(paymentsNudgeEmail("Dave").html).toContain("£12.00");
     expect(paymentsNudgeEmail("Dave").html).toContain("/api/open?to=get-paid");
-    expect(noPlanNudgeEmail("Dave").html).toContain("£115 a year");
+    expect(noPlanNudgeEmail("Dave").html).toContain("£144 a year");
     const first = firstCustomerEmail("Dave", "Sarah Jones", "Boiler Care", 11520);
     expect(first.subject).toBe("Your first customer has joined");
     expect(first.html).toContain("Sarah Jones has joined Boiler Care");

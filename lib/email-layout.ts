@@ -90,12 +90,11 @@ export function emailShell(opts: {
 <tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="${width}" cellpadding="0" cellspacing="0" border="0" style="width:${width}px;max-width:100%;background:#ffffff;border-radius:14px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:${EMAIL.ink};">
   <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:24px 30px 20px;border-bottom:1px solid ${EMAIL.line};">
-    <!-- Matt, 4 Nov: the dark logo ("Trade" in navy) on white, with ®; the
-         white "Trade" was near-invisible where mail apps lightened the band. -->
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-      <td><img src="${assets}/brand/lockup-dark.png" width="160" height="32" alt="TradeSura" style="display:block;border:0;"></td>
-      <td valign="top" style="padding-left:2px;color:${EMAIL.navy};font-size:11px;line-height:11px;font-family:Arial,Helvetica,sans-serif;">&reg;</td>
-    </tr></table>
+    <!-- Matt, 4 Nov: the dark logo ("Trade" in navy) with ®. Matt 16 Nov: in
+         Outlook's dark mode the band turns dark and the navy "Trade" vanished,
+         so the logo and ® now sit on their own solid white (mail apps never
+         recolour an image), readable on any background. -->
+    <img src="${assets}/email/brand/lockup-dark.png" width="178" height="40" alt="TradeSura" style="display:block;border:0;">
   </td></tr>
   ${opts.rows}
   <tr><td style="background:${EMAIL.wash};padding:18px 30px;font-size:11.5px;line-height:17px;color:${EMAIL.muted};">

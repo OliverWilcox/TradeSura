@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { hasRepairDiscount } from "@/lib/clauses";
+import { useRef, useState } from "react";
 import { NotIncluded } from "@/components/ui";
 import { EmbeddedCheckout } from "@/components/embedded-checkout";
 import { JOIN_BTN, PlanTierCard } from "@/components/plan-tier-card";
+import { StickyJoin } from "@/components/sticky-join";
 import { BillingChoice } from "@/components/billing-choice";
 import { chargePence, priceLine, type BillingInterval } from "@/lib/billing-interval";
 import { defaultTierId, hasLandlordChoice, tiersFor } from "@/lib/signup-choice";
@@ -60,6 +62,7 @@ export function SignupTiers({
   normalPrices?: NormalPrices;
   /** §7.6 — "Why a yearly service matters", in the visit reason's order. */
   serviceOrder?: string[] | null;
+  /** Matt 16 Nov — the builder's repair discount (already a line on each plan). */
 }) {
   const tiers = pinnedTierId
     ? [...rawTiers].sort((a, b) => (a.id === pinnedTierId ? -1 : b.id === pinnedTierId ? 1 : 0))
@@ -76,6 +79,7 @@ export function SignupTiers({
   const [started, setStarted] = useState<Started | null>(null);
   const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
   const selected = tiers.find((t) => t.id === selectedId);
+  const joinRef = useRef<HTMLDivElement>(null);
 
   async function choose() {
     if (!selected) return;
@@ -165,10 +169,11 @@ export function SignupTiers({
 
       <WhyYearlyService order={serviceOrder} />
 
-      <NotIncluded />
+      <NotIncluded repairDiscount={hasRepairDiscount(selected?.codes ?? [])} />
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
+      <div ref={joinRef} className="flex flex-col gap-3.5 scroll-mt-4">
       {selected && (
         <BillingChoice
           priceMonthlyPence={selected.priceMonthlyPence}
@@ -187,8 +192,14 @@ export function SignupTiers({
             : `Join now · ${selected.name}, ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)}`}
         </button>
       )}
+      </div>
 
       <HomePassportBlock brand={engineerName} />
+
+      {/* Matt 16 Nov — phones: a sticky Join that takes them to the Join step. */}
+      {selected && (
+        <StickyJoin label={`Join for ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)}`} target={joinRef} />
+      )}
     </>
   );
 }

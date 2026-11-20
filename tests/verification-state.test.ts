@@ -141,11 +141,11 @@ describe("paymentsStatus", () => {
   it("not active while payouts are still off (matches the hub)", () => {
     const s = paymentsStatus({ ...acct, stripePayoutsEnabled: false });
     expect(s.tone).toBe("amber");
-    expect(s.text).toContain("Stripe needs more information");
+    expect(s.text).toContain("We need a bit more information");
   });
   it("half set up before the Stripe details are submitted", () => {
     const s = paymentsStatus({ ...acct, stripeDetailsSubmitted: false, stripeChargesEnabled: false, stripePayoutsEnabled: false });
-    expect(s.text).toBe("Payments half set up — finish with Stripe →");
+    expect(s.text).toBe("Payments half set up — finish setup →");
   });
   it("still 'set up payments' when Get paid made the account but Stripe was never opened", () => {
     const s = paymentsStatus({ ...acct, stripeDetailsSubmitted: false, stripeChargesEnabled: false, stripePayoutsEnabled: false, stripeOnboardingStartedAt: null });

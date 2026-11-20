@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { repairChargeLine } from "@/lib/clauses";
 
 // `variant` picks the card treatment from Screen Designs v2: `flat` (default,
 // most cards), `raised` (surface-2→surface gradient + shadow, for the
@@ -117,7 +118,7 @@ export function Money({ pence, suffix = "" }: { pence: number; suffix?: string }
 
 // Handover 1.4 — the industry's failure mode is a customer who thinks the plan
 // covers breakdowns. Stated plainly wherever the plan is presented.
-export function NotIncluded() {
+export function NotIncluded({ repairDiscount = false }: { repairDiscount?: boolean }) {
   return (
     <div className="bg-warn-tint border border-warn-tint rounded-xl px-4 py-3">
       <p className="font-mono text-[10px] tracking-[0.1em] uppercase text-warn mb-1">
@@ -125,9 +126,8 @@ export function NotIncluded() {
       </p>
       <p className="text-xs text-warn leading-relaxed">
         <b>Breakdown repairs.</b>{" "}
-        If something breaks, your engineer prioritises you and repair work is chargeable at your
-        plan discount. This plan is a maintenance &amp; priority agreement, not an insurance
-        policy.
+        If something breaks, your engineer prioritises you and {repairChargeLine(repairDiscount)}.
+        This plan is a maintenance &amp; priority agreement, not an insurance policy.
       </p>
     </div>
   );

@@ -14,7 +14,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tradesura.engineerx",
-      "buildNumber": "22",
+      "buildNumber": "26",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -86,7 +86,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#0B1A2E"
         }
-      ]
+      ],
+      ["@stripe/stripe-react-native", {}]
     ],
     "extra": {
       "router": {},

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { BADGE_WHERE, showsVerifiedBadge } from "@/lib/public-badge";
 
 // Section 6 — profiles live at tradesura.com/gas-engineers/{townSlug}/{slug}
 // and each town gets a listing page. The town is the engineer's own words
@@ -104,6 +105,9 @@ export async function ensureEngineerTown(engineerId: string): Promise<{ town: st
 
 export type TownEngineer = {
   gasSafeVerifiedAt: Date | null;
+  gasSafeRegisterCheckedAt: Date | null;
+  gasSafeSuspendedAt: Date | null;
+  companyRoleFlaggedAt: Date | null;
   profilePublishedAt: Date | null;
   liveTiers: number;
   leftAt: Date | null;
@@ -112,11 +116,13 @@ export type TownEngineer = {
   ownerId: string | null;
 };
 
-// A real engineer for a town page: verified, chose to publish, has a plan
-// customers can join, still trading with us, and is a business (not staff).
+// A real engineer for a town page: verified and register-checked (the page
+// calls everyone on it "Gas Safe verified", so it follows the public badge,
+// Matt 13 Nov), chose to publish, has a plan customers can join, still
+// trading with us, and is a business (not staff).
 export function listedOnTownPage(e: TownEngineer): boolean {
   return (
-    Boolean(e.gasSafeVerifiedAt) &&
+    showsVerifiedBadge(e) &&
     Boolean(e.profilePublishedAt) &&
     e.liveTiers > 0 &&
     !e.leftAt &&
@@ -135,7 +141,7 @@ export function townIsPublic(page: { heldAt: Date | null } | null, engineers: To
 
 // The Prisma filter matching listedOnTownPage, for queries.
 export const LISTED_ENGINEER_WHERE = {
-  gasSafeVerifiedAt: { not: null },
+  ...BADGE_WHERE,
   profilePublishedAt: { not: null },
   tiers: { some: { status: "LIVE" as const } },
   leftAt: null,

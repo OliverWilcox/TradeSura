@@ -81,16 +81,16 @@ export async function alertIfStripeNeedsMore(
   await track("stripe_more_info_requested", { type: "ENGINEER", id: engineer.id }, {});
   await sendPushNotification(
     engineer.id,
-    "Stripe needs one more thing",
-    "Stripe has asked for a bit more information before it can keep paying you. It takes a minute.",
+    "One more thing needed",
+    "We need a bit more information before we can keep paying you. It takes a minute.",
     { url: "/get-paid" },
   ).catch((err) => console.error("[stripe] more-info push failed:", err));
   if (engineer.email) {
     await sendEmail({
       to: engineer.email,
-      subject: "Stripe needs one more thing",
+      subject: "One more thing needed to keep paying you",
       html: `<p>Hi ${engineer.firstName ?? "there"},</p>
-<p>Stripe has asked for a bit more information before it can keep paying you. It usually takes a minute.</p>
+<p>We need a bit more information before we can keep paying you. It usually takes a minute.</p>
 <p>Open the TradeSura app and tap <b>Get paid</b> to finish it. Your customers' plans aren't affected while you do.</p>`,
     }).catch((err) => console.error("[stripe] more-info email failed:", err));
   }

@@ -62,7 +62,7 @@ export default function PaymentsReady() {
             You&apos;re set up to get paid
           </Text>
           <Text className="mt-2 text-center text-[15px] text-muted">
-            Stripe has everything it needs. Payments are on.
+            We have everything we need. Payments are on.
           </Text>
 
           <View className="mt-5 rounded-2xl border border-line-strong px-4 py-1.5">

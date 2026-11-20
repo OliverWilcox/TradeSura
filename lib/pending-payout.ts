@@ -14,6 +14,8 @@ export type TimelineView = {
   basis: "customer" | "example";
   customerFirstName: string | null;
   timeline: PayoutTimeline;
+  /** True until the first payout: payoutAt already allows for the new-account hold. */
+  firstPayoutHeld: boolean;
 };
 
 async function hasBeenPaid(engineerId: string): Promise<boolean> {
@@ -72,6 +74,7 @@ export async function timelineView(engineerId: string, now = new Date()): Promis
         basis: "customer",
         customerFirstName: first.customer.firstName,
         timeline: timelineFor(first, FIRST_PAYOUT_HOLD_DAYS, now),
+        firstPayoutHeld: true,
       };
     }
   }
@@ -79,5 +82,6 @@ export async function timelineView(engineerId: string, now = new Date()): Promis
     basis: "example",
     customerFirstName: null,
     timeline: payoutTimeline({ joinedAt: now, holdDays: paid ? 0 : FIRST_PAYOUT_HOLD_DAYS, now }),
+    firstPayoutHeld: !paid,
   };
 }

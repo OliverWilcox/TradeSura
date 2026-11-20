@@ -60,8 +60,19 @@ export function claimedInTime(code: { claimedAt: Date | null; redeemedAt: Date |
 /** Which of these engineers are Founding Members. */
 export async function foundingMemberIds(engineerIds: string[]): Promise<Set<string>> {
   if (engineerIds.length === 0) return new Set();
+  // Matt 16 Nov — an account flagged by the impersonation check gets no
+  // Founding Member perks (top spot, first look at town requests) until an
+  // admin clears it (lib/company-role-check.ts).
+  const flagged = new Set(
+    (
+      await prisma.engineer.findMany({
+        where: { id: { in: engineerIds }, companyRoleFlaggedAt: { not: null } },
+        select: { id: true },
+      })
+    ).map((e) => e.id),
+  );
   const codes = await prisma.claimCode.findMany({
-    where: { redeemedByEngineerId: { in: engineerIds }, suppressedAt: null },
+    where: { redeemedByEngineerId: { in: engineerIds.filter((id) => !flagged.has(id)) }, suppressedAt: null },
     select: { redeemedByEngineerId: true, claimedAt: true, redeemedAt: true, letterBatch: true, createdAt: true, reservedUntil: true },
   });
   const out = new Set<string>();

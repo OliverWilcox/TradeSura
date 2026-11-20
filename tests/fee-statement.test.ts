@@ -27,6 +27,12 @@ describe("fee statement", () => {
     });
   });
 
+  it("a yearly refund comes out of the engineer's share, our fee kept (Matt, 13 Nov)", () => {
+    const lines = [{ date: "9 Nov 2026", customer: "Sam Lee", planRef: "TSH-1002", collectedPence: 16500, feePence: 3300 }];
+    const refunds = [{ date: "20 Nov 2026", customer: "Sam Lee", planRef: "TSH-1002", refundedPence: 13750, feeRefundedPence: 0 }];
+    expect(statementTotals(lines, refunds)).toMatchObject({ feePence: 3300, netFeePence: 3300, toYouPence: 16500 - 3300 - 13750 });
+  });
+
   it("months run on UK time", () => {
     expect(isMonth("2026-11")).toBe(true);
     expect(isMonth("2026-13")).toBe(false);

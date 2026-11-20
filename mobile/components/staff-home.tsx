@@ -66,7 +66,7 @@ export function StaffHome() {
         </Card>
 
         <Button onPress={() => setSheetOpen(true)} disabled={!canAdd}>
-          Add customer
+          Offer a plan
         </Button>
         {!canAdd && (
           <Text className="text-center font-sans text-xs text-muted">

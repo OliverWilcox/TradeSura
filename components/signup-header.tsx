@@ -52,6 +52,9 @@ export function SignupHeader(p: SignupHeaderProps) {
           ) : (
             <p className="font-sans font-bold text-lg leading-tight">{first ? `${first} · ${p.brand}` : p.brand}</p>
           )}
+          {/* Matt 16 Nov — said in words as well as the badge, only once the
+              register check has passed (lib/public-badge.ts). */}
+          {p.verified && <p className="mt-0.5 text-[13px] font-semibold text-ink">Gas Safe registered</p>}
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             {p.verified && <VerifiedMemberBadge />}
             {p.founding}

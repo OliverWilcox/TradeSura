@@ -5,6 +5,7 @@ import { getActor } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { passportForCustomer, passportState } from "@/lib/passport";
 import { requestRating } from "@/lib/ratings";
+import { inviteCustomerAfterFirstService } from "@/lib/trustpilot";
 
 const Body = z.object({
   servicedOn: z.string().datetime().optional(),
@@ -79,6 +80,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     });
     serviceRecordId = record.id;
     ratingRequested = (await requestRating(record.id)).requested;
+    // Matt, 12 Nov — Trustpilot invite after the customer's first service.
+    await inviteCustomerAfterFirstService(id, engineerId);
   }
 
   await track("service_recorded", { type: "ENGINEER", id: engineerId }, {

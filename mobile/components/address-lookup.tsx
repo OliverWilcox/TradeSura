@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { View, Text, TextInput, Pressable, ActivityIndicator } from "react-native";
 import { api, ApiError } from "@/lib/api";
-import { Micro } from "@/components/ui";
 
 export type AddressValue = { line1: string; town: string; postcode: string };
 
@@ -112,7 +111,8 @@ export function AddressLookupField({
       </View>
 
       {postcodeError && <Text className="text-[13px] text-warn">{postcodeError}</Text>}
-      {searchError && <Micro className="text-faint">{searchError}</Micro>}
+      {/* Matt 16 Nov — sentence case, not the uppercase Micro label. */}
+      {searchError && <Text className="text-[13px] leading-[18px] text-white/70">{searchError}</Text>}
 
       {results && results.length > 0 && (
         <View className="rounded-[10px] border border-line bg-paper">

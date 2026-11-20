@@ -246,13 +246,13 @@ describe("yearly cancellation refund (Review 4)", () => {
     expect((await cancelAtPeriodEnd("plan_1")).refundPence).toBeUndefined();
   });
 
-  it("when it ends: refunds that amount, reversing the engineer's share and our fee", async () => {
+  it("when it ends: refunds that amount from the engineer's share and keeps our 20% (Matt, 13 Nov)", async () => {
     m.plan.findUniqueOrThrow.mockResolvedValue({ ...basePlan, billingInterval: "year" });
     paidYear();
     const endedAt = addMonths(start, 2);
     await settleEndedSubscription("plan_1", { ...sub, ended_at: sec(endedAt) } as never);
     expect(m.stripe.refunds.create).toHaveBeenCalledWith(
-      expect.objectContaining({ payment_intent: "pi_1", amount: 13750, reverse_transfer: true, refund_application_fee: true }),
+      expect.objectContaining({ payment_intent: "pi_1", amount: 13750, reverse_transfer: true, refund_application_fee: false }),
       { idempotencyKey: "yearly-refund:in_1" },
     );
   });

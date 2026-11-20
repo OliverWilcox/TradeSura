@@ -45,6 +45,9 @@ describe("town slug derivation", () => {
 describe("town publish rule", () => {
   const real: TownEngineer = {
     gasSafeVerifiedAt: new Date(),
+    gasSafeRegisterCheckedAt: new Date(),
+    gasSafeSuspendedAt: null,
+    companyRoleFlaggedAt: null,
     profilePublishedAt: new Date(),
     liveTiers: 1,
     leftAt: null,
@@ -58,6 +61,13 @@ describe("town publish rule", () => {
     expect(listedOnTownPage({ ...real, gasSafeVerifiedAt: null })).toBe(false);
     expect(listedOnTownPage({ ...real, profilePublishedAt: null })).toBe(false);
     expect(listedOnTownPage({ ...real, liveTiers: 0 })).toBe(false);
+  });
+
+  it("waits for the Gas Safe Register check, like the public badge (Matt, 13 Nov)", () => {
+    expect(listedOnTownPage({ ...real, gasSafeRegisterCheckedAt: null })).toBe(false);
+    expect(listedOnTownPage({ ...real, gasSafeSuspendedAt: new Date() })).toBe(false);
+    // Matt 16 Nov — flagged by the impersonation check.
+    expect(listedOnTownPage({ ...real, companyRoleFlaggedAt: new Date() })).toBe(false);
   });
 
   it("leaves out installers who left, banned, deleted accounts and staff", () => {

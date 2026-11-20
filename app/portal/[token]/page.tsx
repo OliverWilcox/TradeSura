@@ -6,6 +6,7 @@ import { CustomerShell } from "@/components/shells";
 import { Card, NotIncluded, Pill, RowLine, btnClass } from "@/components/ui";
 import { annualServiceFrom, annualServiceUnlocked, priceLine } from "@/lib/plan-billing";
 import { resolvePlanTier } from "@/lib/plan-tier";
+import { hasRepairDiscount } from "@/lib/clauses";
 import { passportPath } from "@/lib/passport-link";
 
 export default async function PortalPage({ params }: { params: Promise<{ token: string }> }) {
@@ -119,7 +120,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
         </Card>
       )}
 
-      {clauses.length > 0 && <NotIncluded />}
+      {clauses.length > 0 && <NotIncluded repairDiscount={hasRepairDiscount(clauses.map((c) => c.code))} />}
 
       {(plan.status === "ACTIVE" || plan.status === "PAUSED") && (
         <Card>

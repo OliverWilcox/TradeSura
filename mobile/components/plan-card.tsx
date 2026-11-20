@@ -14,7 +14,7 @@ function priceText(pence: number) {
 
 // The customer's view of a plan, as the 2026 Build Guide targets draw it on
 // the builder's steps 2–4: a white card, navy text, blue ticks, a green
-// "Cancel anytime" chip and the customer's blue Join. (2026 guide wins over
+// "Cancel any time" chip and the customer's blue Join. (2026 guide wins over
 // Build Guide v2's colour rules — see CLAUDE.md.)
 const NAVY = "#0B1A2E";
 const JOIN_BLUE = "#1F5FC4";
@@ -90,9 +90,15 @@ export function CustomerPlanCard({
           {priceText(priceMonthlyPence)}
         </Text>
         {cancelChip && (
-          <Text className="mt-2.5 self-start overflow-hidden rounded-full bg-[#E3EEFB] px-3 py-1 text-[13px] text-[#1F4E8C]">
-            Cancel any time. No contract.
-          </Text>
+          <View className="mt-2.5 flex-row flex-wrap gap-1.5">
+            <Text className="overflow-hidden rounded-full bg-[#E3EEFB] px-3 py-1 text-[13px] text-[#1F4E8C]">
+              Cancel any time. No contract.
+            </Text>
+            {/* As on the web plan card (components/plan-tier-card.tsx). */}
+            <Text className="overflow-hidden rounded-full bg-[#E3EEFB] px-3 py-1 text-[13px] text-[#1F4E8C]">
+              Your price is fixed for 12 months
+            </Text>
+          </View>
         )}
         <View className="mt-2.5 gap-2">
           {lines.map((line) => {
@@ -126,6 +132,14 @@ export function CustomerPlanCard({
         {cancelChip && (
           <Text className="mt-2.5 text-[13px] text-[#5B6B82]">First payment after your 14-day cooling-off period.</Text>
         )}
+        {/* The second option under the plans on the web (components/billing-choice):
+            12 months for the price of 11. */}
+        {cancelChip && priceMonthlyPence > 0 && (
+          <Text className="mt-1.5 text-[13px]" style={{ color: NAVY }}>
+            <Text className="font-semibold">Pay yearly and save:</Text> {pounds(priceMonthlyPence * 11)} a year, save{" "}
+            {pounds(priceMonthlyPence)}
+          </Text>
+        )}
         {showJoin && (
           <View className="mt-4 items-center rounded-xl py-3" style={{ backgroundColor: JOIN_BLUE }}>
             <Text className="text-[16px] font-semibold text-white">Join</Text>
@@ -140,6 +154,7 @@ export function CustomerPlanCard({
     </View>
   );
 }
+
 
 // "WHAT YOUR CUSTOMER SEES" — the small preview on the price step.
 export function CustomerPlanPeek({

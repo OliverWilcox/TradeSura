@@ -274,6 +274,10 @@ function OwnerHome() {
   // 30 Oct §6.1 — once offers are open, the big "Offer a plan" button is
   // always on Home, and the 5pm weekday nudge is set on the phone.
   const canOffer = Boolean(isLive && !lock);
+  // Matt, 16 Nov — Home with 0 customers was too busy. Until the first plan
+  // is sold it shows Gas Safe status, setup, Offer a plan and practice only;
+  // Growth, Invite and the Shop come in after (and are always under More).
+  const preSale = !data || data.count === 0;
   useEffect(() => {
     (canOffer ? scheduleOfferNudge() : cancelOfferNudge()).catch(() => {});
   }, [canOffer]);
@@ -347,7 +351,8 @@ function OwnerHome() {
                       ? "Your first plan changes this"
                       : data.count === 0 && data.offersOut === 0
                         ? lock
-                          ? "Plan ready — offers unlock once your Gas Safe check and payments are done"
+                          ? // Only what's still left (seen in testing: a verified engineer was told to wait for the check).
+                            `Plan ready — offers unlock once ${lock.needsGasSafe && lock.needsPayments ? "your Gas Safe check and payments are done" : lock.needsGasSafe ? "your Gas Safe check is done" : "payments are set up"}`
                           : "Your plan is live — offer it at your next job"
                         : `${data.count} plan${data.count === 1 ? "" : "s"} live · ${data.offersOut} offer${data.offersOut === 1 ? "" : "s"} out`}
                   </Text>
@@ -458,8 +463,26 @@ function OwnerHome() {
               </Card>
             )}
 
+            {/* Matt, 16 Nov — demo mode: a practice hand-over, findable from Home. */}
+            {preSale && awake && (
+              <Card>
+                <Micro>Practice</Micro>
+                <Text className="mt-1.5 text-[19px] font-bold text-ink">Try it now</Text>
+                <Text className="mt-1 text-[14px] text-muted">
+                  Run the hand-over with a sample customer before you do it for real. No payment, nothing saved.
+                </Text>
+                <Button
+                  variant="ghost"
+                  className="mt-4"
+                  onPress={() => router.push({ pathname: "/demo", params: { practice: "1" } })}
+                >
+                  Try it now (practice)
+                </Button>
+              </Card>
+            )}
+
             {/* After going live, the optional Grow steps live here. */}
-            {me?.role !== "staff" && isLive && growDone < grow.length && (
+            {me?.role !== "staff" && isLive && !preSale && growDone < grow.length && (
               <Card>
                 <Micro>Keep growing</Micro>
                 <Text className="mt-1.5 text-[19px] font-bold text-ink">
@@ -506,6 +529,7 @@ function OwnerHome() {
               </Card>
             )}
 
+            {!(preSale && data.upcoming.length === 0 && data.failedRecently === 0 && !data.referral && data.emergencies === 0) && (
             <Card>
               <Micro className="mb-1">Today</Micro>
               {data.upcoming.length > 0 && (
@@ -530,7 +554,7 @@ function OwnerHome() {
                   <Icon name="clock" size={18} color="#9fb6d0" />
                   <Text className="flex-1 text-[13px] text-ink">
                     {data.failedRecently} payment{data.failedRecently === 1 ? "" : "s"} retrying —{" "}
-                    <Text className="text-faint">Stripe handles it, no action yet</Text>
+                    <Text className="text-faint">Handled for you, no action yet</Text>
                   </Text>
                 </Pressable>
               )}
@@ -562,8 +586,9 @@ function OwnerHome() {
                 </Text>
               )}
             </Card>
+            )}
 
-            <GrowthCard />
+            {!preSale && <GrowthCard />}
 
             {/* Part 6.5 — the 2×2 quick-action row: My plans · Invite an
                 engineer · How it works · Membership Shop. My plans and
@@ -577,25 +602,35 @@ function OwnerHome() {
                 muted={!awake && !me?.anyTierCount}
                 onPress={() => (awake || me?.anyTierCount ? router.push("/plans") : setPlansGateOpen(true))}
               />
-              <QuickAction
-                icon="invite"
-                label="Invite an engineer — earn 25% of our fee"
-                onPress={() => router.push("/referral")}
-              />
+              {preSale ? (
+                <QuickAction
+                  icon="howItWorks"
+                  label="How it works"
+                  onPress={() => router.push("/how-it-works")}
+                />
+              ) : (
+                <QuickAction
+                  icon="invite"
+                  label="Invite an engineer — earn 25% of our fee for 12 months, then 10% for life"
+                  onPress={() => router.push("/referral")}
+                />
+              )}
             </View>
-            <View className="flex-row gap-2.5">
-              <QuickAction
-                icon="howItWorks"
-                label="How it works"
-                onPress={() => router.push("/how-it-works")}
-              />
-              <QuickAction
-                icon="shop"
-                label="Membership Shop"
-                muted={!verified}
-                onPress={() => (verified ? router.push("/membership-shop") : setShopGateOpen(true))}
-              />
-            </View>
+            {!preSale && (
+              <View className="flex-row gap-2.5">
+                <QuickAction
+                  icon="howItWorks"
+                  label="How it works"
+                  onPress={() => router.push("/how-it-works")}
+                />
+                <QuickAction
+                  icon="shop"
+                  label="Membership Shop"
+                  muted={!verified}
+                  onPress={() => (verified ? router.push("/membership-shop") : setShopGateOpen(true))}
+                />
+              </View>
+            )}
           </>
         )}
       </ScrollView>

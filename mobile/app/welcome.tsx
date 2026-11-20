@@ -19,8 +19,9 @@ import { Lockup } from "@/components/ui";
 import { AuthBackdrop } from "@/components/auth-backdrop";
 import { Icon } from "@/components/icon";
 import { PoweredByStripe } from "@/components/stripe-badge";
-import { EXAMPLE_CUSTOMERS, formatPounds, yearlyPence } from "@/lib/earnings";
+import { EXAMPLE_CUSTOMERS, EXAMPLE_PLAN_PENCE, formatPounds, yearlyPence } from "@/lib/earnings";
 import { findClaimCode, pasteClaimCode } from "@/lib/clipboard";
+import { installClaimCode } from "@/lib/install-claim";
 
 type ClaimResolved =
   | { valid: true; personalised: boolean; firstName?: string; businessName?: string }
@@ -83,6 +84,19 @@ export default function Welcome() {
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
   }, []);
+
+  // Letter → app (Matt, 13 Nov): on the first open without a code, look for
+  // the one the letter's claim page sent through the install.
+  useEffect(() => {
+    if (code || token || refParam) return;
+    let cancelled = false;
+    installClaimCode().then((found) => {
+      if (found && !cancelled) router.setParams({ code: found });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [code, token, refParam]);
 
   useEffect(() => {
     if (!code) return;
@@ -150,20 +164,24 @@ export default function Welcome() {
     claim?.valid && claim.personalised ? (claim.businessName ?? claim.firstName ?? null) : null;
   const referrerName = referrerNameParam || (refParam ? prettifySlug(refParam) : null);
 
+  // Sign-up's link source. How it works passes it on too, so a letter code
+  // isn't lost on the way through (Matt, 16 Nov: asked how he'd heard).
+  const signUpParams = {
+    ...(code ? { code } : {}),
+    ...(code && claimToken ? { t: claimToken } : {}),
+    ...(refParam ? { ref: refParam } : {}),
+    // e.g. ?src=email on a campaign link — sign-up records it and skips
+    // "How did you hear about us?".
+    ...(src ? { src } : {}),
+  };
+
   function startPrimary() {
     acted.current = true;
     if (!reduceMotion) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     fire("welcome_start_tapped", { source });
     router.push({
       pathname: "/sign-up",
-      params: {
-        ...(code ? { code } : {}),
-        ...(code && claimToken ? { t: claimToken } : {}),
-        ...(refParam ? { ref: refParam } : {}),
-        // e.g. ?src=email on a campaign link — sign-up records it and skips
-        // "How did you hear about us?".
-        ...(src ? { src } : {}),
-      },
+      params: signUpParams,
     });
   }
 
@@ -266,14 +284,14 @@ export default function Welcome() {
                 <View className="mt-3">
                   <Text className="text-[13px] font-medium text-white/85">What you could earn:</Text>
                   <Text className="mt-0.5 text-[16px] font-semibold text-white">
-                    Just {EXAMPLE_CUSTOMERS} customers ={" "}
+                    Just {EXAMPLE_CUSTOMERS} customers at £{EXAMPLE_PLAN_PENCE / 100} a month ={" "}
                     <Text className="font-bold text-copper">
                       {formatPounds(yearlyPence(EXAMPLE_CUSTOMERS))}
                     </Text>{" "}
                     a year
                   </Text>
                   <Text className="mt-0.5 text-[10px] text-white/50">
-                    *based on average installer care plan prices
+                    Example only. You set your own price.
                   </Text>
                 </View>
                 {/* 3.6 */}
@@ -334,7 +352,7 @@ export default function Welcome() {
 
           {/* 4 Oct notes 3.7 — a real (ghost) button, above the proof chips. */}
           <Pressable
-            onPress={() => router.push("/how-it-works")}
+            onPress={() => router.push({ pathname: "/how-it-works", params: signUpParams })}
             className="mb-2.5 min-h-11 flex-row items-center justify-center gap-2 rounded-2xl border-[1.5px] border-white/40 py-3"
             accessibilityRole="button"
           >

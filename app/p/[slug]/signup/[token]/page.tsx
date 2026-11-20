@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { showsVerifiedBadge } from "@/lib/public-badge";
 import { prisma } from "@/lib/db";
 import { brandName, tradingNameOf } from "@/lib/engineer";
 import { track } from "@/lib/track";
@@ -66,7 +67,7 @@ export default async function SignupPage({
         brand={brand}
         firstName={plan.engineer.firstName}
         photoUrl={plan.engineer.logoUrl}
-        verified={Boolean(plan.engineer.gasSafeVerifiedAt)}
+        verified={showsVerifiedBadge(plan.engineer)}
         founding={(await isFoundingMember(plan.engineer.id)) ? <FoundingBadge /> : null}
         rating={await ratingSummary(plan.engineer.id)}
       />
@@ -104,7 +105,7 @@ export default async function SignupPage({
         }))}
       />
       <p className="font-mono text-[10px] text-faint text-center pt-1">
-        Direct Debit Guarantee protected · 14-day cooling-off · cancel anytime
+        Direct Debit Guarantee protected · 14-day cooling-off · cancel any time
       </p>
     </CustomerShell>
   );

@@ -73,7 +73,7 @@ export default function Team() {
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
         <Text className="px-1 font-sans text-sm text-muted">
           Your engineers sign in to their own accounts and can add customers to your plans. They never
-          see your money or settings, and every payment still goes to your Stripe account.
+          see your money or settings, and every payment still goes to your account.
         </Text>
 
         <Button onPress={() => router.push("/team-add")}>Add an engineer</Button>

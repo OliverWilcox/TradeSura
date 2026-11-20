@@ -57,3 +57,19 @@ describe("the address itself", () => {
     expect(moveSlug({ slug: "same", previousSlugs: ["x"] }, "same")).toEqual({ slug: "same" });
   });
 });
+
+describe("addresses the app picks (Matt, 16 Nov)", () => {
+  it("are the business name with no hyphens, then the town, never -2 first", async () => {
+    const { slugCandidates } = await import("@/lib/slug");
+    const c = slugCandidates("302 MD LTD", "Holmfirth");
+    expect(c[0]).toBe("302mdltd");
+    expect(c[1]).toBe("302mdltdholmfirth");
+    expect(c[2]).toBe("302mdltdholmfirth2");
+    expect(c.every((s) => /^[a-z0-9]+$/.test(s))).toBe(true);
+  });
+  it("skip app words, with or without their dashes", async () => {
+    const { slugCandidates } = await import("@/lib/slug");
+    expect(slugCandidates("How it works", "Leeds")[0]).toBe("howitworksleeds");
+    expect(slugCandidates("Admin")[0]).toBe("admin2");
+  });
+});

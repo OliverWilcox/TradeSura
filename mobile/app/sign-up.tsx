@@ -126,6 +126,7 @@ type FieldKey =
   | "gasSafeNo"
   | "gasSafeRegistrationNo"
   | "gasSafeCard"
+  | "gasSafeCardBack"
   | "cardExpiry"
   | "tradingName"
   | "companyNumber"
@@ -142,6 +143,7 @@ const FIELD_STEP: Record<FieldKey, 1 | 2 | 3> = {
   gasSafeNo: 2,
   gasSafeRegistrationNo: 2,
   gasSafeCard: 2,
+  gasSafeCardBack: 2,
   cardExpiry: 2,
   tradingName: 3,
   companyNumber: 3,
@@ -212,6 +214,64 @@ function Input({
       {right && <View className="absolute right-3.5">{right}</View>}
     </View>
   );
+}
+
+// Matt 16 Nov — the card is read the moment it's uploaded
+// (app/api/onboarding/gas-safe-card).
+type CardReading = {
+  licenceNumber: string | null;
+  registrationNumber: string | null;
+  expiresOn: string | null;
+  holderName: string | null;
+  businessName: string | null;
+};
+type CardProblem = "not_a_card" | "not_readable" | "screen_photo" | "expired";
+type CardRead = { reading: CardReading | null; problem: CardProblem | null };
+
+const digitsOnly = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
+
+function isoToDmy(iso: string | null | undefined): string | null {
+  const m = iso?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
+}
+
+const nameWords = (v: string | null | undefined) =>
+  (v ?? "").toLowerCase().replace(/[^a-z\s'-]/g, " ").split(/[\s'-]+/).filter(Boolean);
+
+// What should make the engineer retake the photo, in plain words. Anything
+// they carry on with anyway goes to a person, never straight through.
+function cardReadWarning(
+  read: CardRead,
+  typed: { firstName: string; lastName: string; gasSafeNo: string; gasSafeRegistrationNo: string },
+): string | null {
+  switch (read.problem) {
+    case "not_a_card":
+      return "That doesn't look like a Gas Safe ID card. Take a photo of the front of your card.";
+    case "screen_photo":
+      return "That looks like a photo of a screen. Take a photo of the card itself.";
+    case "not_readable":
+      return "We couldn't read the card. Lay it flat in good light, with all four corners in the photo.";
+    case "expired":
+      return `This card expired${read.reading?.expiresOn ? ` on ${isoToDmy(read.reading.expiresOn)}` : ""}. Take a photo of your current card.`;
+  }
+  const r = read.reading;
+  if (!r) return null;
+  const licence = digitsOnly(r.licenceNumber);
+  const typedLicence = digitsOnly(typed.gasSafeNo);
+  if (licence && typedLicence && licence !== typedLicence) {
+    return `The card shows licence number ${licence}, not ${typedLicence}. Check the number, or take another photo.`;
+  }
+  const registration = digitsOnly(r.registrationNumber);
+  const typedRegistration = digitsOnly(typed.gasSafeRegistrationNo);
+  if (registration && typedRegistration && registration !== typedRegistration) {
+    return `The card shows business registration number ${registration}, not ${typedRegistration}. Check the number, or take another photo.`;
+  }
+  const holder = nameWords(r.holderName);
+  const surname = nameWords(typed.lastName);
+  if (holder.length && surname.length && !surname.every((w) => holder.includes(w))) {
+    return `The name on this card (${r.holderName}) doesn't match ${`${typed.firstName} ${typed.lastName}`.trim()}. It needs to be your own card.`;
+  }
+  return null;
 }
 
 function FieldError({ children }: { children?: ReactNode }) {
@@ -417,8 +477,15 @@ export default function SignUp() {
   const [gasSafeRegistrationNo, setGasSafeRegistrationNo] = useState("");
   const [card, setCard] = useState<IdCardState>({ phase: "empty" });
   const [cardToken, setCardToken] = useState<string | null>(null);
+  // Matt 16 Nov — the back of the card, as a second photo.
+  const [cardBack, setCardBack] = useState<IdCardState>({ phase: "empty" });
+  const [cardBackToken, setCardBackToken] = useState<string | null>(null);
+  const [cardBackProblem, setCardBackProblem] = useState<CardProblem | null>(null);
   // The expiry printed on the card, typed as DD/MM/YYYY (or MM/YYYY).
   const [cardExpiry, setCardExpiry] = useState("");
+  // Matt 16 Nov — what the AI read off the card at upload (null until then,
+  // or when the reading wasn't available).
+  const [cardRead, setCardRead] = useState<CardRead | null>(null);
   const [step2Busy, setStep2Busy] = useState(false);
 
   // Step 3 — business
@@ -455,7 +522,7 @@ export default function SignUp() {
   // 30 Oct update 3.9 — this firm is already on TradeSura (its letter code
   // was claimed, or its company number is on an account): the second person
   // joins its team as staff, not as a second account or Founding spot.
-  const [firm, setFirm] = useState<{ businessName: string; ownerFirstName: string | null } | null>(null);
+  const [firm, setFirm] = useState<{ businessName: string } | null>(null);
   const [firmDismissed, setFirmDismissed] = useState(false);
   const [joinBusy, setJoinBusy] = useState(false);
   const [joinSent, setJoinSent] = useState(false);
@@ -672,7 +739,7 @@ export default function SignUp() {
     const number = /^[A-Z0-9]{8}$/.test(firmCompanyNumber) ? firmCompanyNumber : undefined;
     if (!claimCodeParam && !number) return;
     let cancelled = false;
-    api<{ firm: { businessName: string; ownerFirstName: string | null } | null }>("/api/onboarding/firm", {
+    api<{ firm: { businessName: string } | null }>("/api/onboarding/firm", {
       method: "POST",
       body: JSON.stringify({ phoneToken, claimCode: claimCodeParam || undefined, companyNumber: number }),
     })
@@ -825,6 +892,7 @@ export default function SignUp() {
   function changePhone() {
     resetVerification();
     setCardToken(null);
+    setCardBackToken(null);
   }
 
   async function sendOtp(): Promise<boolean> {
@@ -948,18 +1016,67 @@ export default function SignUp() {
   }
 
   async function uploadCard(photo: IdPhoto) {
-    const r = await api<{ cardToken: string }>("/api/onboarding/gas-safe-card", {
-      method: "POST",
-      body: JSON.stringify({ phoneToken, base64: photo.base64, mimeType: photo.mimeType }),
-    });
+    const r = await api<{ cardToken: string; reading?: CardReading | null; problem?: CardProblem | null }>(
+      "/api/onboarding/gas-safe-card",
+      {
+        method: "POST",
+        body: JSON.stringify({ phoneToken, base64: photo.base64, mimeType: photo.mimeType }),
+      },
+    );
     setCardToken(r.cardToken);
+    const reading = r.reading ?? null;
+    setCardRead(reading || r.problem ? { reading, problem: r.problem ?? null } : null);
+    // Matt 16 Nov — pre-fill what the card shows; never overwrite what the
+    // engineer typed (a mismatch is pointed out instead, below the photo).
+    if (reading && !r.problem) {
+      const licence = digitsOnly(reading.licenceNumber);
+      const registration = digitsOnly(reading.registrationNumber);
+      if (licence.length === 7 && !gasSafeNo.trim()) {
+        setGasSafeNo(licence);
+        clearError("gasSafeNo");
+      }
+      if (registration && !gasSafeRegistrationNo.trim()) {
+        setGasSafeRegistrationNo(registration);
+        clearError("gasSafeRegistrationNo");
+      }
+    }
+    // The expiry always comes from the card when it can be read — a typed
+    // future date can't cover an expired card (Matt's 16 Nov test).
+    const expiry = isoToDmy(reading?.expiresOn);
+    if (expiry) {
+      setCardExpiry(expiry);
+      clearError("cardExpiry");
+    }
+  }
+
+  async function uploadCardBack(photo: IdPhoto) {
+    const r = await api<{ cardToken: string; problem?: CardProblem | null }>("/api/onboarding/gas-safe-card", {
+      method: "POST",
+      body: JSON.stringify({ phoneToken, base64: photo.base64, mimeType: photo.mimeType, side: "back" }),
+    });
+    setCardBackToken(r.cardToken);
+    setCardBackProblem(r.problem ?? null);
+  }
+
+  function onCardBackChange(next: IdCardState) {
+    setCardBack(next);
+    if (next.phase !== "added") {
+      setCardBackToken(null);
+      setCardBackProblem(null);
+    }
+    clearError("gasSafeCardBack");
   }
 
   function onCardChange(next: IdCardState) {
     setCard(next);
-    if (next.phase !== "added") setCardToken(null);
+    if (next.phase !== "added") {
+      setCardToken(null);
+      setCardRead(null);
+    }
     clearError("gasSafeCard");
   }
+
+  const cardWarning = cardRead ? cardReadWarning(cardRead, { firstName, lastName, gasSafeNo, gasSafeRegistrationNo }) : null;
 
   // Continue submits everything — no separate "Submit for verification"
   // button (step 2 item 11). The photo usually uploaded the moment they
@@ -978,7 +1095,14 @@ export default function SignUp() {
     // The expiry goes with the photo, so it's asked for only when there is one.
     const expiry = card.phase === "empty" || card.phase === "denied" ? null : cardExpiryOf(cardExpiry);
     const expiryErr = expiry && "error" in expiry ? expiry.error : null;
-    if (fail({ gasSafeNo: noErr, gasSafeRegistrationNo: registrationErr, gasSafeCard: cardErr, cardExpiry: expiryErr })) return;
+    // Matt 16 Nov — with the front comes the back.
+    let backErr: string | null = null;
+    if (!cardErr && card.phase !== "empty" && card.phase !== "denied") {
+      if (cardBack.phase === "empty" || cardBack.phase === "denied") backErr = "Add a photo of the back of your card too.";
+      else if (cardBack.phase === "uploading") backErr = "The back of your card is still uploading — one moment.";
+      else if (cardBack.phase === "failed") backErr = "Upload failed — tap the photo to try again.";
+    }
+    if (fail({ gasSafeNo: noErr, gasSafeRegistrationNo: registrationErr, gasSafeCard: cardErr, cardExpiry: expiryErr, gasSafeCardBack: backErr })) return;
     if (card.phase === "preview" || (card.phase === "added" && !cardToken)) {
       const photo = card.photo;
       setStep2Busy(true);
@@ -994,6 +1118,21 @@ export default function SignUp() {
         setStep2Busy(false);
       }
     }
+    if (cardBack.phase === "preview" || (cardBack.phase === "added" && !cardBackToken)) {
+      const photo = cardBack.photo;
+      setStep2Busy(true);
+      setCardBack({ phase: "uploading", photo });
+      try {
+        await uploadCardBack(photo);
+        setCardBack({ phase: "added", photo });
+      } catch {
+        setCardBack({ phase: "failed", photo });
+        fail({ gasSafeCardBack: "Upload failed — tap the photo to try again." });
+        return;
+      } finally {
+        setStep2Busy(false);
+      }
+    }
     goToStep(3);
   }
 
@@ -1004,6 +1143,8 @@ export default function SignUp() {
     if (fail({ gasSafeNo: checkGasSafeNo(gasSafeNo), gasSafeRegistrationNo: checkRegistrationNo(gasSafeRegistrationNo) })) return;
     setCard({ phase: "empty" });
     setCardToken(null);
+    setCardBack({ phase: "empty" });
+    setCardBackToken(null);
     goToStep(3);
   }
 
@@ -1092,6 +1233,7 @@ export default function SignUp() {
             gasSafeNo: gasSafeNo.replace(/\s/g, ""),
             gasSafeRegistrationNo: gasSafeRegistrationNo.replace(/\s/g, ""),
             gasSafeCardToken: cardToken ?? undefined,
+            gasSafeCardBackToken: cardToken ? (cardBackToken ?? undefined) : undefined,
             gasSafeCardExpiresOn: cardToken ? expiryIso(cardExpiry) : undefined,
             tradingName: tradingName.trim(),
             businessType,
@@ -1189,7 +1331,7 @@ export default function SignUp() {
         <Text className="mb-1.5 text-[13.5px] leading-[18px] text-white/85">
           {otpChannel === "email"
             ? `Enter the 4-digit code we emailed to ${email.trim()}.`
-            : `Enter the 4-digit code we texted to ${phone}.`}
+            : `We've texted you a code. Enter the 4 digits we sent to ${phone}.`}
         </Text>
         <Input
           value={otpCode}
@@ -1379,12 +1521,12 @@ export default function SignUp() {
                           </View>
                         ) : (
                           <Text className="mt-2 text-[13.5px] leading-[18px] text-white/75">
-                            Mobile saved — we&apos;ll verify it by text once text messages are switched on.
+                            Mobile saved.
                           </Text>
                         ))}
                       <Hint>
-                        We&apos;ll only use this to verify you and send your sign-in codes. Never
-                        shared, never spammed.
+                        To verify you, send sign-in codes and important account updates. Never shared,
+                        never spammed.
                       </Hint>
 
                       {otpChannel === "sms" && codeBox}
@@ -1624,11 +1766,62 @@ export default function SignUp() {
                         error={errors.gasSafeCard}
                       />
                       <FieldError>{errors.gasSafeCard}</FieldError>
+                      {card.phase === "added" && cardWarning && (
+                        <View className="mt-3 rounded-xl border border-warn/60 bg-warn/10 px-3.5 py-3">
+                          <Text className="text-[14.5px] font-bold text-white">Let&apos;s try that again</Text>
+                          <Text className="mt-1 text-[13.5px] leading-[19px] text-white/85">{cardWarning}</Text>
+                          <Pressable
+                            onPress={() => onCardChange({ phase: "empty" })}
+                            className="mt-2.5 min-h-[44px] items-center justify-center rounded-xl bg-white"
+                            accessibilityRole="button"
+                          >
+                            <Text className="text-[14.5px] font-bold text-on-light">Take another photo</Text>
+                          </Pressable>
+                          <Text className="mt-2 text-[12px] leading-[17px] text-white/60">
+                            Sure it&apos;s right? Carry on and we&apos;ll check it by hand.
+                          </Text>
+                        </View>
+                      )}
+                      {card.phase === "added" && cardRead?.reading && !cardWarning && (
+                        <View className="mt-2 flex-row items-center gap-1.5">
+                          <BlueTick size={14} />
+                          <Text className="text-[13.5px] text-white">Card read — we&apos;ve filled in what it shows.</Text>
+                        </View>
+                      )}
                       <Hint>
                         Needed for your Verified Member badge. Only used to verify you — never shown to
                         customers.
                       </Hint>
                     </View>
+
+                    {card.phase !== "empty" && card.phase !== "denied" && (
+                      <View ref={fieldRef("gasSafeCardBack")} collapsable={false}>
+                        <Text className={labelCls}>Back of the card</Text>
+                        <IdCardPicker
+                          value={cardBack}
+                          onChange={onCardBackChange}
+                          upload={uploadCardBack}
+                          error={errors.gasSafeCardBack}
+                          side="back"
+                        />
+                        <FieldError>{errors.gasSafeCardBack}</FieldError>
+                        {cardBack.phase === "added" && cardBackProblem && cardBackProblem !== "expired" && (
+                          <View className="mt-3 rounded-xl border border-warn/60 bg-warn/10 px-3.5 py-3">
+                            <Text className="text-[14.5px] font-bold text-white">Let&apos;s try that again</Text>
+                            <Text className="mt-1 text-[13.5px] leading-[19px] text-white/85">
+                              {cardReadWarning({ reading: null, problem: cardBackProblem }, { firstName, lastName, gasSafeNo, gasSafeRegistrationNo })?.replace("the front of your card", "the back of your card")}
+                            </Text>
+                            <Pressable
+                              onPress={() => onCardBackChange({ phase: "empty" })}
+                              className="mt-2.5 min-h-[44px] items-center justify-center rounded-xl bg-white"
+                              accessibilityRole="button"
+                            >
+                              <Text className="text-[14.5px] font-bold text-on-light">Take another photo</Text>
+                            </Pressable>
+                          </View>
+                        )}
+                      </View>
+                    )}
 
                     {card.phase !== "empty" && card.phase !== "denied" && (
                       <View ref={fieldRef("cardExpiry")} collapsable={false}>
@@ -1652,8 +1845,8 @@ export default function SignUp() {
 
                   {/* Never implies a link with Gas Safe (30 Sept build notes). */}
                   <Text className="mt-3 text-center text-[13px] leading-[19px] text-white/85">
-                    We check every member&apos;s registration, usually within 24 hours. You can
-                    build your plans in the meantime.
+                    Once your card&apos;s checked you&apos;re live. Your Verified badge goes public after we
+                    confirm your registration, usually within 24 hours.
                   </Text>
 
                   <PrimaryButton label="Continue" onPress={continueStep2} busy={step2Busy} />
@@ -1669,7 +1862,7 @@ export default function SignUp() {
                 <>
                   <Text className="text-[26px] font-extrabold tracking-wide text-white">Request sent</Text>
                   <Text className="mt-2 text-[15px] leading-[21px] text-white/85">
-                    We&apos;ve asked {firm.ownerFirstName ?? "the owner"} to add you to {firm.businessName}&apos;s team.
+                    We&apos;ve asked the account owner to add you to {firm.businessName}&apos;s team.
                     You&apos;ll get an email with how to sign in once they do.
                   </Text>
                   <PrimaryButton label="Done" onPress={() => router.replace("/welcome")} />
@@ -1696,11 +1889,11 @@ export default function SignUp() {
                         {firm.businessName} is already on TradeSura
                       </Text>
                       <Text className="mt-1 text-[13.5px] leading-[19px] text-white/85">
-                        Join their team instead: {firm.ownerFirstName ?? "the owner"} adds you as an engineer, and
+                        Join their team instead: the account owner adds you as an engineer, and
                         you offer plans under {firm.businessName}. Money and settings stay with them.
                       </Text>
                       <PrimaryButton
-                        label={`Ask ${firm.ownerFirstName ?? "them"} to add me`}
+                        label="Ask the account owner to add me"
                         onPress={askToJoin}
                         busy={joinBusy}
                       />

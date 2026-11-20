@@ -6,6 +6,7 @@
 // send it twice. The badge-live email goes out when the Gas Safe check is
 // approved.
 import { prisma } from "@/lib/db";
+import { inviteEngineerAfterFirstPayout } from "@/lib/trustpilot";
 import { appUrl } from "@/lib/app-url";
 import { sendEmail } from "@/lib/email";
 import { EMAIL, SUPPORT_EMAIL, emailButton, emailShell, escapeHtml } from "@/lib/email-layout";
@@ -19,7 +20,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Nudges only go to new sign-ups: an older account that never set up
 // shouldn't get a "day 1" email weeks later (or on the first deploy).
 const NUDGE_WINDOW_DAYS = 14;
-const EXAMPLE_PLAN_PENCE = 1200;
+// Matt 13 Nov — the member pack letter's example plan, everywhere.
+const EXAMPLE_PLAN_PENCE = 1500;
 
 type Field = "paymentsNudgeEmailAt" | "noPlanNudgeEmailAt" | "firstCustomerEmailAt" | "firstPayoutEmailAt";
 
@@ -91,9 +93,9 @@ export function paymentsNudgeEmail(firstName: string | null) {
   return accountEmail({
     firstName,
     title: "Set up payments to start taking customers",
-    preheader: "About 3 minutes with Stripe. We've filled in what we already know.",
+    preheader: "About 3 minutes. We've filled in what we already know.",
     paragraphs: [
-      "Customers can only join your plans once payments are set up. It takes about 3 minutes with Stripe, and we've already filled in your business details.",
+      "Customers can only join your plans once payments are set up. It takes about 3 minutes, and we've already filled in your business details.",
       `You keep 80% of every plan, ${money(poundsFromPence(keep))} a month on a ${poundsLabel(EXAMPLE_PLAN_PENCE)} plan, paid into your bank every Friday.`,
     ],
     button: { to: "get-paid", label: "Set up payments" },
@@ -265,6 +267,8 @@ export async function sendPayoutEmail(engineerId: string, payoutId: string, amou
   if (!e.firstPayoutEmailAt) {
     await sendFirstPayoutEmail(engineerId, amountPence);
     await track("payout_email_sent", { type: "SYSTEM" }, { engineerId, payoutId, first: true });
+    // Matt, 12 Nov — Trustpilot invite after the first Friday payout.
+    await inviteEngineerAfterFirstPayout(engineerId);
     return;
   }
   const seen = await prisma.event.findFirst({

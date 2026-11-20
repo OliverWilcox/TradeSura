@@ -20,7 +20,7 @@ describe("value sum (§7.3) — only the installer's own figures", () => {
 
   it("says 'worth over' a figure below the real value, and the weekly cost rounded up", () => {
     // £180 of value against £12 a month (£144 a year, £2.77 a week).
-    expect(valueSum(["ANNUAL_SERVICE", "NO_CALLOUT_FEE"], prices, 1200)).toEqual({ overPounds: 170, perWeek: "£2.77" });
+    expect(valueSum(["ANNUAL_SERVICE", "NO_CALLOUT_FEE"], prices, 1200)).toEqual({ overPounds: 170, perWeek: "£2.77", valuePence: 18000, yearlyPence: 14400 });
   });
 
   it("says nothing when the plan costs as much as its items, or there are no figures", () => {
@@ -30,7 +30,7 @@ describe("value sum (§7.3) — only the installer's own figures", () => {
 
   it("uses the yearly price when they pay yearly", () => {
     // £15 × 11 = £165 a year → £3.18 a week; value £180 → "over £170".
-    expect(valueSum(["ANNUAL_SERVICE", "NO_CALLOUT_FEE"], prices, 1500, "year")).toEqual({ overPounds: 170, perWeek: "£3.18" });
+    expect(valueSum(["ANNUAL_SERVICE", "NO_CALLOUT_FEE"], prices, 1500, "year")).toEqual({ overPounds: 170, perWeek: "£3.18", valuePence: 18000, yearlyPence: 16500 });
   });
 });
 

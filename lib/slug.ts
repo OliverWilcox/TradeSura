@@ -16,17 +16,36 @@ export function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
 }
 
-export async function uniqueSlug(base: string, excludeEngineerId?: string) {
-  const root = slugify(base) || "engineer";
-  let slug = RESERVED_SLUGS.has(root) ? `${root}-2` : root;
-  for (let i = RESERVED_SLUGS.has(root) ? 3 : 2; ; i++) {
+// Matt, 16 Nov — the agreed address is tradesura.com/{businessname}: no
+// hyphens ("302-md-ltd-2" looked wrong). An address the app picks is letters
+// and numbers only; the engineer can still choose one with dashes.
+export function compactSlug(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 40);
+}
+
+function isReserved(slug: string) {
+  return RESERVED_SLUGS.has(slug) || [...RESERVED_SLUGS].some((r) => r.replace(/-/g, "") === slug);
+}
+
+/** The candidates in order: the name, the name + town, then numbered. */
+export function slugCandidates(base: string, town?: string | null): string[] {
+  const root = compactSlug(base) || "engineer";
+  const withTown = town ? compactSlug(`${base} ${town}`) : null;
+  const first = [root, ...(withTown && withTown !== root ? [withTown] : [])].filter((s) => !isReserved(s));
+  const numbered = withTown && withTown !== root ? withTown : root;
+  return [...first, ...Array.from({ length: 98 }, (_, i) => `${numbered}${i + 2}`)];
+}
+
+export async function uniqueSlug(base: string, excludeEngineerId?: string, town?: string | null) {
+  for (const slug of slugCandidates(base, town)) {
     const clash = await prisma.engineer.findFirst({
       where: { OR: [{ slug }, { previousSlugs: { has: slug } }] },
       select: { id: true },
     });
     if (!clash || clash.id === excludeEngineerId) return slug;
-    slug = `${root}-${i}`;
   }
+  // 100 businesses of one name in one town: fall back to a random tail.
+  return `${compactSlug(base) || "engineer"}${Math.random().toString(36).slice(2, 7)}`;
 }
 
 // Review 4 — what the engineer may pick as their address: 3–40 letters,
@@ -39,7 +58,7 @@ export async function checkChosenSlug(input: string, engineerId: string): Promis
     where: { id: { not: engineerId }, OR: [{ slug }, { previousSlugs: { has: slug } }] },
     select: { id: true },
   });
-  if (clash) return { error: `tradesura.com/${slug} is taken — try ${slug}-2 or add your town.` };
+  if (clash) return { error: `tradesura.com/${slug} is taken — try adding your town, like ${slug}leeds.` };
   return { slug };
 }
 

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { hasRepairDiscount } from "@/lib/clauses";
+import { useRef, useState, type ReactNode } from "react";
 import { NotIncluded } from "@/components/ui";
 import { EmbeddedCheckout } from "@/components/embedded-checkout";
 import { JOIN_BTN, PlanTierCard } from "@/components/plan-tier-card";
+import { StickyJoin } from "@/components/sticky-join";
 import { BillingChoice } from "@/components/billing-choice";
 import { chargePence, priceLine, type BillingInterval } from "@/lib/billing-interval";
 import type { PageMode } from "@/lib/public-page";
@@ -91,6 +93,7 @@ export function PublicSignup({
   localProof?: string | null;
   /** §7.9 — a neighbour's referral link (?nref=): their first month free. */
   neighbourRef?: string;
+  /** Matt 16 Nov — the builder's repair discount (already a line on each plan). */
 }) {
   // §7.4 — "Are you a landlord?" only when there are both kinds of plan.
   const landlordChoice = hasLandlordChoice(tiers);
@@ -110,6 +113,8 @@ export function PublicSignup({
   const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
   const [practiceDone, setPracticeDone] = useState(false);
   const selected = tiers.find((t) => t.id === selectedId);
+  const joinRef = useRef<HTMLDivElement>(null);
+  const firstNameRef = useRef<HTMLInputElement>(null);
 
   const ready =
     firstName.trim().length >= 2 &&
@@ -158,7 +163,7 @@ export function PublicSignup({
     return (
       <div className="rounded-xl border border-warn bg-warn-tint p-4 text-sm text-ink">
         <p className="font-semibold">
-          <span className="text-warn">DEMO</span> · This is where {firstName.trim() || "your customer"} sets up
+          <span className="text-warn">PRACTICE</span> · This is where {firstName.trim() || "your customer"} sets up
           their Direct Debit
         </p>
         <p className="mt-1.5 text-muted">
@@ -215,6 +220,12 @@ export function PublicSignup({
           payment is a month after your 14-day cooling-off period.
         </p>
       )}
+      {/* Matt 16 Nov — when sign-ups are off, say so first and hide the form. */}
+      {mode === "closed" && (
+        <p className="rounded-xl border border-line bg-paper px-3.5 py-3 text-center text-sm text-muted">
+          {`${engineerName} isn't taking sign-ups online just yet. Check back soon, or ask them directly.`}
+        </p>
+      )}
       {reason?.node}
 
       {landlordChoice && (
@@ -252,10 +263,12 @@ export function PublicSignup({
 
       <WhyYearlyService order={reason?.serviceOrder} />
 
-      <NotIncluded />
+      <NotIncluded repairDiscount={hasRepairDiscount(selected?.codes ?? [])} />
 
+      {mode !== "closed" && (
+      <div ref={joinRef} className="flex flex-col gap-3.5 scroll-mt-4">
       <div className="grid grid-cols-2 gap-2">
-        <input className={input} placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+        <input ref={firstNameRef} className={input} placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
         <input className={input} placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
       </div>
       <input className={input} placeholder="Mobile number" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
@@ -272,19 +285,17 @@ export function PublicSignup({
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
-      {selected && mode === "closed" ? (
-        <p className="rounded-xl border border-line bg-paper px-3.5 py-3 text-center text-sm text-muted">
-          {`${engineerName} isn't taking sign-ups online just yet. Check back soon, or ask them directly.`}
-        </p>
-      ) : selected ? (
+      {selected ? (
         <button onClick={begin} disabled={busy || !ready || mode === "preview"} className={JOIN_BTN}>
           {mode === "preview"
             ? "Join is switched off in preview"
             : busy
               ? "Setting up…"
-              : `${mode === "practice" ? "DEMO · " : ""}Join now · ${selected.name}, ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)}`}
+              : `${mode === "practice" ? "PRACTICE · " : ""}Join now · ${selected.name}, ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)}`}
         </button>
       ) : null}
+      </div>
+      )}
 
       {/* §7.7 — Home Passport, then "Send me the details" for anyone not ready. */}
       <HomePassportBlock
@@ -293,6 +304,15 @@ export function PublicSignup({
         detailsUrl={mode === "live" ? `/api/p/${slug}/details` : undefined}
         tierId={selected?.id}
       />
+
+      {/* Matt 16 Nov — phones: a sticky Join that takes them to the Join step. */}
+      {selected && mode !== "closed" && (
+        <StickyJoin
+          label={`${mode === "practice" ? "PRACTICE · " : ""}Join for ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)}`}
+          target={joinRef}
+          focus={firstNameRef}
+        />
+      )}
     </>
   );
 }

@@ -69,7 +69,10 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     category: CAT_CORE,
     upliftPence: 250,
     bodyText:
-      "One scheduled service of your gas fire in each 12-month plan period, including the manufacturer's recommended safety checks.",
+      "One scheduled service of your gas fire in each 12-month plan period, including the manufacturer's recommended safety checks. This benefit is available once your third monthly payment has been collected.",
+    // Matt, 16 Nov — the third-payment rule covers every high-value benefit.
+    note: "available after your third payment",
+    engineerNote: "available after the customer's 3rd payment",
   },
   {
     code: "COOKER_HOB_CHECK",
@@ -79,7 +82,10 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     category: CAT_CORE,
     upliftPence: 150,
     bodyText:
-      "One safety check of your gas cooker or hob in each 12-month plan period, carried out alongside your annual service where practical.",
+      "One safety check of your gas cooker or hob in each 12-month plan period, carried out alongside your annual service where practical. This benefit is available once your third monthly payment has been collected.",
+    // Matt, 16 Nov — the third-payment rule covers every high-value benefit.
+    note: "available after your third payment",
+    engineerNote: "available after the customer's 3rd payment",
   },
   {
     code: "UNVENTED_CYLINDER",
@@ -89,7 +95,10 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     category: CAT_CORE,
     upliftPence: 300,
     bodyText:
-      "One scheduled service of your unvented hot water cylinder in each 12-month plan period, including the discharge and safety device checks required by the manufacturer.",
+      "One scheduled service of your unvented hot water cylinder in each 12-month plan period, including the discharge and safety device checks required by the manufacturer. This benefit is available once your third monthly payment has been collected.",
+    // Matt, 16 Nov — the third-payment rule covers every high-value benefit.
+    note: "available after your third payment",
+    engineerNote: "available after the customer's 3rd payment",
   },
   {
     code: "HEALTH_CHECK",
@@ -99,7 +108,10 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     category: CAT_CORE,
     upliftPence: 150,
     bodyText:
-      "A check of your central heating system alongside your annual service: system pressure, flow and return temperatures, and thermostatic radiator valve operation.",
+      "A check of your central heating system alongside your annual service: system pressure, flow and return temperatures, and thermostatic radiator valve operation. This benefit is available once your third monthly payment has been collected.",
+    // Matt, 16 Nov — the third-payment rule covers every high-value benefit.
+    note: "available after your third payment",
+    engineerNote: "available after the customer's 3rd payment",
   },
   {
     code: "RADIATOR_BALANCE",
@@ -293,9 +305,9 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     category: CAT_PRIORITY,
     upliftPence: 200,
     bodyText:
-      "When we attend a visit you request under this plan, our usual attendance charge is waived. This is not a promise to attend at any particular time. Labour and parts for any work carried out remain chargeable at the rates shown in your plan.",
-    note: "your attendance charge is waived when we attend",
-    engineerNote: "your attendance charge is waived when you attend",
+      "When we attend a visit you request under this plan, our usual attendance charge is waived. This is not a promise to attend at any particular time. Labour and parts for any work carried out remain chargeable at the rates shown in your plan. This benefit is available once your third monthly payment has been collected.",
+    note: "available after your third payment; your attendance charge is waived when we attend",
+    engineerNote: "available after the customer's 3rd payment; their attendance charge is waived when you attend",
   },
 
   // ---------- Discounts ----------
@@ -307,7 +319,10 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     category: CAT_DISCOUNTS,
     upliftPence: 200,
     bodyText:
-      "A 15% discount applies to our standard labour rates for work arising from visits made under this plan.",
+      "A 15% discount applies to our standard labour rates for work arising from visits made under this plan. This benefit is available once your third monthly payment has been collected.",
+    // Matt, 16 Nov — the third-payment rule covers every high-value benefit.
+    note: "available after your third payment",
+    engineerNote: "available after the customer's 3rd payment",
   },
   {
     code: "PARTS_DISCOUNT",
@@ -317,7 +332,10 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     category: CAT_DISCOUNTS,
     upliftPence: 150,
     bodyText:
-      "A 10% discount applies to parts supplied by us for work carried out under this plan.",
+      "A 10% discount applies to parts supplied by us for work carried out under this plan. This benefit is available once your third monthly payment has been collected.",
+    // Matt, 16 Nov — the third-payment rule covers every high-value benefit.
+    note: "available after your third payment",
+    engineerNote: "available after the customer's 3rd payment",
   },
   {
     code: "DIAGNOSTIC_WAIVED",
@@ -327,7 +345,10 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     category: CAT_DISCOUNTS,
     upliftPence: 150,
     bodyText:
-      "Our standard diagnostic charge is not applied to plan members. Any remedial work identified remains chargeable at your plan rates.",
+      "Our standard diagnostic charge is not applied to plan members. Any remedial work identified remains chargeable at your plan rates. This benefit is available once your third monthly payment has been collected.",
+    // Matt, 16 Nov — the third-payment rule covers every high-value benefit.
+    note: "available after your third payment",
+    engineerNote: "available after the customer's 3rd payment",
   },
   {
     code: "POWERFLUSH_DISCOUNT",
@@ -460,7 +481,10 @@ export const CLAUSE_TEMPLATES: ClauseSeed[] = [
     category: CAT_LANDLORD,
     upliftPence: 200,
     bodyText:
-      "A legionella risk assessment of the hot and cold water system, with a written record for your compliance file.",
+      "A legionella risk assessment of the hot and cold water system, with a written record for your compliance file. This benefit is available once your third monthly payment has been collected.",
+    // Matt, 16 Nov — the third-payment rule covers every high-value benefit.
+    note: "available after your third payment",
+    engineerNote: "available after the customer's 3rd payment",
   },
 
   // ---------- CARE: hidden until solicitor sign-off ----------
@@ -661,7 +685,19 @@ export const TIER_PRICE_MAX_PENCE = 100000;
 // signup page, the customer portal and in the plan document email.
 // Goes to the solicitor with the clause templates.
 export const NOT_INCLUDED_COPY =
-  "Not included: breakdown repairs. If something breaks, your engineer prioritises you and repair work is chargeable at your plan discount. This plan is a maintenance & priority agreement, not an insurance policy.";
+  "Not included: breakdown repairs. If something breaks, your engineer prioritises you and repair work is charged at your engineer's normal rates, less any repair discount your plan includes. This plan is a maintenance & priority agreement, not an insurance policy.";
+
+// Matt 16 Nov — "chargeable at your plan discount" only when the plan really
+// has a repair discount; otherwise the engineer's normal rates.
+const REPAIR_DISCOUNT_CODES = new Set(["LABOUR_DISCOUNT_15", "PARTS_DISCOUNT", "LOYALTY_REPAIRS_DISCOUNT"]);
+export function hasRepairDiscount(codes: readonly string[]): boolean {
+  return codes.some((c) => REPAIR_DISCOUNT_CODES.has(c));
+}
+export function repairChargeLine(repairDiscount: boolean): string {
+  return repairDiscount
+    ? "repair work is chargeable at your plan discount"
+    : "repair work is charged at your engineer's normal rates";
+}
 
 export const TRADESURA_FEE_RATE = 0.2;
 

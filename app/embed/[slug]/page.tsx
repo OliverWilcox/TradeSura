@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { showsVerifiedBadge } from "@/lib/public-badge";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
@@ -63,7 +64,7 @@ export default async function EmbedPlans({
   const slugs = planSlugs(tiers);
   const locked = pageMode({ preview: false, practice: false, engineer }) === "closed";
   const rating = await ratingSummary(engineer.id);
-  const verified = Boolean(engineer.gasSafeVerifiedAt);
+  const verified = showsVerifiedBadge(engineer);
   return (
     <div className="bg-panel p-3 text-ink">
       <EmbedResizer slug={slug} />
@@ -135,7 +136,7 @@ export default async function EmbedPlans({
         </a>
       </p>
       <p className="font-mono text-[10px] text-faint text-center pt-2">
-        Monthly by Direct Debit · cancel anytime · powered by TradeSura
+        Monthly or yearly by Direct Debit · cancel any time · powered by TradeSura
       </p>
       {tradingNameOf(engineer) && (
         <p className="font-mono text-[10px] text-faint text-center pt-1">{tradingNameOf(engineer)}</p>

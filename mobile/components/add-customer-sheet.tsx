@@ -58,8 +58,18 @@ export function AddCustomerSheet({
         ? "Unlocks when your Gas Safe check and payments are done"
         : !badgeGranted
           ? "Unlocks when your Gas Safe check is done"
-          : "Unlocks when your payments are set up";
+          : "Finish payments setup — about 2 min";
   const customerLocked = !badgeGranted || !paymentsReady;
+  // Matt 16 Nov — a locked sheet says what's left and has a button straight
+  // to it, not just greyed-out rows.
+  const unlock: { label: string; href: Parameters<typeof router.push>[0] } | null =
+    !customerLocked || me?.role === "staff"
+      ? null
+      : badgeGranted
+        ? { label: "Finish payments setup — 2 min", href: "/get-paid" }
+        : paymentsReady
+          ? { label: "Check my Gas Safe status", href: "/more" }
+          : { label: "Finish payments setup — 2 min", href: "/get-paid" };
 
   function go(path: Parameters<typeof router.push>[0]) {
     onClose();
@@ -72,7 +82,7 @@ export function AddCustomerSheet({
     onClose();
     Alert.alert(title, reason, [
       { text: "Not now", style: "cancel" },
-      { text: "Try it in demo mode", onPress: () => router.push("/demo") },
+      { text: "Try it now (practice)", onPress: () => router.push({ pathname: "/demo", params: { practice: "1" } }) },
       ...(href ? [{ text: cta, onPress: () => router.push(href) }] : []),
     ]);
   }
@@ -91,7 +101,7 @@ export function AddCustomerSheet({
     if (!paymentsReady) {
       return me?.role === "staff"
         ? locked("Set up payments first", "Ask the business owner to finish payment setup from their app.", "", null)
-        : locked("Set up payments first", "Customers pay you by Direct Debit through Stripe, so payments need setting up before you can offer a plan.", "Set up payments", "/get-paid");
+        : locked("Set up payments first", "Customers pay you by Direct Debit, so payments need setting up before you can offer a plan.", "Set up payments", "/get-paid");
     }
     go(path);
   }
@@ -104,7 +114,7 @@ export function AddCustomerSheet({
           className="rounded-t-3xl border-t border-line-strong bg-paper px-5 pb-10 pt-4"
         >
           <View className="mb-3 h-1 w-10 self-center rounded-full bg-line-strong" />
-          <Text className="mb-1 text-center text-base font-bold text-ink">Add a customer</Text>
+          <Text className="mb-1 text-center text-base font-bold text-ink">Offer a plan</Text>
 
           <Row
             title="They're with me — show my plans"
@@ -123,6 +133,23 @@ export function AddCustomerSheet({
             sub="No plan yet — just their name and number"
             onPress={() => go("/add-customer")}
           />
+          {/* Matt, 16 Nov — a practice run, any time: no customer, no payment. */}
+          <Row
+            title="Try it now (practice)"
+            sub="Run the hand-over with a sample customer — nothing is saved"
+            muted={!me?.hasPlan}
+            onPress={() => go({ pathname: "/demo", params: { practice: "1" } })}
+          />
+
+          {unlock && (
+            <Pressable
+              onPress={() => go(unlock.href)}
+              className="mt-4 min-h-[48px] items-center justify-center rounded-2xl bg-white"
+              accessibilityRole="button"
+            >
+              <Text className="text-[15px] font-bold text-on-light">{unlock.label}</Text>
+            </Pressable>
+          )}
 
           {me?.role !== "staff" && (
             <Pressable onPress={() => go("/plans")} className="items-center pt-3">

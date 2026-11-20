@@ -115,10 +115,10 @@ export default function GetPaid() {
         ? "Finish setting up payments"
         : "Set up payments"
     : state === "needs_more"
-      ? "Go back to Stripe"
+      ? "Add the missing detail"
       : me?.stripeDetailsSubmitted || state === "half"
-        ? "Finish with Stripe"
-        : "Continue to Stripe";
+        ? "Finish setting up payments"
+        : "Set up payments";
 
   return (
     <View className="flex-1 bg-bg">
@@ -160,7 +160,7 @@ export default function GetPaid() {
         {/* Matt, 30 Oct §9.3 — the same flow, with real dates. */}
         <PayoutTimeline />
 
-        <Section title="Why Stripe asks a few questions">
+        <Section title="Why we ask a few questions">
           <Text className="text-[15.5px] leading-[23px] text-ink">
             The law requires every business that takes payments to be checked. It&apos;s a one-off.
             We&apos;ve already filled in what we can from your sign-up, so you just check it.
@@ -187,7 +187,7 @@ export default function GetPaid() {
         <View className="flex-row gap-2.5 px-1">
           <Icon name="lock" size={16} color="#9fb6d0" />
           <Text className="flex-1 text-[13.5px] leading-[20px] text-muted">
-            TradeSura never sees your bank login. Stripe is regulated by the FCA. Stop halfway and
+            Your details go straight to our FCA-regulated payments partner. Stop halfway and
             we&apos;ll save your progress.
           </Text>
         </View>
@@ -199,18 +199,18 @@ export default function GetPaid() {
         {returned && (state === "needs_more" || state === "half") && (
           <View className="rounded-2xl border border-warn/50 bg-warn-tint p-4">
             <Text className="text-[15.5px] font-bold text-warn">
-              {state === "half" ? "Payments half set up" : "Stripe needs one more thing"}
+              {state === "half" ? "Payments half set up" : "One more thing needed"}
             </Text>
             <Text className="mt-1 text-[14px] leading-[20px] text-ink">
               {state === "half"
                 ? "About 1 minute left. Your progress is saved, so you carry on where you stopped."
-                : "Stripe wants one more detail before you can be paid. It only takes a moment."}
+                : "We need one more detail before you can be paid. It only takes a moment."}
             </Text>
           </View>
         )}
         {reviewing && (
           <View className="rounded-2xl border border-warn/50 bg-warn-tint p-4">
-            <Text className="text-[15.5px] font-bold text-warn">In review · Stripe usually confirms within 24 hours</Text>
+            <Text className="text-[15.5px] font-bold text-warn">In review · usually confirmed within 24 hours</Text>
             <Text className="mt-1 text-[14px] leading-[20px] text-ink">
               Nothing more to do. We&apos;ll let you know when payments are on.
             </Text>

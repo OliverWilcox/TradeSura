@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
+import { showsVerifiedBadge } from "@/lib/public-badge";
 import { clauseLine, isLandlordPlan } from "@/lib/clauses";
 import { orderBenefits, preselectedTierId, reasonContent, type ReasonContent } from "@/lib/visit-reasons";
 import { VisitReasonIntro } from "@/components/visit-reason-intro";
@@ -85,7 +86,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "What's not included?",
-    a: "Breakdown repairs. If something breaks you get priority and your plan discount on the work — this is a maintenance and priority agreement, not an insurance policy.",
+    a: "Breakdown repairs. If something breaks you get priority, and the work is charged at your engineer's normal rates, less any repair discount your plan includes — this is a maintenance and priority agreement, not an insurance policy.",
   },
   {
     q: "When is my service?",
@@ -97,7 +98,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "Who is TradeSura?",
-    a: "The platform your engineer uses to run care plans and collect payments by Direct Debit. Your plan and your relationship are with your engineer; TradeSura just handles the rails.",
+    a: "The platform your engineer uses to run care plans and collect payments by Direct Debit. Your plan and your relationship are with your engineer; TradeSura just handles the payments and paperwork.",
   },
 ];
 
@@ -198,10 +199,9 @@ export async function EngineerPage({
     );
   }
 
-  // The badge follows the Gas Safe check alone (Matt, 4 Nov): live once the
-  // card check passes, down when suspended, paused or banned. A stored copy
-  // of the register never shows it.
-  const gasSafe = Boolean(engineer.gasSafeVerifiedAt && !engineer.pausedAt && !engineer.bannedAt);
+  // The public badge waits for the Gas Safe Register check (Matt, 13 Nov),
+  // and comes down when suspended, paused or banned.
+  const gasSafe = showsVerifiedBadge(engineer);
 
   await track("page_visit", { type: "CUSTOMER" }, {
     engineerId: engineer.id,
@@ -331,7 +331,7 @@ export async function EngineerPage({
       {/* Build Guide v2 Part 15.1 — title + sub-line, verbatim. */}
       <div>
         <h2 className="font-sans font-semibold text-lg">Choose your plan</h2>
-        <p className="text-sm text-muted">Cancel anytime — set up takes about 2 minutes.</p>
+        <p className="text-sm text-muted">Cancel any time — set up takes about 2 minutes.</p>
       </div>
 
       <PublicSignup
@@ -385,7 +385,7 @@ export async function EngineerPage({
         <h2 className="font-sans font-semibold text-sm mb-1.5">How it works</h2>
         <ol className="text-[13px] text-muted space-y-1 list-decimal list-inside">
           <li>Join in 2 minutes</li>
-          <li>Pay monthly by Direct Debit</li>
+          <li>Pay monthly or yearly by Direct Debit</li>
           <li>Your engineer books your service in with you</li>
         </ol>
       </div>
@@ -403,7 +403,7 @@ export async function EngineerPage({
       </div>
 
       <p className="font-mono text-[10px] text-faint text-center pt-1">
-        Direct Debit Guarantee protected · 14-day cooling-off · cancel anytime
+        Direct Debit Guarantee protected · 14-day cooling-off · cancel any time
       </p>
 
       {profile && (
@@ -429,8 +429,8 @@ function ModeBanner({ mode }: { mode: ReturnType<typeof pageMode> }) {
   if (mode === "practice") {
     return (
       <div className="rounded-xl border border-warn bg-warn-tint px-3.5 py-2.5 text-[13px] text-ink">
-        <b className="text-warn tracking-wide">DEMO</b> · Practice only. Nothing here creates a customer
-        or takes a payment.
+        <b className="text-warn tracking-wide">PRACTICE</b> · Nothing here creates a customer or takes a
+        payment.
       </div>
     );
   }

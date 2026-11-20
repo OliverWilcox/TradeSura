@@ -99,8 +99,8 @@ export function paymentsStatus(
   if (e.stripeChargesEnabled && e.stripePayoutsEnabled) {
     return { tone: "quiet", text: "Payments — active, paid every Friday." };
   }
-  if (!e.stripeDetailsSubmitted) return { tone: "amber", text: "Payments half set up — finish with Stripe →" };
-  return { tone: "amber", text: "Stripe needs more information to pay you — finish setup →" };
+  if (!e.stripeDetailsSubmitted) return { tone: "amber", text: "Payments half set up — finish setup →" };
+  return { tone: "amber", text: "We need a bit more information to pay you — finish setup →" };
 }
 
 export function standingCopy(
@@ -113,7 +113,7 @@ export function standingCopy(
     case "PAUSED":
       return { state, tone: "red", text: e.pauseReason ?? "Your account is paused — Fix it →" };
     case "STRIPE_NEEDS_INFO":
-      return { state, tone: "amber", text: "Stripe needs more information to pay you — finish setup →" };
+      return { state, tone: "amber", text: "We need a bit more information to pay you — finish setup →" };
     case "CHECK_FAILED":
       return {
         state,

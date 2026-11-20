@@ -205,7 +205,7 @@ export default function Payouts() {
           <Card className="border-warn-tint bg-warn-tint">
             <Text className="font-semibold text-sm text-warn">In review · usually 24 hours</Text>
             <Text className="mt-0.5 font-sans text-xs text-muted">
-              Stripe is checking your details. Nothing to do — payouts start once it&apos;s done.
+              We&apos;re checking your payment details. Nothing to do — payouts start once it&apos;s done.
             </Text>
           </Card>
         )}
@@ -259,7 +259,7 @@ export default function Payouts() {
               )}
               {data.stripeError && (
                 <Text className="mt-1 font-sans text-[11px] text-warn">
-                  Couldn&apos;t reach Stripe just now — showing the plan maths instead.
+                  Couldn&apos;t reach our payments partner just now — showing the plan maths instead.
                 </Text>
               )}
             </Card>

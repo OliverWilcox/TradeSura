@@ -41,13 +41,17 @@ describe("welcome email (Build Review 3, P1)", () => {
     expect(html).toContain("TRADESURA LTD</b> now has a free TradeSura account");
   });
 
-  it("uses the engineer's 80%: £115 a year per £12 customer, not £144", async () => {
+  it("uses the engineer's 80% and the letter's example: 20 × £15 = £2,880 a year", async () => {
     expect(engineerYearlyPence(1200)).toBe(11520);
+    expect(engineerYearlyPence(1500)).toBe(14400);
     m.engineer.mockResolvedValue(engineer);
     const { html } = await engineerWelcomeEmailHtml("e1");
-    expect(html).toContain("£115 a year to you");
-    expect(html).toContain("£1,152 a year");
-    expect(html).not.toContain("£144");
+    expect(html).toContain("e.g. £144 a year on a £15 plan");
+    expect(html).toContain("£2,880 a year");
+    expect(html).toContain("Example:");
+    expect(html).toContain("monthly or yearly by Direct Debit");
+    expect(html).not.toContain("up to £");
+    expect(html).not.toContain("£180");
   });
 
   it("has the real logo and the company footer", async () => {

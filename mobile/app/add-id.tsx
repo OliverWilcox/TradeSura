@@ -16,6 +16,8 @@ import { IdCardPicker, type IdCardState } from "@/components/id-card-picker";
 export default function AddId() {
   const { me, refreshMe } = useAuth();
   const [card, setCard] = useState<IdCardState>({ phase: "empty" });
+  // Matt 16 Nov — the back of the card too.
+  const [back, setBack] = useState<IdCardState>({ phase: "empty" });
   const [expiry, setExpiry] = useState("");
   const [expiryError, setExpiryError] = useState<string | null>(null);
 
@@ -74,6 +76,21 @@ export default function AddId() {
           Needed for your Verified Member badge. Only used to verify you — never shown to customers.
         </Text>
         {card.phase === "added" && (
+          <View className="mt-5">
+            <IdCardPicker
+              value={back}
+              onChange={setBack}
+              side="back"
+              upload={async (photo) => {
+                await api("/api/settings/gas-safe-card", {
+                  method: "POST",
+                  body: JSON.stringify({ base64: photo.base64, mimeType: photo.mimeType, side: "back" }),
+                });
+              }}
+            />
+          </View>
+        )}
+        {card.phase === "added" && back.phase === "added" && (
           <Pressable
             onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
             className="mt-6 min-h-[54px] items-center justify-center rounded-2xl bg-white"

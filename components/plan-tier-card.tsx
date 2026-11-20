@@ -1,6 +1,6 @@
 // The customer's plan card on the web — matched to the 2026 Build Guide
 // targets (and the app's "what your customer sees" preview): white card,
-// navy text, blue ticks, blue "Cancel anytime" (Review 3). The 2026 guide wins over
+// navy text, blue ticks, blue "Cancel any time" (Review 3). The 2026 guide wins over
 // older colour rules (CLAUDE.md).
 import { perMonth } from "@/lib/engineer";
 import { FIRST_PAYMENT_LINE } from "@/lib/billing-interval";

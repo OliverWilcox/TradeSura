@@ -12,16 +12,16 @@ import { Icon } from "@/components/icon";
 const COPY: Partial<Record<StripeState, { title: string; body: string; cta?: string }>> = {
   half: {
     title: "Payments half set up",
-    body: "About 1 minute left with Stripe. We saved your progress.",
+    body: "About 1 minute left. We saved your progress.",
     cta: "Continue",
   },
   needs_more: {
-    title: "Stripe needs one more thing",
-    body: "Stripe wants one more detail before you can be paid.",
-    cta: "Go back to Stripe",
+    title: "One more thing needed",
+    body: "We need one more detail before you can be paid.",
+    cta: "Add it now",
   },
   checking: {
-    title: "Stripe is checking your details",
+    title: "We're checking your payment details",
     body: "Nothing to do. We'll let you know when payments are on.",
   },
 };

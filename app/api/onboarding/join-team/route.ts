@@ -44,5 +44,5 @@ export async function POST(req: Request) {
     gasSafeNo: b.gasSafeNo,
   });
   await track("team_join_request_sent", { type: "ENGINEER", id: firm.ownerId }, { requestId }).catch(() => {});
-  return NextResponse.json({ ok: true, ownerFirstName: firm.ownerFirstName, businessName: firm.businessName });
+  return NextResponse.json({ ok: true, businessName: firm.businessName });
 }

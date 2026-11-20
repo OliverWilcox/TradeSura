@@ -453,8 +453,8 @@ export function OpeningStripe() {
     return () => loop.stop();
   }, [dots]);
   return (
-    <View className="mt-2 flex-row items-center justify-center gap-2" accessibilityLabel="Opening Stripe">
-      <Text className="font-sans text-sm text-muted">Opening Stripe</Text>
+    <View className="mt-2 flex-row items-center justify-center gap-2" accessibilityLabel="Opening payment set-up">
+      <Text className="font-sans text-sm text-muted">Opening payment set-up</Text>
       <View className="flex-row gap-1">
         {dots.map((d, i) => (
           <Animated.View

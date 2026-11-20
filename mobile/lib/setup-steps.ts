@@ -146,21 +146,21 @@ export function goLiveSteps(me: Me | null): SetupStep[] {
       ? {
           key: "paid",
           title: "Get paid",
-          sub: "Stripe is checking your details. Nothing to do.",
+          sub: "We're checking your details. Nothing to do.",
           done: false,
           status: "In review · usually 24 hours",
           tone: "amber",
           waiting: true,
           href: "/get-paid",
-          next: "Stripe is checking your details",
+          next: "we're checking your payment details",
         }
       : state === "half" || state === "needs_more"
         ? {
             key: "paid",
             title: "Get paid",
-            sub: state === "half" ? "About 1 minute left with Stripe. We saved your progress." : "Stripe needs one more thing from you.",
+            sub: state === "half" ? "About 1 minute left. We saved your progress." : "We need one more thing from you.",
             done: false,
-            status: state === "half" ? "Half set up" : "Stripe needs more",
+            status: state === "half" ? "Half set up" : "One more thing",
             tone: "amber",
             cta: "Finish",
             href: "/get-paid",
@@ -169,7 +169,7 @@ export function goLiveSteps(me: Me | null): SetupStep[] {
         : {
             key: "paid",
             title: "Get paid",
-            sub: "About 3 minutes with Stripe",
+            sub: "About 3 minutes",
             done: false,
             status: "Not set up",
             tone: "grey",

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { View, Text, ScrollView, Pressable } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { WebView } from "react-native-webview";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth-context";
@@ -27,7 +27,10 @@ export default function Demo() {
   const [viewing, setViewing] = useState(false);
   const [loading, setLoading] = useState(true);
   const base = process.env.EXPO_PUBLIC_API_URL;
-  const practice = offerLock(me) !== null;
+  // "Try it now (practice)" on Home and the Offer a plan sheet (Matt, 16 Nov)
+  // asks for practice even once live; locked offers are always practice.
+  const { practice: practiceParam } = useLocalSearchParams<{ practice?: string }>();
+  const practice = practiceParam === "1" || offerLock(me) !== null;
   // Staff hand over their phone too — `by` credits the sale to them (section 8).
   const url =
     me && base
@@ -43,7 +46,7 @@ export default function Demo() {
           <View className="flex-row items-center justify-between px-4 py-2.5">
             {practice ? (
               <Text className="flex-1 font-sans text-xs text-muted" numberOfLines={1}>
-                <Text className="font-bold text-warn">DEMO</Text> · practice only, nothing is saved
+                <Text className="font-bold text-warn">PRACTICE</Text> · nothing is saved, no payment taken
               </Text>
             ) : (
               <Text className="flex-1 font-sans text-xs text-muted" numberOfLines={1}>
@@ -72,15 +75,15 @@ export default function Demo() {
   return (
     <View className="flex-1 bg-panel">
       <SafeAreaView edges={["top"]} className="bg-iron">
-        <AppHeader title={practice ? "Demo mode" : "Show a customer"} />
+        <AppHeader title={practice ? "Practice" : "Show a customer"} />
       </SafeAreaView>
       <ScrollView className="flex-1" contentContainerClassName="gap-3.5 px-4 pb-8 pt-4">
         {practice && (
           <Card className="border-warn">
-            <Text className="font-bold text-sm text-warn">DEMO</Text>
+            <Text className="font-bold text-sm text-warn">PRACTICE</Text>
             <Text className="mt-1 font-sans text-xs text-muted">
-              Practice only. Try the sign-up as a customer would: nothing you do here creates a customer,
-              sets up a Direct Debit or takes a payment.
+              Try the whole hand-over as a customer would — use a made-up customer like
+              &quot;Sam Taylor&quot;. Nothing you do here creates a customer, sets up a Direct Debit or takes a payment.
             </Text>
           </Card>
         )}
@@ -107,11 +110,13 @@ export default function Demo() {
           }}
           disabled={!url || !me?.hasPlan}
         >
-          {practice ? "Open my plan page in demo mode" : "Open my plan page"}
+          {practice ? "Start the practice run" : "Open my plan page"}
         </Button>
         <Micro className="text-center">
           {practice
-            ? "Real sign-ups unlock once your Gas Safe check and payments are done."
+            ? offerLock(me) !== null
+              ? "Real sign-ups unlock once your Gas Safe check and payments are done."
+              : "Practice only — for a real customer, use Offer a plan."
             : "Anything signed up here is tagged as an in-person sale."}
         </Micro>
       </ScrollView>

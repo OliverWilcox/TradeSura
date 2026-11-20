@@ -26,6 +26,7 @@ export function IdCardPicker({
   upload,
   error,
   whose = "your",
+  side = "front",
 }: {
   value: IdCardState;
   onChange: (next: IdCardState) => void;
@@ -34,6 +35,8 @@ export function IdCardPicker({
   error?: string | null;
   /** "their" when an owner photographs a staff engineer's card. */
   whose?: "your" | "their";
+  /** Matt 16 Nov — the back of the card is a second photo. */
+  side?: "front" | "back";
 }) {
   async function pick(source: "camera" | "library") {
     const perm =
@@ -78,13 +81,15 @@ export function IdCardPicker({
         <Pressable
           onPress={() => pick("camera")}
           accessibilityRole="button"
-          accessibilityLabel={`Take a photo of ${whose} ID card`}
+          accessibilityLabel={side === "back" ? `Take a photo of the back of ${whose} ID card` : `Take a photo of ${whose} ID card`}
           className={`items-center rounded-xl border-[1.5px] border-dashed px-4 py-6 ${border}`}
         >
           <Icon name="camera" size={40} color={BLUE} />
-          <Text className="mt-2.5 text-[16px] font-semibold text-white">Take a photo of {whose} ID card</Text>
+          <Text className="mt-2.5 text-[16px] font-semibold text-white">{side === "back" ? `Now the back of ${whose} card` : `Take a photo of ${whose} ID card`}</Text>
           <Text className="mt-1 text-center text-[13px] text-white/65">
-            Line up the front of {whose} card inside the frame.
+            {side === "back"
+              ? `Turn it over: the back shows ${whose} work categories.`
+              : `Line up the front of ${whose} card inside the frame.`}
           </Text>
           <Pressable onPress={() => pick("library")} hitSlop={8} className="mt-3 py-1">
             <Text className="text-[14px] font-medium" style={{ color: BLUE }}>
@@ -158,7 +163,7 @@ export function IdCardPicker({
           <>
             <View className="flex-row items-center gap-1.5">
               <Icon name="check" size={15} color={BLUE} weight="bold" />
-              <Text className="text-[15px] font-semibold text-white">ID card added</Text>
+              <Text className="text-[15px] font-semibold text-white">{side === "back" ? "Back of card added" : "ID card added"}</Text>
             </View>
             <Pressable onPress={() => pick("camera")} hitSlop={8} className="mt-1 self-start py-0.5">
               <Text className="text-[13px] font-medium" style={{ color: BLUE }}>

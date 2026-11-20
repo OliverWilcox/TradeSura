@@ -29,7 +29,7 @@ export function emailConfigured(): boolean {
 // Customer emails sent on an engineer's behalf pass the engineer's own email.
 const REPLY_TO = process.env.EMAIL_REPLY_TO?.trim() || SUPPORT_EMAIL;
 
-export async function sendEmail(opts: { to: string; subject: string; html: string; replyTo?: string | null }) {
+export async function sendEmail(opts: { to: string; subject: string; html: string; replyTo?: string | null; bcc?: string | null }) {
   const resend = getResend();
   const html = withCompanyFooter(opts.html);
   if (!resend) {
@@ -44,6 +44,7 @@ export async function sendEmail(opts: { to: string; subject: string; html: strin
     subject: opts.subject,
     html,
     replyTo: opts.replyTo?.trim() || REPLY_TO,
+    ...(opts.bcc?.trim() ? { bcc: opts.bcc.trim() } : {}),
   });
   if (error) {
     console.error(`[EMAIL] Resend error sending to ${opts.to}:`, error);

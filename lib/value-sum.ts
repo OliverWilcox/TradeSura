@@ -22,7 +22,14 @@ export function planValuePence(codes: string[], prices: NormalPrices): number {
   return total;
 }
 
-export type ValueSum = { overPounds: number; perWeek: string };
+export type ValueSum = {
+  overPounds: number;
+  perWeek: string;
+  /** Matt 16 Nov — "Worth £X a year if bought separately — you pay £Y". */
+  valuePence: number;
+  /** What the customer pays a year on the chosen billing (monthly × 12, or the yearly price). */
+  yearlyPence: number;
+};
 
 /**
  * The sum the page shows, or null when there's nothing honest to say: no
@@ -43,5 +50,5 @@ export function valueSum(
   if (overPounds * 100 <= yearly) return null;
   // Rounded up to the penny, so "just £Y a week" never understates the cost.
   const weekPence = Math.ceil(yearly / 52);
-  return { overPounds, perWeek: `£${(weekPence / 100).toFixed(2)}` };
+  return { overPounds, perWeek: `£${(weekPence / 100).toFixed(2)}`, valuePence: value, yearlyPence: yearly };
 }

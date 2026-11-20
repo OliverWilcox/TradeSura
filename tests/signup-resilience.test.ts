@@ -20,6 +20,9 @@ vi.mock("@/lib/email", () => ({ sendEmail: vi.fn() }));
 vi.mock("@/lib/engineer-welcome-email", () => ({ engineerWelcomeEmailHtml: async () => ({ subject: "Welcome", html: "Test" }) }));
 vi.mock("@/lib/sms", () => ({ notifyEngineer: vi.fn() }));
 vi.mock("@/lib/push", () => ({ sendPushNotification: vi.fn() }));
+// Matt 16 Nov — the impersonation check runs after the response.
+vi.mock("next/server", async (orig) => ({ ...(await orig<typeof import("next/server")>()), after: vi.fn() }));
+vi.mock("@/lib/company-role-check", () => ({ runCompanyRoleCheck: vi.fn() }));
 import { POST } from "@/app/api/auth/request/route";
 beforeEach(() => {
   vi.resetAllMocks(); m.findUnique.mockResolvedValue(null);

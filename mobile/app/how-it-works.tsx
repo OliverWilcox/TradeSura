@@ -11,11 +11,11 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { AppHeader } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icon";
 import { useAuth } from "@/lib/auth-context";
-import { KEEP_PENCE_PER_CUSTOMER, formatPounds } from "@/lib/earnings";
+import { EXAMPLE_CUSTOMERS, EXAMPLE_PLAN_PENCE, KEEP_PENCE_PER_CUSTOMER, formatPounds } from "@/lib/earnings";
 
 // How It Works page — full rebuild to the 30 Sept build notes. This is where
 // engineers decide to sign up, so it sells: why join, how it works, what
@@ -36,7 +36,7 @@ const CARDS: { title: string; body: string; image?: ImageSourcePropType }[] = [
   {
     title: "Job Complete",
     image: require("../assets/how-it-works/card-1.jpg"),
-    body: "Any job done — install, repair or service. The engineer shows the homeowner their care plan.",
+    body: "Any job done — install, repair or service. You show the homeowner your plans.",
   },
   {
     title: "Signed Up On The Spot",
@@ -87,14 +87,16 @@ const PACK: { icon: IconName; label: string }[] = [
   { icon: "qr", label: "QR labels" },
 ];
 
-const SCRIPT =
-  "“I put all my customers on a care plan now — £12 a month and you’re first in my diary. Your annual service comes with it once your third payment’s gone through. It takes a minute — shall we set you up now?”";
+// Matt 16 Nov — no script to learn: the app explains the plans.
+const HAND_OVER = "Just pick why you were there and hand them your phone — the app explains the plans for you.";
 
 const TIPS = [
   "Offer at every job, while you're still there.",
   "Sign them up on your phone there and then. Never leave them homework.",
   "If they say “not now”, offer again at your next visit.",
 ];
+
+const FOLLOW_UP = "Not ready yet? We text them a reminder after 2 days and again after 7.";
 
 const FAQ = [
   {
@@ -103,11 +105,11 @@ const FAQ = [
   },
   {
     q: "Does it cost me anything?",
-    a: "No. It's free to join. TradeSura takes 20% of the plan payments you collect, and you keep 80%.",
+    a: "No. It's free to join. TradeSura collects the payments for you and keeps 20%; you keep 80%.",
   },
   {
     q: "What if a customer cancels?",
-    a: "Their payments simply stop. Plans are monthly with no contract, so nobody's locked in, which is exactly why customers say yes.",
+    a: "Their payments simply stop. There's no contract, so nobody's locked in, which is exactly why customers say yes. Anyone who cancels within 14 days of joining gets everything back. On a yearly plan, they get back the whole months they haven't used — that comes out of your share, and TradeSura keeps its 20%.",
   },
   {
     q: "When do I get paid?",
@@ -115,12 +117,11 @@ const FAQ = [
   },
 ];
 
-// A £12 plan at 80%, in pence so the maths stays exact (1 → £9.60 / £115.20,
-// 100 → £960 / £11,520 — the build notes' test values). From the shared
-// earnings config, same as W0.
+// A £15 plan at 80%, in pence so the maths stays exact (20 → £240 / £2,880,
+// the member pack letter's example). From the shared earnings config, same as W0.
 const KEEP_PENCE = KEEP_PENCE_PER_CUSTOMER;
 const SLIDER_MIN = 1;
-// 4 Oct notes 5.3 — up to a real book size (200 × £9.60 × 12 = £23,040/yr).
+// 4 Oct notes 5.3 — up to a real book size (200 × £12 × 12 = £28,800/yr).
 const SLIDER_MAX = 200;
 
 function SectionLabel({ children }: { children: string }) {
@@ -285,7 +286,7 @@ function CustomerSlider({ value, onChange }: { value: number; onChange: (v: numb
 }
 
 function Earnings() {
-  const [customers, setCustomers] = useState(25);
+  const [customers, setCustomers] = useState(EXAMPLE_CUSTOMERS);
   const monthly = customers * KEEP_PENCE;
   return (
     <View>
@@ -305,7 +306,7 @@ function Earnings() {
         </Text>
       </Panel>
       <Text className="mt-2 text-center text-[12.5px] text-white/60">
-        Based on a £12 a month plan. You set your own price.
+        Example: a £{EXAMPLE_PLAN_PENCE / 100} a month plan. You set your own price.
       </Text>
     </View>
   );
@@ -337,10 +338,12 @@ export default function HowItWorks() {
   // 4 Oct notes 5.5 — signed in, never "Start now": "Build my first plan"
   // until there is one, then no button at all (Back stays).
   const showStart = !signedIn || !me?.hasPlan;
+  // From Welcome: the letter code / invite / campaign source, passed straight on.
+  const signUpParams = useLocalSearchParams<{ code?: string; t?: string; ref?: string; src?: string }>();
 
   function start() {
     if (signedIn) router.push("/plans");
-    else router.push("/sign-up");
+    else router.push({ pathname: "/sign-up", params: signUpParams });
   }
 
   function backHome() {
@@ -424,8 +427,8 @@ export default function HowItWorks() {
         </Panel>
 
         <Panel className="mt-6">
-          <Text className="text-[17px] font-bold text-white">What to say at the job</Text>
-          <Text className="mt-2 text-[15px] leading-[22px] text-white">{SCRIPT}</Text>
+          <Text className="text-[17px] font-bold text-white">At the job</Text>
+          <Text className="mt-2 text-[15px] leading-[22px] text-white">{HAND_OVER}</Text>
           <Text className="mb-1 mt-4 text-[13px] font-bold text-white">Three tips</Text>
           {TIPS.map((t) => (
             <View key={t} className="flex-row gap-2.5 py-1">
@@ -433,6 +436,7 @@ export default function HowItWorks() {
               <Text className="shrink text-[14px] leading-[20px] text-white/85">{t}</Text>
             </View>
           ))}
+          <Text className="mt-3 text-[13px] leading-[19px] text-white/65">{FOLLOW_UP}</Text>
         </Panel>
 
         <Text className="mb-1 mt-7 text-[19px] font-bold text-white">Quick answers</Text>

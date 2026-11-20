@@ -212,7 +212,11 @@ export async function requestCancel(
   // Installer alert: instant, so they can call before the paid month ends.
   const who = `${plan.customer.firstName} ${plan.customer.lastName}`;
   if (opts.source === "customer") {
-    const ends = endedNow ? "Plan ended (cooling-off)" : `Plan ends ${shortDate(effectiveAt)}`;
+    // Matt, 13 Nov — a yearly customer's refund comes out of the engineer's share.
+    const refundNote = refund.refundPence
+      ? ` · Yearly: their ${poundsLabel(refund.refundPence)} refund comes out of your share`
+      : "";
+    const ends = (endedNow ? "Plan ended (cooling-off)" : `Plan ends ${shortDate(effectiveAt)}`) + refundNote;
     const line = `${who} wants to cancel · Reason: ${reasonLabel(opts.reason)} · ${ends}`;
     await notifyEngineer(plan.engineerId, endedNow ? `${line}.` : `${line}. A quick call saves most customers.`, {
       template: "cancel_requested",

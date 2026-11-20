@@ -10,7 +10,13 @@ type Timeline = {
   clearsAt: string;
   payoutAt: string;
 };
-type View_ = { basis: "customer" | "example"; customerFirstName: string | null; timeline: Timeline };
+type View_ = {
+  basis: "customer" | "example";
+  customerFirstName: string | null;
+  timeline: Timeline;
+  // Older servers don't send it; then the footnote stays general.
+  firstPayoutHeld?: boolean;
+};
 
 // "Fri 27 Nov" — the dates are whole UK days (lib/payout-timeline.ts).
 function day(iso: string) {
@@ -42,7 +48,7 @@ export function PayoutTimeline({ refreshKey }: { refreshKey?: unknown }) {
     ["14-day cooling-off ends", day(t.coolingOffEndsAt)],
     ["First payment taken by Direct Debit", day(t.firstCollectionAt)],
     ["Payment clears (about 3 working days)", day(t.clearsAt)],
-    [who ? "Your first payout" : "Paid to your bank", day(t.payoutAt)],
+    [data.firstPayoutHeld ? "Your first payout" : who ? "Your first payout" : "Paid to your bank", day(t.payoutAt)],
   ];
 
   return (
@@ -61,9 +67,13 @@ export function PayoutTimeline({ refreshKey }: { refreshKey?: unknown }) {
           </Text>
         </View>
       ))}
+      {/* Matt, 16 Nov: the date read as if the 7-day hold came on top. It's in it. */}
       <Text className="mt-2 text-[12px] leading-[17px] text-muted">
-        Paid every Friday. Stripe holds a new account&apos;s first payout for about 7 days, so the first one takes a
-        little longer; after that, each payment reaches you the Friday after it clears.
+        {data.firstPayoutHeld === true
+          ? "This is your real first payout date. It already allows for the 7 days a new account's first payment is held. After that, you're paid every Friday for whatever has cleared."
+          : data.firstPayoutHeld === false
+            ? "Paid every Friday: each payment reaches you the Friday after it clears."
+            : "Paid every Friday. A new account's first payout is held for about 7 days, so the first one takes a little longer; after that, each payment reaches you the Friday after it clears."}
       </Text>
     </View>
   );

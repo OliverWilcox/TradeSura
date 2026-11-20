@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { orderedServiceReasons } from "@/lib/yearly-service";
 import type { ValueSum } from "@/lib/value-sum";
+import { poundsLabel } from "@/lib/billing-interval";
 
 // 30 Oct update §7 — the pieces the customer sign-up pages share: the value
 // sum, "Why a yearly service matters", the landlord toggle, the Home
@@ -12,11 +13,15 @@ import type { ValueSum } from "@/lib/value-sum";
 const CARD = "bg-paper border border-line rounded-xl p-3.5";
 const INPUT = "w-full rounded-[10px] border-[1.5px] border-line bg-paper px-3 py-2.5 text-sm";
 
+// Matt 16 Nov — what the plan is worth against what they pay, at the
+// installer's own prices (lib/value-sum.ts hides it when there's nothing
+// honest to say). Money in green.
 export function ValueSumLine({ sum }: { sum: ValueSum | null }) {
   if (!sum) return null;
   return (
     <p className="rounded-xl bg-flame-tint px-3.5 py-2.5 text-[14px] text-ink">
-      Worth over <b className="text-ok">£{sum.overPounds}</b> a year… just <b className="text-ok">{sum.perWeek}</b> a week.
+      Worth <b className="text-ok">{poundsLabel(sum.valuePence)}</b> a year if bought separately. You pay{" "}
+      <b className="text-ok">{poundsLabel(sum.yearlyPence)}</b> a year, just <b className="text-ok">{sum.perWeek}</b> a week.
     </p>
   );
 }

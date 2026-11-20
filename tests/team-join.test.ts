@@ -88,6 +88,8 @@ describe("join requests", () => {
     );
     expect(res.status).toBe(200);
     expect(m.eventCreate.mock.calls[0][0].data.meta).toMatchObject({ email: "sam@example.com", phone: "+447700900456" });
+    // Whoever types the business details never learns the owner's name (Matt, 16 Nov).
+    expect(await res.json()).not.toHaveProperty("ownerFirstName");
   });
 
   it("refuses an expired verification", async () => {

@@ -46,6 +46,8 @@ export type Me = {
   gasSafeName: string | null;
   gasSafeCompany: string | null;
   gasSafeCategories: string | null;
+  /** Trustpilot review link, once TradeSura has one. */
+  trustpilotUrl?: string | null;
   stripeConnected: boolean;
   stripeDetailsSubmitted: boolean;
   stripePayoutsEnabled: boolean;

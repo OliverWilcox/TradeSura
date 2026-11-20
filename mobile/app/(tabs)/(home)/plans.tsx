@@ -8,6 +8,7 @@ import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 import { formatPounds } from "@/lib/earnings";
 import { useAuth } from "@/lib/auth-context";
 import { offerLock, readyLabel } from "@/lib/offer-lock";
+import { YearlyRule } from "@/components/yearly-rule";
 
 type Tier = {
   id: string;
@@ -210,6 +211,7 @@ export default function PlansHub() {
             </Card>
           );
         })}
+        {tiers.some((t) => t.status !== "DRAFT") && <YearlyRule />}
       </ScrollView>
     </View>
   );

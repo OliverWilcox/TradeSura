@@ -69,7 +69,7 @@ export async function activatePlan(
   await sendSms({
     engineerId: plan.engineerId,
     to: plan.customer.phone,
-    body: `Welcome to ${brand}'s ${plan.tier?.name ?? "care"} plan — ${priceLine(plan.priceMonthlyPence ?? 0, plan.billingInterval)} by Direct Debit. ${FIRST_PAYMENT_LINE} We'll message you when your annual service is due. Manage or cancel anytime: ${portalUrl}`,
+    body: `Welcome to ${brand}'s ${plan.tier?.name ?? "care"} plan — ${priceLine(plan.priceMonthlyPence ?? 0, plan.billingInterval)} by Direct Debit. ${FIRST_PAYMENT_LINE} We'll message you when your annual service is due. Manage or cancel any time: ${portalUrl}`,
     messageClass: "TRANSACTIONAL",
     consentBasis: "plan-member-transactional",
   });

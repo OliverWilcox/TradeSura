@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { View, Text, Pressable, Animated, AccessibilityInfo, Share } from "react-native";
+import { View, Text, Pressable, Animated, AccessibilityInfo, Share, Linking } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { askForRatingSoon } from "@/lib/rating-prompt";
+import { useAuth } from "@/lib/auth-context";
 
 function pounds(pence: number) {
   return pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
@@ -13,6 +14,7 @@ function pounds(pence: number) {
 // in the app: shown once, ever, the first time a real payout lands. Single
 // haptic success pattern, count-up on the figure, screenshot-friendly.
 export default function FirstPayout() {
+  const { me } = useAuth();
   const { amountPence, plans, monthlyPence, bankLast4 } = useLocalSearchParams<{
     amountPence: string;
     plans: string;
@@ -100,6 +102,14 @@ export default function FirstPayout() {
           >
             <Text className="text-base font-extrabold text-on-light">Share this</Text>
           </Pressable>
+          {me?.trustpilotUrl ? (
+            <Pressable
+              onPress={() => Linking.openURL(me.trustpilotUrl!).catch(() => {})}
+              className="min-h-11 items-center justify-center rounded-2xl border-[1.5px] border-white/55 py-3.5"
+            >
+              <Text className="font-semibold text-white">Review TradeSura on Trustpilot</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={() => router.replace("/")}
             className="min-h-11 items-center justify-center rounded-2xl border-[1.5px] border-white/55 py-3.5"

@@ -149,14 +149,19 @@ async function latestPaidPayment(subscriptionId: string): Promise<{
   };
 }
 
-async function refundPayment(paymentIntentId: string, amount: number, key: string) {
+// The refund always comes back from the engineer's share (reverse_transfer:
+// a destination charge transferred them the whole payment). Our 20% comes
+// back too only when keepOurFee is false: cooling-off refunds return
+// everything; yearly cancellations keep it (Matt, 13 Nov: "We keep our full
+// 20% when a yearly customer cancels, and the engineer covers the refund").
+async function refundPayment(paymentIntentId: string, amount: number, key: string, keepOurFee = false) {
   if (amount <= 0) return;
   await getStripe().refunds.create(
     {
       payment_intent: paymentIntentId,
       amount,
       reverse_transfer: true,
-      refund_application_fee: true,
+      refund_application_fee: !keepOurFee,
       metadata: { kind: key.split(":")[0] },
     },
     { idempotencyKey: key },
@@ -283,7 +288,8 @@ export async function undoCancel(planId: string): Promise<void> {
 }
 
 // customer.subscription.deleted: a yearly plan ending early gets its unused
-// whole months back, pro rata of what was paid. Safe to replay — skips a
+// whole months back, pro rata of what was paid, from the engineer's share
+// (our 20% is kept, Matt 13 Nov). Safe to replay — skips a
 // payment that already has a refund on it.
 export async function settleEndedSubscription(planId: string, sub: Stripe.Subscription): Promise<void> {
   const plan = await loadPlan(planId);
@@ -299,8 +305,8 @@ export async function settleEndedSubscription(planId: string, sub: Stripe.Subscr
   const months = unusedYearlyMonths(period.start, endedAt);
   const amount = yearlyRefundPence(paid.amountPaid, months);
   if (amount <= 0) return;
-  await refundPayment(paid.paymentIntentId, amount, `yearly-refund:${paid.invoiceId}`);
-  await track("yearly_refund", { type: "SYSTEM" }, { planId: plan.id, unusedMonths: months, amountPence: amount });
+  await refundPayment(paid.paymentIntentId, amount, `yearly-refund:${paid.invoiceId}`, true);
+  await track("yearly_refund", { type: "SYSTEM" }, { planId: plan.id, unusedMonths: months, amountPence: amount, feeKept: true });
   await emailYearlyRefund(plan.id, amount, months);
 }
 

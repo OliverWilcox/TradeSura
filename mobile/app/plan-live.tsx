@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { YearlyRule } from "@/components/yearly-rule";
 import {
   View,
   Text,
@@ -196,6 +197,10 @@ export default function PlanLive() {
                 </Pressable>
               ))}
             </View>
+          </View>
+
+          <View className="mt-3">
+            <YearlyRule />
           </View>
 
           <View className="mt-3 rounded-2xl border border-line-strong px-4 pt-3">

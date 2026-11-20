@@ -54,7 +54,7 @@ describe("alertIfStripeNeedsMore", () => {
     await alertIfStripeNeedsMore(engineer(true), status(true));
     await alertIfStripeNeedsMore(engineer(true), status(true));
     expect(m.push).toHaveBeenCalledTimes(1);
-    expect(m.push.mock.calls[0][1]).toBe("Stripe needs one more thing");
+    expect(m.push.mock.calls[0][1]).toBe("One more thing needed");
     expect(m.push.mock.calls[0][3]).toEqual({ url: "/get-paid" });
     expect(m.email).toHaveBeenCalledTimes(1);
   });

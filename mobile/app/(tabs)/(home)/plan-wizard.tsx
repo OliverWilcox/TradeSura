@@ -152,7 +152,8 @@ export default function PlanWizard() {
   const [info, setInfo] = useState<Template | null>(null);
   const [typingPrice, setTypingPrice] = useState(false);
   const [priceText, setPriceText] = useState("");
-  const [customers, setCustomers] = useState(10);
+  // Matt 16 Nov — starts at the member pack letter's 20 customers.
+  const [customers, setCustomers] = useState(20);
   const [tipsOpen, setTipsOpen] = useState(false);
   // §5 — "What do you normally charge…?", blank until they say. Saved to the
   // account (not the plan); the customer page's value sum uses only these.
@@ -965,7 +966,6 @@ export default function PlanWizard() {
                 [
                   { key: "service", label: "What do you normally charge for a service?", prefix: "£", kb: "decimal-pad" },
                   { key: "callout", label: "What do you normally charge for a call-out?", prefix: "£", kb: "decimal-pad" },
-                  { key: "discount", label: "Any discount on repairs for plan customers?", suffix: "%", kb: "number-pad" },
                 ] as const
               ).map((f) => (
                 <View key={f.key} className="mt-3">
@@ -981,11 +981,17 @@ export default function PlanWizard() {
                       accessibilityLabel={f.label}
                       className="flex-1 px-1 text-[16px] text-ink"
                     />
-                    {"suffix" in f && <Text className="text-[16px] text-muted">{f.suffix}</Text>}
                   </View>
                 </View>
               ))}
               {normalNote && <Text className="mt-2 text-[13px] text-warn">{normalNote}</Text>}
+              {/* Matt, 16 Nov — a typed "10% off repairs" never reached the
+                  customer and isn't plan wording. Discounts go in as items,
+                  so they're in the plan document too. */}
+              <Text className="mt-3 text-[13px] leading-[18px] text-muted">
+                Want to give plan customers money off repairs? Add &quot;15% off labour&quot; or &quot;10% off parts&quot;
+                to your plan — they then show on the customer&apos;s plan and in their plan document.
+              </Text>
             </Card>
 
             {priceSet && (
@@ -994,7 +1000,7 @@ export default function PlanWizard() {
               <Slider
                 value={customers}
                 min={1}
-                max={20}
+                max={50}
                 onChange={setCustomers}
                 accessibilityLabel="Number of customers on this plan"
               />
@@ -1034,7 +1040,7 @@ export default function PlanWizard() {
                   {[
                     "Price the work, not the risk: the plan pays for the service and checks you'll actually do.",
                     "We recommend offering 3 plans: most customers pick the middle one.",
-                    "You can change the price later. Customers already on the plan keep what they signed up for.",
+                    "You can change the price later. Customers already on the plan keep their price for 12 months, then it can rise by up to 10% a year, with 30 days' notice.",
                   ].map((t) => (
                     <View key={t} className="flex-row gap-2">
                       <Text className="text-[14px] text-flame">•</Text>

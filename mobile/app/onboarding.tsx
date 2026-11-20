@@ -213,6 +213,21 @@ export default function Onboarding() {
   const currentIdx = live.findIndex((s) => !s.done && !s.waiting);
   const isLive = done === live.length;
 
+  // The automatic card check (lib/card-check.ts) passes a few seconds after
+  // the upload: while a step is waiting, look again every 5 seconds for up to
+  // 2 minutes so "You're live" appears without leaving the screen.
+  const waiting = live.some((s) => s.waiting && !s.done);
+  useEffect(() => {
+    if (!waiting) return;
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      if (tries > 24) clearInterval(timer);
+      else refreshMe();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [waiting, refreshMe]);
+
   // Matt, 30 Oct §8 — the rating prompt's "You're verified" moment: the
   // You're live celebration, once the Gas Safe check (and the rest) is done.
   useEffect(() => (isLive && me?.role !== "staff" ? askForRatingSoon("verified", 600) : undefined), [isLive, me?.role]);
@@ -274,17 +289,7 @@ export default function Onboarding() {
     <View className="flex-1 bg-bg">
       <SafeAreaView edges={["top"]} className="flex-1">
         <ScrollView contentContainerClassName="gap-3 px-4 pb-10 pt-3">
-          {/* One "Skip to dashboard" at the top, as on the design. */}
-          <View className="flex-row justify-end">
-            <Pressable
-              onPress={toDashboard}
-              accessibilityRole="button"
-              className="rounded-full border border-line-strong px-3.5 py-1.5"
-            >
-              <Text className="text-[13.5px] font-semibold text-flame">Skip to dashboard</Text>
-            </Pressable>
-          </View>
-
+          {/* One way out only, at the bottom (Matt, 16 Nov: two on one screen). */}
           <View className="flex-row items-center justify-between gap-3">
             <View className="flex-1">
               <Text className="text-[30px] font-extrabold leading-[36px] text-ink" numberOfLines={1} adjustsFontSizeToFit>

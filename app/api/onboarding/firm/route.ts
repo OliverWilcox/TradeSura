@@ -22,6 +22,6 @@ export async function POST(req: Request) {
   }
   const firm = await findFirm(parsed.data);
   return NextResponse.json({
-    firm: firm ? { businessName: firm.businessName, ownerFirstName: firm.ownerFirstName } : null,
+    firm: firm ? { businessName: firm.businessName } : null,
   });
 }

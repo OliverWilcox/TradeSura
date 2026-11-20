@@ -45,7 +45,7 @@ const VALUE_PROPS = [
     body: "Every plan is built from pre-approved service descriptions, so what you sell stays clear and consistent.",
   },
   {
-    title: "Cancel anytime, both ways",
+    title: "Cancel any time, both ways",
     body: "Customers can leave in two taps, and so can you. No lock-in, no small print.",
   },
 ];

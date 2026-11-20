@@ -157,7 +157,20 @@ describe("My plans and deleting a plan (Review 4)", () => {
     const annual = CLAUSE_TEMPLATES.find((c) => c.code === "ANNUAL_SERVICE")!;
     expect(hubClauseLine(annual).note).toBe("available after the customer's 3rd payment");
     const callout = CLAUSE_TEMPLATES.find((c) => c.code === "NO_CALLOUT_FEE")!;
-    expect(hubClauseLine(callout).note).toBe("your attendance charge is waived when you attend");
+    expect(hubClauseLine(callout).note).toBe(
+      "available after the customer's 3rd payment; their attendance charge is waived when you attend",
+    );
+  });
+  it("puts every high-value benefit behind the third payment (Matt, 16 Nov)", () => {
+    for (const code of [
+      "CP12", "NO_CALLOUT_FEE", "DIAGNOSTIC_WAIVED", "LABOUR_DISCOUNT_15", "PARTS_DISCOUNT",
+      "GAS_FIRE_SERVICE", "COOKER_HOB_CHECK", "UNVENTED_CYLINDER", "HEALTH_CHECK", "LEGIONELLA",
+    ]) {
+      const c = CLAUSE_TEMPLATES.find((x) => x.code === code)!;
+      expect(c.note, code).toMatch(/third payment/);
+      expect(c.engineerNote, code).toMatch(/3rd payment/);
+      expect(c.bodyText, code).toMatch(/third monthly payment/);
+    }
   });
   it("lets a plan that never had a customer be deleted, whatever its status", () => {
     expect(tierCanBeDeleted(0)).toBe(true);

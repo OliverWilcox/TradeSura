@@ -186,7 +186,7 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
             <Pressable
               onPress={() => (heroAwake ? setSheetOpen(true) : setGateOpen(true))}
               accessibilityRole="button"
-              accessibilityLabel="Add customer"
+              accessibilityLabel="Offer a plan"
               accessibilityState={{ disabled: !heroAwake }}
               className="h-14 w-14 items-center justify-center rounded-full bg-white"
               style={{
@@ -209,7 +209,7 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
             <Text
               style={{ fontSize: 10, fontWeight: "600", color: heroAwake ? "#f3f7fb" : IDLE, marginTop: 2 }}
             >
-              Add customer
+              Offer a plan
             </Text>
           </View>
           {rightTabs.map(renderTab)}
@@ -221,7 +221,7 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
         reason={
           isStaff
             ? "The business has no live plan yet — ask the owner to make one live."
-            : "Add customers once your first plan is live."
+            : "Offer plans once your first plan is live."
         }
         cta={isStaff ? "OK" : undefined}
         onCta={() => (isStaff ? setGateOpen(false) : router.push("/onboarding"))}

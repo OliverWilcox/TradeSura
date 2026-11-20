@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { CLAIM_STEPS, claimForPage } from "@/lib/claim";
+import { recordInstallHint } from "@/lib/install-match";
 
 // 30 Oct update §1.9 — "Log every step per code": the steps only the
 // browser sees (ticks seen, code copied, store opened). Each step is logged
@@ -20,5 +21,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
     select: { id: true },
   });
   if (!seen) await track("claim_step", { type: "SYSTEM" }, { code: row.code, step, variantCell: row.variantCell });
+  // Letter → app: remember which network went to the store with this code
+  // (every time, unlike the funnel step), for the app's first open.
+  if (step === "store_opened" || step === "store_fallback_tapped") await recordInstallHint(row.code, req);
   return NextResponse.json({ ok: true });
 }

@@ -1,6 +1,7 @@
 // Plan document assembly — ONLY from the clause templates table
 // (CLAUDE.md §Compliance 1). No free text enters this document.
 import { prisma } from "@/lib/db";
+import { hasRepairDiscount, repairChargeLine } from "@/lib/clauses";
 import { EMERGENCY_LINE } from "@/lib/compliance/interlock";
 import { resolvePlanTier } from "@/lib/plan-tier";
 import { appUrl } from "@/lib/app-url";
@@ -58,7 +59,7 @@ export async function planDocumentEmailHtml(planId: string) {
   ${clauseHtml}
   <h2>What's not included</h2>
   <p style="margin:0"><b>Breakdown repairs.</b> If something breaks, your engineer prioritises you
-  and repair work is chargeable at your plan discount. This plan is a maintenance &amp; priority
+  and ${repairChargeLine(hasRepairDiscount(clauses.map((c) => c.code)))}. This plan is a maintenance &amp; priority
   agreement, not an insurance policy.</p>
   <h2>Your rights</h2>
   <p>You have a <b>14-day cooling-off period</b>${coolingOffEnds ? ` (until ${coolingOffEnds})` : ""}:

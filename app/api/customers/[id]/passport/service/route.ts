@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { track } from "@/lib/track";
 import { addMonths, passportBoiler } from "@/lib/passport";
 import { requestRating } from "@/lib/ratings";
+import { inviteCustomerAfterFirstService } from "@/lib/trustpilot";
 import { isOwnPhotoUrl, livePlanId, passportAccess } from "../access";
 
 const Body = z.object({
@@ -82,5 +83,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   });
 
   const { requested } = await requestRating(record.id);
+  // Matt, 12 Nov — Trustpilot invite after the customer's first service.
+  await inviteCustomerAfterFirstService(id, businessId);
   return NextResponse.json({ ok: true, id: record.id, ratingRequested: requested });
 }
