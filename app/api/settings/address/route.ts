@@ -29,12 +29,8 @@ export async function POST(req: Request) {
     where: { id: engineerId },
     select: { slug: true, previousSlugs: true, slugChosenAt: true },
   });
-  if (engineer.slugChosenAt) {
-    return NextResponse.json(
-      { error: "Your address is already set. Message support if it really needs to change." },
-      { status: 409 },
-    );
-  }
+  // QA 25 Nov: the address can be changed after it's chosen. moveSlug keeps
+  // every old address in previousSlugs, which still forward to the new one.
   const r = await checkChosenSlug(parsed.data.slug, engineerId);
   if ("error" in r) return NextResponse.json({ error: r.error }, { status: 409 });
 

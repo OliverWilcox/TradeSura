@@ -62,6 +62,12 @@ const CATEGORY_ORDER = [
 // Open by default; the rest fold into a row with an "N on" count.
 const OPEN_CATEGORIES = new Set(["Core gas servicing", "Priority & access"]);
 const PRICE_MIN_PENCE = 1000;
+
+// QA 25 Nov: money boxes take an amount only: digits, one point, two decimals.
+function moneyText(v: string): string {
+  const [whole, ...rest] = v.replace(/[^\d.]/g, "").split(".");
+  return rest.length ? `${whole}.${rest.join("").slice(0, 2)}` : whole;
+}
 // Build Review 2, ruling 1 — £10 minimum, no business maximum (the max is a
 // typo guard, mirrored from ../../../lib/clauses.ts).
 const PRICE_MAX_PENCE = 100000;
@@ -907,7 +913,7 @@ export default function PlanWizard() {
                 {typingPrice ? (
                   <TextInput
                     value={priceText}
-                    onChangeText={setPriceText}
+                    onChangeText={(v) => setPriceText(moneyText(v))}
                     onBlur={commitTypedPrice}
                     onSubmitEditing={commitTypedPrice}
                     keyboardType="decimal-pad"
@@ -982,7 +988,7 @@ export default function PlanWizard() {
                     {"prefix" in f && <Text className="text-[16px] text-muted">{f.prefix}</Text>}
                     <TextInput
                       value={normal[f.key]}
-                      onChangeText={(v) => setNormal({ ...normal, [f.key]: v.slice(0, 8) })}
+                      onChangeText={(v) => setNormal({ ...normal, [f.key]: moneyText(v).slice(0, 8) })}
                       onEndEditing={() => saveNormalPrices(normal)}
                       onBlur={() => saveNormalPrices(normal)}
                       keyboardType={f.kb}
@@ -992,7 +998,7 @@ export default function PlanWizard() {
                   </View>
                 </View>
               ))}
-              {normalNote && <Text className="mt-2 text-[13px] text-warn">{normalNote}</Text>}
+              {normalNote && <Text className="mt-2 text-[13px] text-danger">{normalNote}</Text>}
               {/* Matt, 16 Nov — a typed "10% off repairs" never reached the
                   customer and isn't plan wording. Discounts go in as items,
                   so they're in the plan document too. */}

@@ -201,7 +201,12 @@ export default function ProfileScreen() {
         )
       ) : (
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
-          <ScrollView contentContainerClassName="gap-3 px-4 pb-10 pt-4" keyboardShouldPersistTaps="handled">
+          {/* QA 25 Nov: scrolling closes the keyboard, so iOS stops pulling the view back to the focused box. */}
+          <ScrollView
+            contentContainerClassName="gap-3 px-4 pb-10 pt-4"
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
             <View>
               <Text className="text-[22px] font-bold text-ink">Get found on Google</Text>
               <Text className="mt-1.5 text-[14.5px] leading-[21px] text-muted">

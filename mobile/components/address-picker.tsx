@@ -20,6 +20,9 @@ export function AddressPicker({
   const [remote, setRemote] = useState<{ for: string; ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // QA 25 Nov: a chosen address can be changed; the old one keeps forwarding.
+  const [editing, setEditing] = useState(false);
+  const locked = chosen && !editing;
 
   const wanted = draft.trim();
   const check =
@@ -33,7 +36,7 @@ export function AddressPicker({
 
   // Checks the name as they type, so a taken or kept word shows before Save.
   useEffect(() => {
-    if (chosen || !wanted || wanted === slug) return;
+    if (locked || !wanted || wanted === slug) return;
     let live = true;
     const t = setTimeout(() => {
       api<{ ok: boolean; display?: string; error?: string }>(`/api/settings/address?slug=${encodeURIComponent(wanted)}`)
@@ -48,7 +51,7 @@ export function AddressPicker({
       live = false;
       clearTimeout(t);
     };
-  }, [wanted, chosen, slug]);
+  }, [wanted, locked, slug]);
 
   async function save() {
     setBusy(true);
@@ -58,6 +61,7 @@ export function AddressPicker({
         method: "POST",
         body: JSON.stringify({ slug: draft.trim() }),
       });
+      setEditing(false);
       onChosen(r.slug);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't save your address — try again.");
@@ -66,12 +70,24 @@ export function AddressPicker({
     }
   }
 
-  if (chosen) {
+  if (locked) {
     return (
       <View>
-        <Text selectable className="text-[16px] font-bold text-ink">
-          tradesura.com/{slug}
-        </Text>
+        <View className="flex-row items-center justify-between gap-2">
+          <Text selectable className="flex-1 text-[16px] font-bold text-ink">
+            tradesura.com/{slug}
+          </Text>
+          <Text
+            onPress={() => {
+              setDraft(slug);
+              setError(null);
+              setEditing(true);
+            }}
+            className="py-1 text-[14px] font-semibold text-flame"
+          >
+            Change
+          </Text>
+        </View>
         <Text className="mt-1 text-[11px] text-faint">
           On your plan links, QR codes, member pack and website. Each plan has its own link under it.
         </Text>
@@ -97,16 +113,21 @@ export function AddressPicker({
         />
       </View>
       {check && (
-        <Text className={`mt-1 text-xs ${check.ok ? "text-muted" : "text-warn"}`}>{check.text}</Text>
+        <Text className={`mt-1 text-xs ${check.ok ? "text-muted" : "text-danger"}`}>{check.text}</Text>
       )}
       <Text className="mt-1 text-[11px] text-faint">
-        You choose this once. It goes on your plan links, QR codes, member pack and website. Links you&apos;ve already
-        shared keep working.
+        It goes on your plan links, QR codes, member pack and website. If you change it, links and QR codes
+        you&apos;ve already shared keep working: they forward to the new address.
       </Text>
       {error && <Text className="mt-1.5 text-xs text-danger">{error}</Text>}
       <Button variant="ghost" onPress={save} disabled={busy || !draft.trim() || check?.ok === false} className="mt-2.5">
         {busy ? "Saving…" : "Keep this address"}
       </Button>
+      {editing && (
+        <Button variant="ghost" onPress={() => setEditing(false)} disabled={busy} className="mt-2">
+          Cancel
+        </Button>
+      )}
     </View>
   );
 }
