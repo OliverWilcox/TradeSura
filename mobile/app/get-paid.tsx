@@ -224,7 +224,8 @@ export default function GetPaid() {
         )}
 
         {embedded ? (
-          <View className="overflow-hidden rounded-2xl border border-line-strong bg-panel p-3">
+          <View className="overflow-hidden rounded-2xl border border-line-strong bg-bg p-3">
+            {/* Same navy as the form's own colorBackground, so only this one rounded border shows. */}
             <StripeOnboarding
               clientSecret={embedded.clientSecret}
               publishableKey={embedded.publishableKey}
