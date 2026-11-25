@@ -9,6 +9,7 @@ import { Icon, type IconName } from "@/components/icon";
 import { RingMarkProgress } from "@/components/ring-mark";
 import { StripeBadge } from "@/components/stripe-badge";
 import { askForRatingSoon } from "@/lib/rating-prompt";
+import { MEMBER_PACK } from "@/lib/member-pack";
 
 // Matt's Getting Started layout (Review 4, 28 Oct). GO LIVE: the three steps
 // needed to take customers, counted by the ring. GROW: any time, optional.
@@ -147,7 +148,6 @@ function GrowRow({ step }: { step: SetupStep }) {
   );
 }
 
-const PACK_ITEMS = ["Van stickers", "Window sticker", "Quick-start booklet", "Leaflets", "QR labels"];
 
 function MemberPackCard() {
   const { me } = useAuth();
@@ -165,7 +165,7 @@ function MemberPackCard() {
         </View>
       </View>
       <View className="flex-row flex-wrap gap-1.5">
-        {PACK_ITEMS.map((item) => (
+        {MEMBER_PACK.map(({ label: item }) => (
           <View key={item} className="w-[58px] items-center justify-center rounded-md border border-line-strong bg-white/5 px-1 py-2">
             <Text className="text-center text-[9.5px] leading-[12px] text-muted">{item}</Text>
           </View>

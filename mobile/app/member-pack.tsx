@@ -6,20 +6,13 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Button, Tick } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icon";
+import { MEMBER_PACK } from "@/lib/member-pack";
 
 // Getting started · "Member pack" — posted once the Gas Safe badge goes live.
 // Review 4: show the real pack (each item), the posting address with Change,
 // and where it's up to. `image` takes a photo of the real item once we have
 // them (drop it in assets/pack/); until then the item's icon stands in.
-const PACK_ITEMS: { label: string; detail: string; icon: IconName; image?: ImageSourcePropType }[] = [
-  { label: "Van stickers", detail: "Verified Member for both sides of the van", icon: "van" },
-  { label: "Window sticker", detail: "For your office or front window", icon: "shield" },
-  { label: "QR labels", detail: "Stick one on each boiler you service", icon: "qr" },
-  { label: "Quick-start booklet", detail: "Offering plans in under 90 seconds", icon: "booklet" },
-  { label: "Leaflets", detail: "To leave with customers after a job", icon: "leaflets" },
-  { label: "Cover letter", detail: "Welcome to TradeSura", icon: "document" },
-  { label: "Envelope", detail: "Posted to you, free", icon: "mail" },
-];
+const PACK_ITEMS: { label: string; detail: string; icon: IconName; image?: ImageSourcePropType }[] = MEMBER_PACK;
 
 type Stage = "address" | "waiting" | "packing" | "posted";
 

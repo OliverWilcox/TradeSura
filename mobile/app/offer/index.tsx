@@ -61,14 +61,9 @@ function OfferSkeleton() {
 type Customer = { id: string; firstName: string; lastName: string; phone: string };
 type Tier = { id: string; name: string; priceMonthlyPence: number; lines: string[] };
 
-// Built from the selected plan: its own price, and the service line only when
-// the plan includes it (Build Review 2, ruling 2 — service is optional).
-function offerScript(tier: Tier | null): string {
-  const price = tier ? `£${(tier.priceMonthlyPence / 100).toFixed(2).replace(/\.00$/, "")} a month` : "a small monthly fee";
-  const service = !tier || tier.lines.some((l) => /annual boiler service/i.test(l));
-  // 30 Oct §6 — the app does the selling: one line, then hand the phone over.
-  return `“I put all my customers on a care plan now — ${price} and you’re first in my diary.${service ? " Your annual service comes with it once your third payment’s gone through." : ""} Have a quick look, it’s all on here.”`;
-}
+// Matt, 16 Nov — no sales patter (a script quoted prices and promises that
+// depend on each engineer's own plan): pick the reason, hand the phone over.
+const HAND_OVER = "Just pick why you were there and hand them your phone — the app explains the plans for you.";
 
 // Thumb-sized, size-only text class (see components/address-lookup.tsx).
 const inputCls = "min-h-[48px] rounded-[10px] border bg-paper px-3.5 font-sans text-[16px] text-ink";
@@ -102,7 +97,6 @@ export default function OfferStart() {
   const [tiers, setTiers] = useState<Tier[] | null>(null);
   const [tierCount, setTierCount] = useState<number | null>(null);
   const [tierId, setTierId] = useState<string | null>(null);
-  const [scriptOpen, setScriptOpen] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [mode, setMode] = useState<"existing" | "new">("existing");
@@ -141,7 +135,6 @@ export default function OfferStart() {
       setTierCount(data.tierCount);
       setTiers(data.tiers);
       setTierId((current) => current ?? data.tiers[0]?.id ?? null);
-      setScriptOpen(data.offersSent < 10);
       const preselect =
         customerIdParam && data.customers.some((c) => c.id === customerIdParam)
           ? customerIdParam
@@ -303,20 +296,9 @@ export default function OfferStart() {
       ) : (
         <ScrollView className="flex-1" contentContainerClassName="gap-3.5 px-4 pb-8 pt-4">
           {tierCount > 0 && (
-            // Amber means "pending" in the design system; a script isn't, so
-            // this is a plain card with the blue link colour.
             <Card>
-              <Pressable
-                onPress={() => setScriptOpen((v) => !v)}
-                className="flex-row items-center justify-between"
-                accessibilityRole="button"
-              >
-                <Micro className="text-flame">What to say</Micro>
-                <Text className="font-sans text-[13px] font-semibold text-flame">{scriptOpen ? "Hide" : "Show"}</Text>
-              </Pressable>
-              {scriptOpen && (
-                <Text className="mt-2 font-sans text-[14px] leading-[21px] text-ink">{offerScript(selectedTier)}</Text>
-              )}
+              <Micro className="text-flame">At the job</Micro>
+              <Text className="mt-2 font-sans text-[14px] leading-[21px] text-ink">{HAND_OVER}</Text>
             </Card>
           )}
 

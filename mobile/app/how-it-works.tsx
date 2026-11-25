@@ -15,6 +15,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { AppHeader } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icon";
 import { useAuth } from "@/lib/auth-context";
+import { MEMBER_PACK } from "@/lib/member-pack";
 import { EXAMPLE_CUSTOMERS, EXAMPLE_PLAN_PENCE, KEEP_PENCE_PER_CUSTOMER, formatPounds } from "@/lib/earnings";
 
 // How It Works page — full rebuild to the 30 Sept build notes. This is where
@@ -79,13 +80,7 @@ const HARD_BITS = [
   "Paid every Friday",
 ];
 
-const PACK: { icon: IconName; label: string }[] = [
-  { icon: "van", label: "Van stickers" },
-  { icon: "home", label: "Window sticker" },
-  { icon: "booklet", label: "Quick-start booklet" },
-  { icon: "leaflets", label: "Leaflets" },
-  { icon: "qr", label: "QR labels" },
-];
+const PACK = MEMBER_PACK;
 
 // Member pack cover letter v7.1's key message, word for word (19 Nov list).
 const HAND_OVER = "No selling needed. Pick why you were there, hand the customer your phone, and the app does the selling for you.";

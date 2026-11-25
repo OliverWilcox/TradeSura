@@ -36,7 +36,7 @@ export default function VideoScreen() {
         <Card>
           <Text className="text-[17px] font-bold text-ink">How to offer a plan in 60 seconds</Text>
           <Text className="mt-1.5 text-[14px] leading-[20px] text-muted">
-            What to say at the end of the job, then Show them now so they join on your phone before you pack up.
+            Pick why you were there and hand them your phone, so they join before you pack up. The app explains the plans for you.
           </Text>
           {video?.watchedAt && <Text className="mt-2 text-[13px] font-semibold text-ink">Watched</Text>}
         </Card>
