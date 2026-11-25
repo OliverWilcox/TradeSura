@@ -69,15 +69,18 @@ export function checkUkPostcode(v: string): string | null {
  * more than 5 years away (lib/gas-safe-card.ts cardExpiry).
  */
 export function cardExpiryOf(v: string): { iso: string } | { error: string } {
-  const s = v.trim();
+  const s = String(v ?? "").trim().slice(0, 20);
   const full = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   const month = s.match(/^(\d{1,2})\/(\d{4})$/);
   if (!full && !month) return { error: "Enter the expiry date on your card, like 31/03/2027." };
   const y = Number(full ? full[3] : month![2]);
   const m = Number(full ? full[2] : month![1]);
+  const notReal = { error: "That isn't a real date — check the card." };
+  // Range-check before building a Date so an Invalid Date can never reach toISOString().
+  if (m < 1 || m > 12 || y < 1970) return notReal;
   const d = full ? Number(full[1]) : new Date(Date.UTC(y, m, 0)).getUTCDate();
   const date = new Date(Date.UTC(y, m - 1, d));
-  if (m < 1 || m > 12 || date.getUTCDate() !== d) return { error: "That isn't a real date — check the card." };
+  if (Number.isNaN(date.getTime()) || d < 1 || date.getUTCDate() !== d) return notReal;
   const today = new Date().toISOString().slice(0, 10);
   const iso = date.toISOString().slice(0, 10);
   if (iso < today) return { error: "That date has passed. Add a photo of your current card." };

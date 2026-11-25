@@ -141,9 +141,18 @@ export function CustomerPlanCard({
           </Text>
         )}
         {showJoin && (
-          <View className="mt-4 items-center rounded-xl py-3" style={{ backgroundColor: JOIN_BLUE }}>
-            <Text className="text-[16px] font-semibold text-white">Join</Text>
-          </View>
+          <>
+            {/* Preview only (the engineer's side), so it reads as inactive. */}
+            <View
+              accessibilityState={{ disabled: true }}
+              pointerEvents="none"
+              className="mt-4 items-center rounded-xl py-3 opacity-50"
+              style={{ backgroundColor: JOIN_BLUE }}
+            >
+              <Text className="text-[16px] font-semibold text-white">Join</Text>
+            </View>
+            <Text className="mt-1.5 text-center text-[12.5px] text-muted">Customers tap this to join</Text>
+          </>
         )}
       </View>
       {cta && (

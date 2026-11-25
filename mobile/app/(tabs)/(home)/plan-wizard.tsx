@@ -271,7 +271,8 @@ export default function PlanWizard() {
       : null;
   const landlordPlan = templates.some((t) => t.category === LANDLORD_CATEGORY && selected.has(t.code));
   const suggestedName = landlordPlan ? "Landlord Care" : "Boiler Care";
-  const price = pricePence;
+  // From the price step on, an unset price is the £10 minimum, never "£ —".
+  const price = step >= 2 && pricePence < PRICE_MIN_PENCE ? PRICE_MIN_PENCE : pricePence;
   const priceSet = price >= PRICE_MIN_PENCE;
   const keep = keepPence(price);
   const fee = price - keep;
@@ -395,7 +396,11 @@ export default function PlanWizard() {
 
   function commitTypedPrice() {
     const v = Math.round(parseFloat(priceText.replace(/[£,\s]/g, "")) * 100);
-    if (Number.isFinite(v) && v > 0) setPrice(v);
+    if (Number.isFinite(v) && v > 0) {
+      setPrice(v);
+      const clamped = Math.min(PRICE_MAX_PENCE, Math.max(PRICE_MIN_PENCE, v));
+      if (clamped !== v) setPriceNote(`Plans are £10 to £1,000 a month — we've set it to ${pounds(clamped, true)}.`);
+    }
     setTypingPrice(false);
   }
 
@@ -873,7 +878,7 @@ export default function PlanWizard() {
         )}
 
         {step === 1 && (serviceRuleError || rateError) && (
-          <Text className="px-1 text-center text-[13px] text-warn">{serviceRuleError ?? rateError}</Text>
+          <Text className="px-1 text-center text-[13px] text-danger">{serviceRuleError ?? rateError}</Text>
         )}
 
         {/* Step 2 — Set your price */}
@@ -893,8 +898,9 @@ export default function PlanWizard() {
               <View className="mt-2 flex-row items-center justify-between">
                 <Pressable
                   onPress={() => priceSet && setPrice(price - PRICE_STEP_PENCE)}
+                  disabled={price <= PRICE_MIN_PENCE}
                   accessibilityLabel="Lower the price by £1"
-                  className="h-12 w-12 items-center justify-center rounded-full border-[1.5px] border-white/80"
+                  className={`h-12 w-12 items-center justify-center rounded-full border-[1.5px] border-white/80 ${price <= PRICE_MIN_PENCE ? "opacity-40" : ""}`}
                 >
                   <Icon name="minus" size={20} weight="semibold" />
                 </Pressable>
@@ -905,6 +911,7 @@ export default function PlanWizard() {
                     onBlur={commitTypedPrice}
                     onSubmitEditing={commitTypedPrice}
                     keyboardType="decimal-pad"
+                    maxLength={7}
                     autoFocus
                     // Starts empty (the current price shows as the hint), so
                     // typing replaces the price instead of adding to it.
@@ -931,14 +938,15 @@ export default function PlanWizard() {
                 )}
                 <Pressable
                   onPress={() => setPrice(priceSet ? price + PRICE_STEP_PENCE : PRICE_MIN_PENCE)}
+                  disabled={price >= PRICE_MAX_PENCE}
                   accessibilityLabel="Raise the price by £1"
-                  className="h-12 w-12 items-center justify-center rounded-full border-[1.5px] border-white/80"
+                  className={`h-12 w-12 items-center justify-center rounded-full border-[1.5px] border-white/80 ${price >= PRICE_MAX_PENCE ? "opacity-40" : ""}`}
                 >
                   <Icon name="plus" size={20} weight="semibold" />
                 </Pressable>
               </View>
               <Text className="mt-1 text-center text-[13px] text-muted">Tap to type · £10 minimum</Text>
-              {priceNote && <Text className="mt-1 text-center text-[13px] text-warn">{priceNote}</Text>}
+              {priceNote && <Text className="mt-1 text-center text-[13px] text-danger">{priceNote}</Text>}
               {priceSet && (
               <View className="mt-3.5 gap-2 border-t border-line-strong pt-3.5">
                 <View className="flex-row justify-between">

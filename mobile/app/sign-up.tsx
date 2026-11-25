@@ -276,9 +276,8 @@ function cardReadWarning(
 
 function FieldError({ children }: { children?: ReactNode }) {
   if (!children) return null;
-  // Amber, not red: a missing or mistyped answer is a warning, not a fault
-  // (Review 3 design rules).
-  return <Text className="mt-1.5 text-[13px] leading-[17px] text-warn">{children}</Text>;
+  // Red (QA, Nov 2026): input errors share one danger colour across the app.
+  return <Text className="mt-1.5 text-[13px] leading-[17px] text-danger">{children}</Text>;
 }
 
 function Hint({ children }: { children: ReactNode }) {
@@ -1636,7 +1635,22 @@ export default function SignUp() {
                       <>
                         {referralOpen ? (
                           <>
-                            <Text className={labelCls}>Referral code</Text>
+                            <View className="flex-row items-end justify-between">
+                              <Text className={labelCls}>Referral code</Text>
+                              <Pressable
+                                onPress={() => {
+                                  setReferralCode("");
+                                  setReferral({ status: "idle" });
+                                  setReferralOpen(false);
+                                }}
+                                hitSlop={8}
+                                className="py-1"
+                              >
+                                <Text className="text-[14px]" style={{ color: BLUE }}>
+                                  Remove
+                                </Text>
+                              </Pressable>
+                            </View>
                             <Input
                               value={referralCode}
                               onChangeText={onReferralChange}
@@ -1932,7 +1946,7 @@ export default function SignUp() {
                         onPress={askToJoin}
                         busy={joinBusy}
                       />
-                      {joinError && <Text className="mt-2 text-[13px] text-warn">{joinError}</Text>}
+                      {joinError && <Text className="mt-2 text-[13px] text-danger">{joinError}</Text>}
                       <Pressable onPress={() => setFirmDismissed(true)} className="mt-2 items-center py-2">
                         <Text className="text-[13.5px] text-white/70">It&apos;s a different business — carry on</Text>
                       </Pressable>
@@ -2202,7 +2216,7 @@ export default function SignUp() {
                     </Pressable>
                   </View>
 
-                  {error && <Text className="mt-3 text-[14px] text-warn">{error}</Text>}
+                  {error && <Text className="mt-3 text-[14px] text-danger">{error}</Text>}
                   {duplicateGasSafe && (
                     <Link href="/sign-in" asChild>
                       <Pressable className="mt-1 py-1">

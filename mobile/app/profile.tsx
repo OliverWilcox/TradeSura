@@ -40,6 +40,20 @@ type Profile = {
 const BIO_MAX = 600;
 const MAX_PHOTOS = 4;
 
+// Blank is fine (we use their mobile). Otherwise a UK number: digits and spaces,
+// optionally +44, 10 or 11 digits once the leading 0 or +44 is counted.
+function checkUkPhone(v: string): string | null {
+  const s = v.trim();
+  if (!s) return null;
+  if (!/^\+?[\d\s]+$/.test(s)) return "Enter a UK phone number using digits only, like 07123 456789.";
+  const digits = s.replace(/\D/g, "");
+  const national = s.startsWith("+") ? (digits.startsWith("44") ? digits.slice(2) : "") : digits.replace(/^0/, "");
+  if (national.length < 9 || national.length > 10 || (!s.startsWith("+") && !digits.startsWith("0"))) {
+    return "Enter a full UK phone number, like 07123 456789.";
+  }
+  return null;
+}
+
 function prettyPhone(e164: string): string {
   return e164.startsWith("+44") ? `0${e164.slice(3)}` : e164;
 }
@@ -76,9 +90,17 @@ export default function ProfileScreen() {
   );
 
   async function save(publish: boolean, then?: "back" | "preview") {
-    setBusy(true);
     setError(null);
     setFieldError(null);
+    // The number only matters while the Call button is on; when it's off it is
+    // neither checked nor sent, so a stray entry can't block saving.
+    const phoneProblem = showCall ? checkUkPhone(phone) : null;
+    if (phoneProblem) {
+      setFieldError({ field: "enquiryPhone", message: phoneProblem });
+      setError("Fix the phone number above, then save again.");
+      return;
+    }
+    setBusy(true);
     try {
       const p = await api<Profile & { ok: true }>("/api/me/profile", {
         method: "PUT",
@@ -88,7 +110,7 @@ export default function ProfileScreen() {
           publish,
           showCallButton: showCall,
           showMessageButton: showMessage,
-          enquiryPhone: phone,
+          ...(showCall ? { enquiryPhone: phone.trim() } : {}),
           ...(town.trim() ? { town } : {}),
         }),
       });
@@ -113,22 +135,28 @@ export default function ProfileScreen() {
   // Base64 JSON upload, same as the logo (RN multipart bug — see more.tsx).
   async function addPhoto() {
     setPhotoError(null);
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      setPhotoError("Allow photo access to add photos.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-      base64: true,
-    });
-    if (result.canceled || !result.assets[0]?.base64) return;
-    const asset = result.assets[0];
     setPhotoBusy(true);
     try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        setPhotoError(
+          perm.canAskAgain
+            ? "Allow photo access to add photos."
+            : "Photo access is switched off. Turn it on for TradeSura in your phone's Settings, then try again.",
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.7,
+        base64: true,
+      });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if (!asset?.base64) {
+        setPhotoError("Couldn't read that photo. Pick a different one.");
+        return;
+      }
       const { photos } = await api<{ photos: string[] }>("/api/me/profile/photos", {
         method: "POST",
         body: JSON.stringify({ base64: asset.base64, mimeType: asset.mimeType ?? "image/jpeg" }),
