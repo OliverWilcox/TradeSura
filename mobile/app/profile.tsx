@@ -148,7 +148,9 @@ export default function ProfileScreen() {
       }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        quality: 0.7,
+        // Same as the Gas Safe card picker: a full-quality phone photo sent as
+        // base64 goes past the server's upload limit (QA 25 Nov).
+        quality: 0.35,
         base64: true,
       });
       if (result.canceled) return;
@@ -159,7 +161,8 @@ export default function ProfileScreen() {
       }
       const { photos } = await api<{ photos: string[] }>("/api/me/profile/photos", {
         method: "POST",
-        body: JSON.stringify({ base64: asset.base64, mimeType: asset.mimeType ?? "image/jpeg" }),
+        // The picker hands back a compressed JPEG; iPhones can still label it HEIC.
+        body: JSON.stringify({ base64: asset.base64, mimeType: asset.mimeType === "image/png" ? "image/png" : "image/jpeg" }),
       });
       setData((d) => (d ? { ...d, photos } : d));
     } catch (e) {
