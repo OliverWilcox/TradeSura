@@ -88,7 +88,8 @@ const RECOMMENDED_MAX = 6;
 const SCRATCH = "Start from scratch";
 
 function pounds(pence: number, alwaysPence = false) {
-  const s = (pence / 100).toFixed(2);
+  // Thousands get a comma (QA 25 Nov: "£1000.00" read oddly beside "£1,000").
+  const s = (pence / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return `£${alwaysPence ? s : s.replace(/\.00$/, "")}`;
 }
 function roundPounds(pence: number) {

@@ -5,7 +5,7 @@ import { Icon } from "@/components/icon";
 export type PlanLine = string | { title: string; note?: string | null };
 
 function pounds(pence: number) {
-  return `£${(pence / 100).toFixed(2).replace(/\.00$/, "")}`;
+  return `£${(pence / 100).toFixed(2).replace(/\.00$/, "").replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
 }
 // 30 Oct update §5 — a draft's price starts blank (0).
 function priceText(pence: number) {
