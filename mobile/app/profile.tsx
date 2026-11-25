@@ -89,6 +89,12 @@ export default function ProfileScreen() {
     }, []),
   );
 
+  // Opened from a link there's nothing to go back to; go Home instead of a GO_BACK error.
+  function leave() {
+    if (router.canGoBack()) router.back();
+    else router.replace("/");
+  }
+
   async function save(publish: boolean, then?: "back" | "preview") {
     setError(null);
     setFieldError(null);
@@ -119,7 +125,7 @@ export default function ProfileScreen() {
       setData(p);
       setTown(p.town);
       if (then === "preview") Linking.openURL(p.previewUrl ?? p.url);
-      else if (publish) router.back();
+      else if (publish) leave();
     } catch (e) {
       const body = e instanceof ApiError ? (e.body as { field?: string; explanation?: string } | undefined) : undefined;
       if (e instanceof ApiError && body?.field) {
@@ -391,7 +397,7 @@ export default function ProfileScreen() {
                 <Text className="text-[14px] text-muted underline">Hide from search engines</Text>
               </Pressable>
             ) : (
-              <Pressable onPress={() => router.back()} disabled={busy} className="items-center py-2">
+              <Pressable onPress={leave} disabled={busy} className="items-center py-2">
                 <Text className="text-[14px] font-semibold text-flame">Skip for now</Text>
               </Pressable>
             )}
