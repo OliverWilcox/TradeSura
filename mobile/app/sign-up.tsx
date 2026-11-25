@@ -1883,9 +1883,11 @@ export default function SignUp() {
                   </Text>
 
                   <PrimaryButton label="Continue" onPress={continueStep2} busy={step2Busy} />
-                  <Pressable onPress={skipCard} className="mt-2 items-center py-2.5">
-                    <Text className="text-[13.5px] text-white/60">
-                      I&apos;ll add the photo later — you can still build your plans
+                  {/* Skipped cards come back on Getting started and Home as "Photo needed · Add photo". */}
+                  <Pressable onPress={skipCard} className="mt-2 items-center py-2.5" accessibilityRole="button">
+                    <Text className="text-[14px] font-semibold text-white/80">Skip for now</Text>
+                    <Text className="mt-0.5 text-[13px] text-white/60">
+                      Add your card later from Getting started. You can still build your plans.
                     </Text>
                   </Pressable>
                 </>
