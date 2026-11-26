@@ -13,7 +13,7 @@ import { REFERRAL_FIRST_YEAR_PERCENT, REFERRAL_LIFETIME_PERCENT } from "@/lib/re
 import { track } from "@/lib/track";
 
 export const SUPPORT_PHONE = "0330 223 8456";
-const SUPPORT_TEL = "+443302238456";
+export const SUPPORT_TEL = "+443302238456";
 const EXAMPLE_CUSTOMERS = 20;
 
 export type Founding = { kind: "top"; town: string; keepDays: number } | { kind: "badge"; town: string | null } | null;

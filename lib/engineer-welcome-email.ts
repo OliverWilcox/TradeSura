@@ -7,6 +7,7 @@ import { appUrl } from "@/lib/app-url";
 import { EMAIL, SUPPORT_EMAIL, emailAssetBase, emailButton, emailShell, escapeHtml } from "@/lib/email-layout";
 import { REFERRAL_FIRST_YEAR_PERCENT, REFERRAL_LIFETIME_PERCENT } from "@/lib/referral";
 import { computeApplicationFeePence } from "@/lib/stripe";
+import { SUPPORT_PHONE, SUPPORT_TEL } from "@/lib/verified-email";
 
 // Build Review 3, P1 — earnings use the engineer's 80% (after TradeSura's
 // fee, rounded down in their favour), never the customer's price. Matt 13 Nov:
@@ -53,8 +54,6 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
   const examplePounds = `£${EXAMPLE_PLAN_PENCE / 100}`;
   const base = appUrl();
   const open = (to: string) => `${base}/api/open?to=${to}`;
-  // The mock-up's "WhatsApp us on …" line — set SUPPORT_WHATSAPP to show it.
-  const whatsapp = process.env.SUPPORT_WHATSAPP?.trim();
 
   // The app's Getting started hub (mobile/lib/setup-steps.ts, Review 4):
   // three Go live steps that count, then the optional Grow steps. A tick
@@ -142,7 +141,8 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
   </td></tr>
 
   <tr><td style="padding:22px 32px 26px;font-size:14px;line-height:21px;color:${EMAIL.body};">
-    Any questions, just reply to this email${whatsapp ? ` or WhatsApp us on ${escapeHtml(whatsapp)}` : ` or write to <a href="mailto:${SUPPORT_EMAIL}" style="color:${EMAIL.link};">${SUPPORT_EMAIL}</a>`}. We're here to help you get your first plan live.<br><br>
+    <!-- Same contact line as the verified email (Matt): one number, call or WhatsApp. -->
+    Any questions? Call or WhatsApp us on <a href="tel:${SUPPORT_TEL}" style="color:${EMAIL.link};">${SUPPORT_PHONE}</a>, or just reply to this email. We're here to help you get your first plan live.<br><br>
     The TradeSura team
   </td></tr>`;
 
