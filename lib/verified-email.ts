@@ -6,14 +6,12 @@
 import { prisma } from "@/lib/db";
 import { appUrl } from "@/lib/app-url";
 import { sendEmail } from "@/lib/email";
-import { EMAIL, SUPPORT_EMAIL, emailAssetBase, emailButton, emailShell, escapeHtml } from "@/lib/email-layout";
+import { EMAIL, SUPPORT_EMAIL, emailAssetBase, emailButton, emailShell, escapeHtml, supportContactLine } from "@/lib/email-layout";
 import { brandName } from "@/lib/engineer";
 import { canonicalProfileDisplay, canonicalProfileUrl } from "@/lib/public-url";
 import { REFERRAL_FIRST_YEAR_PERCENT, REFERRAL_LIFETIME_PERCENT } from "@/lib/referral";
 import { track } from "@/lib/track";
 
-export const SUPPORT_PHONE = "0330 223 8456";
-export const SUPPORT_TEL = "+443302238456";
 const EXAMPLE_CUSTOMERS = 20;
 
 export type Founding = { kind: "top"; town: string; keepDays: number } | { kind: "badge"; town: string | null } | null;
@@ -88,7 +86,7 @@ export function verifiedEmail(v: VerifiedEmailInput): { subject: string; html: s
   ${small(`🤝 <b>Know another engineer?</b> Share your code <b>${escapeHtml(v.slug)}</b>. You earn ${REFERRAL_FIRST_YEAR_PERCENT}% of our fee on every plan they sell for 12 months, then ${REFERRAL_LIFETIME_PERCENT}% for life.`)}
   ${v.groupUrl ? small(`💬 <b>Join the TradeSura installer group</b> on WhatsApp: share tips, ask questions and swap work with other installers. ${link(escapeHtml(v.groupUrl), "Join the group")}`) : ""}
   <tr><td style="padding:18px 32px 26px;"><div style="background:${EMAIL.wash};border-radius:12px;padding:14px 16px;font-size:13.5px;line-height:20px;color:${EMAIL.body};">
-    <b>Need a hand?</b> Call or WhatsApp us on <a href="tel:${SUPPORT_TEL}" style="color:${EMAIL.link};">${SUPPORT_PHONE}</a>, or just reply to this email. We reply within 2 hours in working hours.
+    <b>Need a hand?</b> ${supportContactLine()} We reply within 2 hours in working hours.
   </div></td></tr>`;
 
   const footerExtra = `You're getting this because you have a TradeSura engineer account. <a href="${appUrl()}/privacy" style="color:${EMAIL.muted};">Privacy policy</a><br>`;

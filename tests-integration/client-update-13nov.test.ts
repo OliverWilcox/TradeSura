@@ -12,11 +12,13 @@ import { makeCustomer, makeEngineer, makePlan, readCard, TEST_CARD_JPEG } from "
 const session = vi.hoisted(() => ({ engineerId: null as string | null }));
 vi.mock("@/lib/auth", async (original) => ({ ...(await original<typeof import("@/lib/auth")>()), getEngineerId: async () => session.engineerId }));
 vi.mock("@vercel/blob", () => ({ put: vi.fn(async (path: string) => ({ url: `https://x.private.blob.vercel-storage.com/${path}-${Math.random().toString(36).slice(2)}` })), get: vi.fn(async () => null), del: vi.fn() }));
-vi.mock("@/lib/card-alert", () => ({ queueCardAlert: vi.fn(async () => {}) }));
 
 beforeEach(async () => {
   await resetDb();
   session.engineerId = null;
+  // A card upload runs the real automatic read; with no one to alert, no alert goes.
+  delete process.env.VERIFICATION_ALERT_EMAIL;
+  delete process.env.VERIFICATION_ALERT_SMS;
 });
 
 const day = (d: number) => new Date(Date.UTC(2026, 9, d, 12));
