@@ -9,8 +9,7 @@ import { normaliseUkPhone } from "@/lib/phone";
 import { uniqueSlug } from "@/lib/slug";
 import { GAS_SAFE_NO } from "@/lib/validate";
 import { PhotoSource, storeGasSafeCard } from "@/lib/gas-safe-card";
-import { queueCardAlert } from "@/lib/card-alert";
-import { queueCardCheck } from "@/lib/admin/verifications";
+import { queueCardCheckAndAlert } from "@/lib/card-alert";
 import { staffCheckStatus } from "@/lib/team";
 
 export const maxDuration = 300;
@@ -123,8 +122,7 @@ export async function POST(req: Request) {
     },
   });
   await track("staff_added", { type: "ENGINEER", id: ownerId }, { staffId: staff.id });
-  await queueCardAlert(staff.id, "team");
-  await queueCardCheck(staff.id);
+  await queueCardCheckAndAlert(staff.id, "team");
 
   const brand = brandName(owner);
   await sendEmail({

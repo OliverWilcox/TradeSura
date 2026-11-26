@@ -29,12 +29,16 @@ export function emailConfigured(): boolean {
 // Customer emails sent on an engineer's behalf pass the engineer's own email.
 const REPLY_TO = process.env.EMAIL_REPLY_TO?.trim() || SUPPORT_EMAIL;
 
-export async function sendEmail(opts: { to: string; subject: string; html: string; replyTo?: string | null; bcc?: string | null }) {
+
+export type EmailAttachment = { filename: string; content: Buffer; contentType: string; contentId?: string };
+
+export async function sendEmail(opts: { to: string; subject: string; html: string; replyTo?: string | null; bcc?: string | null; attachments?: EmailAttachment[] }) {
   const resend = getResend();
   const html = withCompanyFooter(opts.html);
+  const attachments = opts.attachments?.length ? opts.attachments : null;
   if (!resend) {
     console.log(
-      `[EMAIL] to=${opts.to} subject="${opts.subject}"\n${html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400)}`,
+      `[EMAIL] to=${opts.to} subject="${opts.subject}"${attachments ? ` attachments=${attachments.map((a) => a.filename).join(",")}` : ""}\n${html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400)}`,
     );
     return;
   }
@@ -45,6 +49,7 @@ export async function sendEmail(opts: { to: string; subject: string; html: strin
     html,
     replyTo: opts.replyTo?.trim() || REPLY_TO,
     ...(opts.bcc?.trim() ? { bcc: opts.bcc.trim() } : {}),
+    ...(attachments ? { attachments } : {}),
   });
   if (error) {
     console.error(`[EMAIL] Resend error sending to ${opts.to}:`, error);

@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ findUnique: vi.fn(), create: vi.fn(), track: vi.fn(), session: vi.fn(), save: vi.fn() }));
 vi.mock("@/lib/db", () => ({ prisma: { engineer: m, $transaction: (fn: (tx: unknown) => unknown) => fn({}) } }));
 vi.mock("@/lib/addresses", () => ({ saveAddresses: m.save }));
-vi.mock("@/lib/card-alert", () => ({ queueCardAlert: vi.fn() }));
+vi.mock("@/lib/card-alert", () => ({ queueCardCheckAndAlert: vi.fn() }));
 vi.mock("@/lib/auth", () => ({
   verifyToken: async () => ({
     verified: "1",

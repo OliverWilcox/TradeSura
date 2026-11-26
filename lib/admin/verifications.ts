@@ -187,7 +187,8 @@ const ROW_SELECT = {
 
 type Row = Prisma.EngineerGetPayload<{ select: typeof ROW_SELECT }>;
 
-function numbersOf(r: Row) {
+/** The licence and registration numbers they gave; a staff engineer's registration is their employer's. */
+export function numbersOf(r: Pick<Row, "gasSafeNo" | "gasSafeRegistrationNo"> & { owner: { gasSafeNo: string | null; gasSafeRegistrationNo: string | null } | null }) {
   const own = gasSafeNumbers(r);
   return { licenceNo: own.licenceNo, registrationNo: own.registrationNo ?? (r.owner ? gasSafeNumbers(r.owner).registrationNo : null) };
 }
@@ -1223,11 +1224,15 @@ async function cardImage(stored: string, engineerId: string): Promise<{ bytes: A
   return { bytes, type };
 }
 
-export async function fetchCard(engineerId: string, side: "front" | "back" = "front"): Promise<Response | null> {
+/** One side of the engineer's current card photo, as stored; null when there's none or it can't be opened. */
+export async function cardPhoto(engineerId: string, side: "front" | "back" = "front"): Promise<{ bytes: ArrayBuffer; type: string } | null> {
   const row = await prisma.engineer.findFirst({ where: { id: engineerId, ...live }, select: { gasSafeCardUrl: true, gasSafeCardBackUrl: true } });
   const stored = side === "back" ? (row?.gasSafeCardUrl ? row.gasSafeCardBackUrl : null) : row?.gasSafeCardUrl;
-  if (!stored) return null;
-  const image = await cardImage(stored, engineerId);
+  return stored ? cardImage(stored, engineerId) : null;
+}
+
+export async function fetchCard(engineerId: string, side: "front" | "back" = "front"): Promise<Response | null> {
+  const image = await cardPhoto(engineerId, side);
   if (!image) return null;
   const { bytes: body, type } = image;
   return new Response(body, {
@@ -1344,16 +1349,6 @@ export async function retryCardReads(now = new Date()): Promise<number> {
   }
   await Promise.all(due.map((id) => runCardCheck(id, { force: true }).catch((err) => console.error(`[card-check] retry for ${id} failed:`, err))));
   return due.length;
-}
-
-export function queueCardCheck(engineerId: string) {
-  return afterResponse(async () => {
-    try {
-      await runCardCheck(engineerId);
-    } catch (err) {
-      console.error(`[card-check] ${engineerId} failed:`, err);
-    }
-  });
 }
 
 export async function readCardAgain(admin: AdminPrincipal, engineerId: string) {
