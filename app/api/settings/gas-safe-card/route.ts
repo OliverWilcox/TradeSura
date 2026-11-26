@@ -4,8 +4,7 @@ import { prisma } from "@/lib/db";
 import { getEngineerId } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { bothSidesTooBig, cardExpiry, PhotoSource, storeGasSafeCard } from "@/lib/gas-safe-card";
-import { queueCardAlert } from "@/lib/card-alert";
-import { queueCardCheck } from "@/lib/admin/verifications";
+import { queueCardCheckAndAlert } from "@/lib/card-alert";
 
 export const maxDuration = 300;
 
@@ -48,7 +47,6 @@ export async function POST(req: Request) {
     },
   });
   await track("gas_safe_card_added", { type: "ENGINEER", id: engineerId }, {});
-  await queueCardAlert(engineerId, "settings");
-  await queueCardCheck(engineerId);
+  await queueCardCheckAndAlert(engineerId, "settings");
   return NextResponse.json({ ok: true });
 }

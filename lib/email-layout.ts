@@ -24,6 +24,13 @@ export const EMAIL = {
 // overrides it per environment.
 export const SUPPORT_EMAIL = "info@tradesura.com";
 
+export const SUPPORT_PHONE = "0330 223 8456";
+const SUPPORT_TEL = "+443302238456";
+
+export function supportContactLine(): string {
+  return `Call or WhatsApp us on <a href="tel:${SUPPORT_TEL}" style="color:${EMAIL.link};">${SUPPORT_PHONE}</a>, or just reply to this email.`;
+}
+
 export const COMPANY_LINE =
   "TradeSura Ltd, registered in England and Wales, company no. 17325346. Registered office: Unit A3, Gateway Tower, 32 Western Gateway, London E16 1YL.";
 

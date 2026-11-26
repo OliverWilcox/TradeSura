@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/db", () => ({ prisma: {} }));
 
 import { verifiedEmail, yearlyForCustomers, type VerifiedEmailInput } from "@/lib/verified-email";
+import { supportContactLine } from "@/lib/email-layout";
 
 const base: VerifiedEmailInput = {
   firstName: "Dave",
@@ -26,6 +27,10 @@ describe("You're verified email", () => {
     expect(html).toContain("/smithandsons");
     expect(html).toContain("0330 223 8456");
     expect(html).toContain("/brand/verified-member-badge.png");
+  });
+
+  it("has the same contact line as the welcome email", () => {
+    expect(verifiedEmail(base).html).toContain(`<b>Need a hand?</b> ${supportContactLine()} We reply within 2 hours`);
   });
 
   it("two Founding versions, or none", () => {

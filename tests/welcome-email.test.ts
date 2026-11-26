@@ -8,6 +8,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 import { engineerWelcomeEmailHtml, engineerYearlyPence } from "@/lib/engineer-welcome-email";
+import { supportContactLine } from "@/lib/email-layout";
 
 const engineer = {
   id: "e1",
@@ -80,5 +81,13 @@ describe("welcome email (Build Review 3, P1)", () => {
     expect(html).toContain("Your member pack</b> · posts when your Verified Member badge goes live");
     expect(html).toContain("<v:roundrect");
     expect(html).not.toContain("Gas Safe verified");
+  });
+
+  it("words the contact line as the verified email does: Call or WhatsApp us (Matt, 26 Nov)", async () => {
+    m.engineer.mockResolvedValue(engineer);
+    const { html } = await engineerWelcomeEmailHtml("e1");
+    expect(html).toContain(`Any questions? ${supportContactLine()}`);
+    expect(html).toContain(`Call or WhatsApp us on <a href="tel:+443302238456"`);
+    expect(html).not.toContain("reply to this email or WhatsApp us on");
   });
 });

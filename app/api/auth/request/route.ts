@@ -12,8 +12,7 @@ import { engineerWelcomeEmailHtml } from "@/lib/engineer-welcome-email";
 import { notifyEngineer } from "@/lib/sms";
 import { cardExpiry, photoSourceOf } from "@/lib/gas-safe-card";
 import { saveAddresses } from "@/lib/addresses";
-import { queueCardAlert } from "@/lib/card-alert";
-import { queueCardCheck } from "@/lib/admin/verifications";
+import { queueCardCheckAndAlert } from "@/lib/card-alert";
 import { runCompanyRoleCheck } from "@/lib/company-role-check";
 import { sendPushNotification } from "@/lib/push";
 import {
@@ -532,8 +531,7 @@ export async function POST(req: Request) {
 
     // 3.2: tell the team there's a card to check.
     if (gasSafeCardUrl) {
-      await queueCardAlert(engineer.id, "signup");
-      await queueCardCheck(engineer.id);
+      await queueCardCheckAndAlert(engineer.id, "signup");
     }
     // Matt 16 Nov — impersonation check for a limited company: the name
     // against its officers and PSCs (lib/company-role-check.ts).
