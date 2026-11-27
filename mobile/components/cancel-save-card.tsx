@@ -103,7 +103,7 @@ export function CancelSaveCard({ customerId, onChange }: { customerId: string; o
         Reason: {s.reason ?? "Not given"}
         {s.effectiveAt ? ` · Plan ends ${day(s.effectiveAt)}` : ""}
       </Text>
-      <Text className="mt-0.5 text-xs text-muted">{details.join(" · ")}</Text>
+      <Text className="mt-0.5 text-[13px] text-muted">{details.join(" · ")}</Text>
       <View className="mt-3 gap-2">
         {s.phone && (
           <Button onPress={() => Linking.openURL(`tel:${s.phone}`).catch(() => {})}>{`Call ${first}`}</Button>
@@ -119,7 +119,7 @@ export function CancelSaveCard({ customerId, onChange }: { customerId: string; o
           </Button>
         )}
       </View>
-      <Text className="mt-2.5 text-xs text-muted">
+      <Text className="mt-2.5 text-[13px] text-muted">
         You can&apos;t stop a cancellation, but a quick call saves most customers.
       </Text>
     </Card>

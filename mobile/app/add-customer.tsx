@@ -211,7 +211,7 @@ export default function AddCustomer() {
             <View
               className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${ownCustomer ? "border-flame bg-flame" : errors.consent ? "border-danger" : "border-line"}`}
             >
-              {ownCustomer && <Text className="text-[11px] text-white">✓</Text>}
+              {ownCustomer && <Text className="text-[13px] text-white">✓</Text>}
             </View>
             <Text className="flex-1 font-sans text-[13px] text-muted">
               This is my own customer — someone I&apos;ve done work for or who&apos;s asked me to.

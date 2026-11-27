@@ -404,7 +404,7 @@ export default function OfferStart() {
             <>
             <Card>
               <Text className="font-semibold text-[15px] text-ink">Why were you there today?</Text>
-              <Text className="mt-0.5 text-[12.5px] text-muted">
+              <Text className="mt-0.5 text-[13px] text-muted">
                 Your plan page is written for it, so you just hand the phone over.
               </Text>
               <View className="mt-3 flex-row flex-wrap gap-2">
@@ -433,7 +433,7 @@ export default function OfferStart() {
               <Button onPress={showNow} disabled={showBusy}>
                 {showBusy ? "Opening…" : "Show them now"}
               </Button>
-              <Text className="mt-1.5 text-center text-[12px] text-muted">
+              <Text className="mt-1.5 text-center text-[13px] text-muted">
                 They join on your phone, then you ask for a review.
               </Text>
               {!sendOpen && (
@@ -465,7 +465,7 @@ export default function OfferStart() {
                       className={`rounded-full px-3 py-1.5 ${tierId === t.id ? "bg-flame-tint" : "border border-line bg-panel"}`}
                     >
                       <Text
-                        className={`tabular-nums font-medium text-xs ${tierId === t.id ? "text-flame-deep" : "text-faint"}`}
+                        className={`tabular-nums font-medium text-[13px] ${tierId === t.id ? "text-flame-deep" : "text-faint"}`}
                       >
                         {t.name} · {formatPounds(t.priceMonthlyPence)}
                       </Text>
@@ -481,7 +481,7 @@ export default function OfferStart() {
                     className={`rounded-full px-3 py-1.5 ${mode === "existing" ? "bg-flame-tint" : "border border-line bg-panel"}`}
                   >
                     <Text
-                      className={`tabular-nums font-medium text-xs ${mode === "existing" ? "text-flame-deep" : "text-faint"}`}
+                      className={`tabular-nums font-medium text-[13px] ${mode === "existing" ? "text-flame-deep" : "text-faint"}`}
                     >
                       From my book
                     </Text>
@@ -491,7 +491,7 @@ export default function OfferStart() {
                     className={`rounded-full px-3 py-1.5 ${mode === "new" ? "bg-flame-tint" : "border border-line bg-panel"}`}
                   >
                     <Text
-                      className={`tabular-nums font-medium text-xs ${mode === "new" ? "text-flame-deep" : "text-faint"}`}
+                      className={`tabular-nums font-medium text-[13px] ${mode === "new" ? "text-flame-deep" : "text-faint"}`}
                     >
                       New customer
                     </Text>
@@ -599,7 +599,7 @@ export default function OfferStart() {
                   </View>
                   <FieldError>{errors.postcode}</FieldError>
                   <Pressable onPress={() => router.push("/plans")} className="pt-1">
-                    <Text className="font-semibold text-xs text-flame-deep">Manage my plans →</Text>
+                    <Text className="font-semibold text-[13px] text-flame-deep">Manage my plans →</Text>
                   </Pressable>
                 </View>
               )}
@@ -611,7 +611,7 @@ export default function OfferStart() {
                   link}" — server sends this exact text; this previews it. */}
               <Micro className="mb-1.5 mt-3">Their message</Micro>
               <View className="rounded-[14px] rounded-bl-[4px] bg-flame-tint p-3">
-                <Text className="font-sans text-[12.5px] text-ink">
+                <Text className="font-sans text-[13px] text-ink">
                   Hi {previewName} — {me?.firstName ?? brandLabel} from {brandLabel}. My{" "}
                   {selectedTier?.name ?? "plan"} plan is £
                   {selectedTier ? (selectedTier.priceMonthlyPence / 100).toFixed(2).replace(/\.00$/, "") : "—"}{" "}

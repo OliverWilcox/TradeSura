@@ -212,7 +212,7 @@ export default function OfferReview() {
           ) : (
             <Card>
               <Text className="font-semibold text-[14px] text-ink">Your details</Text>
-              <Text className="mt-0.5 text-[12.5px] text-muted">
+              <Text className="mt-0.5 text-[13px] text-muted">
                 We check every review is from a real customer. Only your first name and initial show.
               </Text>
               <TextInput
@@ -262,7 +262,7 @@ export default function OfferReview() {
                 <View
                   className={`mt-0.5 h-5 w-5 items-center justify-center rounded border ${consent ? "border-flame bg-flame" : "border-line"}`}
                 >
-                  {consent && <Text className="text-[12px] font-bold text-iron">✓</Text>}
+                  {consent && <Text className="text-[13px] font-bold text-iron">✓</Text>}
                 </View>
                 <Text className="flex-1 text-[13px] text-ink">
                   {business} may send you occasional plan offers. Untick if you&apos;d rather not.

@@ -88,7 +88,7 @@ export function AddressPicker({
             Change
           </Text>
         </View>
-        <Text className="mt-1 text-[11px] text-faint">
+        <Text className="mt-1 text-[13px] text-faint">
           On your plan links, QR codes, member pack and website. Each plan has its own link under it.
         </Text>
       </View>
@@ -119,7 +119,7 @@ export function AddressPicker({
         It goes on your plan links, QR codes, member pack and website. If you change it, links and QR codes
         you&apos;ve already shared keep working: they forward to the new address.
       </Text>
-      {error && <Text className="mt-1.5 text-xs text-danger">{error}</Text>}
+      {error && <Text className="mt-1.5 text-[13px] text-danger">{error}</Text>}
       <Button variant="ghost" onPress={save} disabled={busy || !draft.trim() || check?.ok === false} className="mt-2.5">
         {busy ? "Saving…" : "Keep this address"}
       </Button>

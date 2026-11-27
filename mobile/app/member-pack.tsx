@@ -137,7 +137,7 @@ export default function MemberPack() {
                 </View>
                 <View className="px-2.5 py-2">
                   <Text className="text-[13.5px] font-semibold text-ink">{item.label}</Text>
-                  <Text className="mt-0.5 text-[11.5px] leading-[15px] text-faint">{item.detail}</Text>
+                  <Text className="mt-0.5 text-[13px] leading-[18px] text-faint">{item.detail}</Text>
                 </View>
               </View>
             ))}

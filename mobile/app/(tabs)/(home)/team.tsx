@@ -92,17 +92,17 @@ export default function Team() {
                 <Text className="flex-1 font-bold text-sm text-ink">{s.name}</Text>
                 <Pill tone={pill.tone}>{pill.label}</Pill>
               </View>
-              <Text className="mt-0.5 font-sans text-xs text-muted">
+              <Text className="mt-0.5 font-sans text-[13px] text-muted">
                 {s.email}
                 {s.joined ? "" : " · hasn't signed in yet"}
               </Text>
               {s.check === "check_in_progress" && (
-                <Text className="mt-1.5 font-sans text-xs text-warn">
+                <Text className="mt-1.5 font-sans text-[13px] text-warn">
                   Can add customers now; offers unlock once their Gas Safe card is approved.
                 </Text>
               )}
               {s.check === "rejected" && (
-                <Text className="mt-1.5 font-sans text-xs text-danger">
+                <Text className="mt-1.5 font-sans text-[13px] text-danger">
                   We couldn&apos;t verify their card{s.rejectReason ? ` (${s.rejectReason})` : ""}. Email
                   info@tradesura.com with a clearer photo.
                 </Text>
@@ -119,7 +119,7 @@ export default function Team() {
               </View>
               {removing === s.id ? (
                 <View className="mt-3 gap-2">
-                  <Text className="font-sans text-xs text-muted">
+                  <Text className="font-sans text-[13px] text-muted">
                     Their access stops straight away. Customers they added stay with your business.
                   </Text>
                   <Button variant="dangerghost" onPress={() => remove(s.id)} disabled={busy}>
@@ -131,7 +131,7 @@ export default function Team() {
                 </View>
               ) : (
                 <Pressable onPress={() => setRemoving(s.id)} className="mt-3 self-start py-1">
-                  <Text className="font-sans text-xs text-muted">Remove from team</Text>
+                  <Text className="font-sans text-[13px] text-muted">Remove from team</Text>
                 </Pressable>
               )}
             </Card>

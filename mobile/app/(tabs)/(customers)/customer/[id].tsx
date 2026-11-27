@@ -148,7 +148,7 @@ function EditDetails({ c, onDone }: { c: Detail; onDone: (saved: boolean) => voi
         <AddressLookupField value={address} onChange={setAddress} />
         {!c.hasPassport && (
           <View>
-            <Text className="mb-1 font-sans text-xs text-muted">Last boiler service</Text>
+            <Text className="mb-1 font-sans text-[13px] text-muted">Last boiler service</Text>
             <MonthPicker value={lastServiced} onChange={setLastServiced} />
           </View>
         )}
@@ -326,7 +326,7 @@ export default function CustomerDetail() {
             <Text className="font-bold text-xl text-ink">
               {c.firstName} {c.lastName}
             </Text>
-            <Text className="font-sans text-xs text-muted">{SOURCE_LABEL[c.source] ?? c.source}</Text>
+            <Text className="font-sans text-[13px] text-muted">{SOURCE_LABEL[c.source] ?? c.source}</Text>
           </View>
           {c.plan ? <Pill tone="info">ON PLAN</Pill> : <Pill tone="off">NO PLAN</Pill>}
         </View>
@@ -361,18 +361,18 @@ export default function CustomerDetail() {
               {c.plan.priceMonthlyPence !== null && (
                 <Text className="tabular-nums font-extrabold text-ok">
                   {formatPounds(c.plan.priceMonthlyPence)}
-                  <Text className="text-xs font-bold text-muted">/month</Text>
+                  <Text className="text-[13px] font-bold text-muted">/month</Text>
                 </Text>
               )}
             </View>
             {c.plan.status === "PAUSED" && (
-              <Text className="mt-0.5 font-sans text-xs text-warn">Direct Debit paused</Text>
+              <Text className="mt-0.5 font-sans text-[13px] text-warn">Direct Debit paused</Text>
             )}
             <View className="mt-2 gap-1">
               {c.plan.benefitLines.map((line) => (
                 <View key={line} className="flex-row items-start gap-2">
                   <Tick size={12} />
-                  <Text className="flex-1 text-xs text-ink">{line}</Text>
+                  <Text className="flex-1 text-[13px] text-ink">{line}</Text>
                 </View>
               ))}
             </View>
@@ -381,7 +381,7 @@ export default function CustomerDetail() {
               <View className="mt-3 border-t border-line pt-2">
                 <RowLine left="Gas safety record due" right={d(c.plan.gasSafetyRecordDueAt)} />
                 {c.plan.oneOffCp12Requested && (
-                  <Text className="mt-1 font-sans text-xs text-warn">
+                  <Text className="mt-1 font-sans text-[13px] text-warn">
                     One-off CP12 requested before then, at your normal price. Their plan&apos;s record is available after
                     their 3rd payment.
                   </Text>
@@ -397,7 +397,7 @@ export default function CustomerDetail() {
             >
               Offer a plan
             </Button>
-            {lock && <Text className="text-center font-sans text-xs text-warn">{lock.reason}</Text>}
+            {lock && <Text className="text-center font-sans text-[13px] text-warn">{lock.reason}</Text>}
           </View>
         )}
 
@@ -463,13 +463,13 @@ export default function CustomerDetail() {
         <Card>
           <Micro className="mb-1.5">Timeline</Micro>
           {c.timeline.length === 0 ? (
-            <Text className="py-1 font-sans text-xs text-muted">Nothing recorded yet.</Text>
+            <Text className="py-1 font-sans text-[13px] text-muted">Nothing recorded yet.</Text>
           ) : (
             c.timeline.map((t, i) => (
               <View key={i} className="flex-row items-center gap-2 py-1.5">
                 <Text>{t.icon}</Text>
                 <Text className="flex-1 font-sans text-[13px] text-ink">{t.text}</Text>
-                <Text className="tabular-nums text-[10px] text-faint">{d(t.at)}</Text>
+                <Text className="tabular-nums text-[13px] text-faint">{d(t.at)}</Text>
               </View>
             ))
           )}
@@ -481,7 +481,7 @@ export default function CustomerDetail() {
           </Button>
         )}
         {texted && (
-          <Text className="text-center font-semibold text-xs text-flame">Sent.</Text>
+          <Text className="text-center font-semibold text-[13px] text-flame">Sent.</Text>
         )}
 
         {c.plan && !ending && !c.viewerIsStaff && (
@@ -501,16 +501,16 @@ export default function CustomerDetail() {
                   accessibilityState={{ selected: endReason === r }}
                   className={`rounded-full border px-3 py-1.5 ${endReason === r ? "border-flame bg-flame-tint" : "border-line bg-panel"}`}
                 >
-                  <Text className={`font-sans text-xs ${endReason === r ? "text-flame" : "text-ink"}`}>{r}</Text>
+                  <Text className={`font-sans text-[13px] ${endReason === r ? "text-flame" : "text-ink"}`}>{r}</Text>
                 </Pressable>
               ))}
             </View>
-            <Text className="mt-2.5 font-sans text-xs text-muted">
+            <Text className="mt-2.5 font-sans text-[13px] text-muted">
               The plan ends at the end of the month they&apos;ve paid for, and they get an email with the
               end date and a one-tap rejoin link. Use this to log a cancellation they asked for by phone
               or email too.
             </Text>
-            {endError && <Text className="mt-2 font-sans text-xs text-danger">{endError}</Text>}
+            {endError && <Text className="mt-2 font-sans text-[13px] text-danger">{endError}</Text>}
             <View className="mt-3 gap-2">
               <Button variant="dangerghost" onPress={endPlan} disabled={busy || !endReason}>
                 {busy ? "Ending…" : "End plan at the end of the paid month"}
@@ -536,7 +536,7 @@ export default function CustomerDetail() {
               Remove customer
             </Button>
             {c.removeBlocked && (
-              <Text className="text-center font-sans text-xs text-warn">{c.removeBlocked}</Text>
+              <Text className="text-center font-sans text-[13px] text-warn">{c.removeBlocked}</Text>
             )}
           </View>
         )}

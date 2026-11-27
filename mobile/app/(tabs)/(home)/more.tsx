@@ -599,7 +599,7 @@ function OwnerAccount() {
             </Button>
           )}
           {savedSettings && !dirty && (
-            <Text className="mt-2 font-semibold text-xs text-ink">Saved</Text>
+            <Text className="mt-2 font-semibold text-[13px] text-ink">Saved</Text>
           )}
         </Card>
 
@@ -647,7 +647,7 @@ function OwnerAccount() {
               {flushBusy ? "Flushing…" : "Run queue now"}
             </Button>
             {flushResult && (
-              <Text className="mt-1.5 font-semibold text-xs text-ink">{flushResult}</Text>
+              <Text className="mt-1.5 font-semibold text-[13px] text-ink">{flushResult}</Text>
             )}
           </Card>
         )}

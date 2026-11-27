@@ -219,7 +219,7 @@ export function PassportSection({ customerId }: { customerId: string }) {
     return (
       <Card>
         <Micro className="mb-1">Home Passport</Micro>
-        <Text className="text-xs text-danger">{loadError}</Text>
+        <Text className="text-[13px] text-danger">{loadError}</Text>
         <Button variant="ghost" className="mt-2" onPress={load}>
           Try again
         </Button>
@@ -248,11 +248,11 @@ export function PassportSection({ customerId }: { customerId: string }) {
       </View>
 
       {p.state === "FROZEN" && (
-        <Text className="text-xs text-muted">
+        <Text className="text-[13px] text-muted">
           No active plan, so nothing new can be added. Past records are kept for the homeowner.
         </Text>
       )}
-      {flash && <Text className="text-xs font-semibold text-flame">{flash}</Text>}
+      {flash && <Text className="text-[13px] font-semibold text-flame">{flash}</Text>}
 
       {/* Boiler */}
       {mode === "boiler" ? (
@@ -271,7 +271,7 @@ export function PassportSection({ customerId }: { customerId: string }) {
             />
           </View>
           <PhotoStrip urls={boilerPhotos} onChange={setBoilerPhotos} disabled={busy} />
-          {formError && <Text className="mt-2 text-xs text-danger">{formError}</Text>}
+          {formError && <Text className="mt-2 text-[13px] text-danger">{formError}</Text>}
           <View className="mt-3 gap-2">
             <Button onPress={saveBoiler} disabled={busy}>
               {busy ? "Saving…" : "Save boiler"}
@@ -287,13 +287,13 @@ export function PassportSection({ customerId }: { customerId: string }) {
             <Icon name="boiler" size={22} color="#5FA3F0" />
             <View className="flex-1">
               <Text className="text-base font-bold text-ink">{boilerName}</Text>
-              <Text className="text-xs text-muted">
+              <Text className="text-[13px] text-muted">
                 {p.boiler?.installedAt ? `Fitted ${monthYear(p.boiler.installedAt)}` : "Fitted date not recorded"}
               </Text>
             </View>
             {p.canAdd && (
               <Pressable onPress={() => startBoiler(p)} accessibilityRole="button" hitSlop={8}>
-                <Text className="text-xs font-bold text-flame">Edit</Text>
+                <Text className="text-[13px] font-bold text-flame">Edit</Text>
               </Pressable>
             )}
           </View>
@@ -314,7 +314,7 @@ export function PassportSection({ customerId }: { customerId: string }) {
         <Card>
           <Micro className="mb-2">Log a service</Micro>
           <View className="gap-2">
-            <Text className="text-xs text-muted">Date of service</Text>
+            <Text className="text-[13px] text-muted">Date of service</Text>
             <TextInput
               value={doneOn}
               onChangeText={(v) => {
@@ -337,11 +337,11 @@ export function PassportSection({ customerId }: { customerId: string }) {
               textAlignVertical="top"
               className={`${input} min-h-[80px]`}
             />
-            <Text className="text-xs text-muted">Photos (up to 4)</Text>
+            <Text className="text-[13px] text-muted">Photos (up to 4)</Text>
           </View>
           <PhotoStrip urls={photos} onChange={setPhotos} disabled={busy} />
           <View className="mt-2 gap-2">
-            <Text className="text-xs text-muted">Next service due</Text>
+            <Text className="text-[13px] text-muted">Next service due</Text>
             <TextInput
               value={nextDue}
               onChangeText={(v) => {
@@ -354,7 +354,7 @@ export function PassportSection({ customerId }: { customerId: string }) {
               className={input}
             />
           </View>
-          {formError && <Text className="mt-2 text-xs text-danger">{formError}</Text>}
+          {formError && <Text className="mt-2 text-[13px] text-danger">{formError}</Text>}
           <View className="mt-3 gap-2">
             <Button onPress={saveService} disabled={busy}>
               {busy ? "Saving…" : "Save service"}
@@ -376,7 +376,7 @@ export function PassportSection({ customerId }: { customerId: string }) {
       <Card>
         <Micro className="mb-1">Your records</Micro>
         {p.records.length === 0 ? (
-          <Text className="py-1 text-xs text-muted">Nothing logged yet.</Text>
+          <Text className="py-1 text-[13px] text-muted">Nothing logged yet.</Text>
         ) : (
           p.records.map((r) => (
             <View key={r.id} className="border-b border-line-soft py-2.5 last:border-b-0">
@@ -385,12 +385,12 @@ export function PassportSection({ customerId }: { customerId: string }) {
                   {KIND[r.kind] ?? r.kind} · {day(r.doneAt)}
                 </Text>
                 {r.stars ? (
-                  <Text className="text-xs text-flame">{"★".repeat(r.stars)}</Text>
+                  <Text className="text-[13px] text-flame">{"★".repeat(r.stars)}</Text>
                 ) : r.ratingRequested ? (
-                  <Text className="text-[11px] text-faint">Rating asked</Text>
+                  <Text className="text-[13px] text-faint">Rating asked</Text>
                 ) : null}
               </View>
-              {r.notes ? <Text className="mt-0.5 text-xs text-muted">{r.notes}</Text> : null}
+              {r.notes ? <Text className="mt-0.5 text-[13px] text-muted">{r.notes}</Text> : null}
               <PhotoStrip urls={r.photoUrls} />
               <PassportFiles
                 customerId={customerId}
@@ -415,7 +415,7 @@ export function PassportSection({ customerId }: { customerId: string }) {
             </View>
           ))
         ) : (
-          <Text className="text-xs text-muted">
+          <Text className="text-[13px] text-muted">
             Stick it on the case — never over the data plate or vents — then link it here.
           </Text>
         )}
@@ -430,14 +430,14 @@ export function PassportSection({ customerId }: { customerId: string }) {
           Link sticker
         </Button>
         <View className="mt-2 flex-row flex-wrap items-center justify-center gap-1">
-          <Text className={`text-xs ${data.stock.low ? "text-warn" : "text-muted"}`}>
+          <Text className={`text-[13px] ${data.stock.low ? "text-warn" : "text-muted"}`}>
             Stickers left: {data.stock.left} ·
           </Text>
           {topUpSent ? (
-            <Text className="text-xs font-semibold text-flame">Free top-up on its way</Text>
+            <Text className="text-[13px] font-semibold text-flame">Free top-up on its way</Text>
           ) : (
             <Pressable onPress={orderMore} accessibilityRole="button" hitSlop={8}>
-              <Text className="text-xs font-bold text-flame">Order more free</Text>
+              <Text className="text-[13px] font-bold text-flame">Order more free</Text>
             </Pressable>
           )}
         </View>
@@ -453,7 +453,7 @@ export function PassportSection({ customerId }: { customerId: string }) {
               <Text className="flex-1 text-[13px] text-ink">{l.text}</Text>
             </View>
           ))}
-          <Text className="mt-1 text-[11px] text-faint">The homeowner has agreed to be contacted about their home.</Text>
+          <Text className="mt-1 text-[13px] text-faint">The homeowner has agreed to be contacted about their home.</Text>
         </Card>
       )}
 

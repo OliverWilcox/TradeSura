@@ -67,7 +67,7 @@ export default function Messages() {
         {recentEmergencies > 0 && (
           <View className="flex-row items-start gap-2 rounded-[10px] border border-[rgba(255,107,107,.4)] bg-danger-tint px-3 py-2.5">
             <Icon name="warning" size={15} color="#ff6b6b" />
-            <Text className="flex-1 font-semibold text-xs text-danger">
+            <Text className="flex-1 font-semibold text-[13px] text-danger">
               GAS EMERGENCY WORDING TRIGGERED this week — the customer was shown the emergency
               script and told to call 0800 111 999 before anything else.
             </Text>
@@ -87,7 +87,7 @@ export default function Messages() {
         {tickets && tickets.length === 0 && (
           <Card className="items-center py-8">
             <Text className="font-semibold text-sm text-ink">No messages yet</Text>
-            <Text className="mt-1.5 text-center font-sans text-xs text-muted">
+            <Text className="mt-1.5 text-center font-sans text-[13px] text-muted">
               Problem reports from your plan customers land here, triaged automatically.
             </Text>
           </Card>
@@ -100,7 +100,7 @@ export default function Messages() {
                 <View className="flex-row items-start justify-between gap-2">
                   <View className="shrink">
                     <Text className="font-bold text-sm text-ink">{t.customerName}</Text>
-                    <Text className="mt-0.5 font-sans text-xs text-muted">
+                    <Text className="mt-0.5 font-sans text-[13px] text-muted">
                       &ldquo;{t.message.slice(0, 90)}
                       {t.message.length > 90 ? "…" : ""}&rdquo;
                     </Text>
@@ -120,7 +120,7 @@ export default function Messages() {
           <Text className="mb-1 font-semibold text-sm text-ink">
             Smart triage on every ticket
           </Text>
-          <Text className="font-sans text-xs text-muted">
+          <Text className="font-sans text-[13px] text-muted">
             Safety events sort to the top and never carry a coverage tag. Other tickets auto-tag
             by type and against the customer&apos;s plan. Replies go by text from your phone for
             now; in-app threads are coming.

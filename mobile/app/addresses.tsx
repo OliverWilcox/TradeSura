@@ -98,7 +98,7 @@ export default function AddressesScreen() {
             <>
               <Card>
                 <Text className="text-[15px] font-semibold text-ink">Trading address</Text>
-                <Text className="mt-0.5 text-[12.5px] leading-[18px] text-muted">
+                <Text className="mt-0.5 text-[13px] leading-[18px] text-muted">
                   Where you work from. It sets your town and your town page.
                 </Text>
                 <View className="mt-3">
@@ -117,7 +117,7 @@ export default function AddressesScreen() {
                 <View className="flex-row items-center justify-between gap-3">
                   <View className="shrink">
                     <Text className="text-[15px] font-semibold text-ink">Send my post here too</Text>
-                    <Text className="mt-0.5 text-[12.5px] leading-[18px] text-muted">
+                    <Text className="mt-0.5 text-[13px] leading-[18px] text-muted">
                       Your member pack and any letters from us.
                     </Text>
                   </View>

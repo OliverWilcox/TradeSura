@@ -65,7 +65,7 @@ export default function Blast() {
             <Text className="font-semibold text-sm text-flame">
               Sent to {done.sent} customer{done.sent === 1 ? "" : "s"}
             </Text>
-            <Text className="mt-1 font-sans text-xs text-muted">
+            <Text className="mt-1 font-sans text-[13px] text-muted">
               Messages go out over the next 10 minutes. Replies land on your number. We&apos;ll
               show the results here in a few days.
             </Text>
@@ -93,7 +93,7 @@ export default function Blast() {
               <Card>
                 <Micro className="mb-1.5">Their message (fixed)</Micro>
                 <View className="rounded-[10px] border border-line bg-panel p-3">
-                  <Text className="font-sans text-[12.5px] text-ink">
+                  <Text className="font-sans text-[13px] text-ink">
                     Hi &#123;first name&#125; — it&apos;s {"{your trading name}"}. I now offer a
                     care plan: annual service, priority call-outs, no call-out fees, from{" "}
                     {priceLabel}/mo. Have a look: {"{link}"}
@@ -110,7 +110,7 @@ export default function Blast() {
                 <View
                   className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${confirmed ? "border-flame bg-flame" : "border-line"}`}
                 >
-                  {confirmed && <Text className="text-[11px] text-white">✓</Text>}
+                  {confirmed && <Text className="text-[13px] text-white">✓</Text>}
                 </View>
                 <Text className="flex-1 font-sans text-[13px] text-muted">
                   These are my own customers — people I&apos;ve done work for or who&apos;ve asked
@@ -121,7 +121,7 @@ export default function Blast() {
               {data.results && (
                 <Card>
                   <Micro>Your last campaign</Micro>
-                  <Text className="mt-0.5 font-sans text-xs text-muted">
+                  <Text className="mt-0.5 font-sans text-[13px] text-muted">
                     {data.results.sent} sent · {data.results.visits} page visit
                     {data.results.visits === 1 ? "" : "s"} · {data.results.plansLive} plan
                     {data.results.plansLive === 1 ? "" : "s"} live

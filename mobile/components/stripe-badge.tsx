@@ -62,14 +62,14 @@ export function StripeBadge({
           resizeMode="contain"
           accessibilityLabel="Powered by Stripe"
         />
-        {caption && <Text className="mt-0.5 text-[12.5px] text-[#3c4a5e]">{caption}</Text>}
+        {caption && <Text className="mt-0.5 text-[13px] text-[#3c4a5e]">{caption}</Text>}
       </View>
     );
   }
   return (
     <View className="items-center gap-1.5">
       <PoweredByStripe width={height * RATIO} />
-      {caption && <Text className="text-center text-[12px] text-muted">{caption}</Text>}
+      {caption && <Text className="text-center text-[13px] text-muted">{caption}</Text>}
     </View>
   );
 }

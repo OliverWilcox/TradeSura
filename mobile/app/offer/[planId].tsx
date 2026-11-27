@@ -87,7 +87,7 @@ export default function OfferLive() {
           £{Math.round(status.incomeMonthlyPence / 100)}
           <Text className="text-base font-bold text-muted"> /month</Text>
         </Text>
-        <Text className="tabular-nums text-xs text-faint">
+        <Text className="tabular-nums text-[13px] text-faint">
           locked in across {status.activePlans} active plan{status.activePlans === 1 ? "" : "s"}
         </Text>
         <Button onPress={() => router.replace("/")} className="mt-4 w-64">
@@ -126,7 +126,7 @@ export default function OfferLive() {
             </Skeleton>
           ) : (
             <>
-              <Text selectable className="tabular-nums text-xs text-muted">
+              <Text selectable className="tabular-nums text-[13px] text-muted">
                 {info.link}
               </Text>
               <Button
@@ -166,7 +166,7 @@ export default function OfferLive() {
             {STEPS.map((step, i) => (
               <Text
                 key={step}
-                className={`tabular-nums font-medium text-[10px] ${
+                className={`tabular-nums font-medium text-[13px] ${
                   i < idx ? "text-flame-deep" : i === idx ? "text-flame" : "text-faint"
                 }`}
               >
@@ -183,7 +183,7 @@ export default function OfferLive() {
 
         {status && (
           <Card className="border-copper-tint bg-copper-tint">
-            <Text className="font-sans text-xs text-copper-deep">
+            <Text className="font-sans text-[13px] text-copper-deep">
               {status.customerFirstName} signs at{" "}
               <Text className="tabular-nums font-semibold">
                 {status.priceMonthlyPence ? `${formatPounds(status.priceMonthlyPence)}/mo` : "£15/mo"}

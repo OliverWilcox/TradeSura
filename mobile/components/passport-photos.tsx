@@ -92,7 +92,7 @@ export function PhotoStrip({
         </Pressable>
       )}
       {editable && urls.length > 0 && (
-        <Text className="w-full text-[11px] text-faint">
+        <Text className="w-full text-[13px] text-faint">
           {urls.length} of {MAX_PASSPORT_PHOTOS} · long press a photo to remove it
         </Text>
       )}

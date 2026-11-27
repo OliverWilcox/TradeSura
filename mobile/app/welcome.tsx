@@ -248,7 +248,7 @@ export default function Welcome() {
           bounces={false}
         >
           <Animated.View style={fadeRise(brandAnim)}>
-            <Text className="tabular-nums text-[12px] font-bold uppercase tracking-[3px] text-brand-blue-lift">
+            <Text className="tabular-nums text-[13px] font-bold uppercase tracking-[3px] text-brand-blue-lift">
               Care plan platform
             </Text>
             <View className="mt-2.5">
@@ -363,7 +363,7 @@ export default function Welcome() {
                   {codeBusy ? <ActivityIndicator color="#0F2140" /> : <Text className="text-[14px] font-bold text-on-light">Go</Text>}
                 </Pressable>
               </View>
-              {codeError && <Text className="mt-1.5 text-[12.5px] leading-[17px] text-danger">{codeError}</Text>}
+              {codeError && <Text className="mt-1.5 text-[13px] leading-[18px] text-danger">{codeError}</Text>}
             </View>
           )}
 
@@ -388,7 +388,7 @@ export default function Welcome() {
                 className="flex-1 items-center rounded-xl border border-white/15 bg-white/[0.08] py-2.5"
               >
                 <Text className="text-[15px] font-bold text-white">{big}</Text>
-                <Text className="mt-0.5 tabular-nums text-[11px] uppercase tracking-wider text-night-muted">
+                <Text className="mt-0.5 tabular-nums text-[13px] uppercase tracking-wider text-night-muted">
                   {small}
                 </Text>
               </View>

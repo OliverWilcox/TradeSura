@@ -227,7 +227,7 @@ export default function Payouts() {
         {data && data.stripeState === "checking" && data.standing.state !== "BANNED" && data.standing.state !== "PAUSED" && (
           <Card className="border-warn-tint bg-warn-tint">
             <Text className="font-semibold text-sm text-warn">In review · usually 24 hours</Text>
-            <Text className="mt-0.5 font-sans text-xs text-muted">
+            <Text className="mt-0.5 font-sans text-[13px] text-muted">
               We&apos;re checking your payment details. Nothing to do — payouts start once it&apos;s done.
             </Text>
           </Card>
@@ -365,7 +365,7 @@ export default function Payouts() {
                 Failed collection recovery
               </Text>
               {data.failedPlans.length === 0 ? (
-                <Text className="py-1 font-sans text-xs text-muted">
+                <Text className="py-1 font-sans text-[13px] text-muted">
                   No failed collections in the last 30 days.
                 </Text>
               ) : (
@@ -384,7 +384,7 @@ export default function Payouts() {
                   </View>
                 ))
               )}
-              <Text className="mt-1.5 font-sans text-xs text-muted">
+              <Text className="mt-1.5 font-sans text-[13px] text-muted">
                 {/* Review 4 — say what actually happens (lib/plan-billing.ts
                     startPaymentRescue / endUnpaidPlans), not "smart retries". */}
                 When a payment fails we text and email the customer a one-tap link, from you, to set up their
@@ -395,7 +395,7 @@ export default function Payouts() {
 
             <Card>
               {exportError && (
-                <Text className="mb-2 font-sans text-xs text-danger">{exportError}</Text>
+                <Text className="mb-2 font-sans text-[13px] text-danger">{exportError}</Text>
               )}
               <Micro className="mb-1.5">Monthly fee statements</Micro>
               {lastMonths(3).map(({ key, label }, i) => (

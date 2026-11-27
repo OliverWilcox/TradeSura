@@ -180,7 +180,7 @@ export default function FirstTenScreen() {
                     <Text className="text-[15px] font-semibold text-ink">
                       {c.firstName} {c.lastName}
                     </Text>
-                    {c.hints.length > 0 && <Text className="text-[12.5px] text-muted">{c.hints.map((h) => HINT[h]).join(" · ")}</Text>}
+                    {c.hints.length > 0 && <Text className="text-[13px] text-muted">{c.hints.map((h) => HINT[h]).join(" · ")}</Text>}
                   </View>
                 </Pressable>
               );

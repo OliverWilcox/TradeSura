@@ -50,11 +50,11 @@ function WeekStrip({ jobDates }: { jobDates: Set<string> }) {
           const hasJob = jobDates.has(key(d));
           return (
             <View key={i} className="flex-1 items-center gap-1 py-1">
-              <Text className="tabular-nums text-[10px] text-faint">{WEEKDAYS[i]}</Text>
+              <Text className="tabular-nums text-[13px] text-faint">{WEEKDAYS[i]}</Text>
               <View
                 className={`h-7 w-7 items-center justify-center rounded-lg ${isToday ? "bg-flame" : ""}`}
               >
-                <Text className={`text-xs ${isToday ? "font-semibold text-white" : "text-ink"}`}>
+                <Text className={`text-[13px] ${isToday ? "font-semibold text-white" : "text-ink"}`}>
                   {d.getDate()}
                 </Text>
               </View>
@@ -118,11 +118,11 @@ function JobRow({
             .toUpperCase()}
         </Micro>
         {d.onPlan ? (
-          <Text className="mt-0.5 font-sans text-[11px] text-muted">
+          <Text className="mt-0.5 font-sans text-[13px] text-muted">
             {reminderLine(new Date(d.dueDate))}
           </Text>
         ) : (
-          <Text className={`mt-0.5 font-sans text-[11px] ${onOffer && lockReason ? "text-warn" : "text-muted"}`}>
+          <Text className={`mt-0.5 font-sans text-[13px] ${onOffer && lockReason ? "text-warn" : "text-muted"}`}>
             {onOffer && lockReason ? lockReason : "Book it — and offer the plan at the perfect moment."}
           </Text>
         )}
@@ -272,14 +272,14 @@ export default function Jobs() {
                 <SectionHeading>Next jobs</SectionHeading>
                 {!showAllNext && upcoming.length > 3 && (
                   <Pressable onPress={() => setShowAllNext(true)}>
-                    <Text className="font-semibold text-xs text-flame-deep">
+                    <Text className="font-semibold text-[13px] text-flame-deep">
                       View all {upcoming.length} →
                     </Text>
                   </Pressable>
                 )}
               </View>
               {nextJobs.length === 0 ? (
-                <Text className="py-1 font-sans text-xs text-muted">
+                <Text className="py-1 font-sans text-[13px] text-muted">
                   Nothing coming up — jobs appear here from plan signups and the last-service
                   column of your customer import.
                 </Text>
@@ -302,14 +302,14 @@ export default function Jobs() {
                 <SectionHeading>Past jobs</SectionHeading>
                 {!showAllPast && data.past.length > 3 && (
                   <Pressable onPress={() => setShowAllPast(true)}>
-                    <Text className="font-semibold text-xs text-flame-deep">
+                    <Text className="font-semibold text-[13px] text-flame-deep">
                       View all {data.past.length} →
                     </Text>
                   </Pressable>
                 )}
               </View>
               {pastJobs.length === 0 ? (
-                <Text className="py-1 font-sans text-xs text-muted">
+                <Text className="py-1 font-sans text-[13px] text-muted">
                   No completed services on record yet.
                 </Text>
               ) : (
@@ -341,11 +341,11 @@ export default function Jobs() {
               </View>
               <View className="flex-row items-center justify-between border-b border-line-soft py-2.5">
                 <Text className="font-sans text-sm text-ink">Booking</Text>
-                <Text className="font-sans text-xs text-muted">Customer replies to book</Text>
+                <Text className="font-sans text-[13px] text-muted">Customer replies to book</Text>
               </View>
               {/* Part 11 — "Tapping a row opens that customer's detail,
                   where Mark service done lives — the footer line says so." */}
-              <Text className="pt-2.5 font-sans text-[11px] text-faint">
+              <Text className="pt-2.5 font-sans text-[13px] text-faint">
                 Tap a job to open their page — Mark service done lives there.
               </Text>
             </Card>
@@ -363,9 +363,9 @@ export default function Jobs() {
                   Offer a plan to a no-plan customer
                 </Button>
                 {me?.hasPlan && lock ? (
-                  <Text className="text-center font-sans text-xs text-warn">{lock.reason}</Text>
+                  <Text className="text-center font-sans text-[13px] text-warn">{lock.reason}</Text>
                 ) : me?.role === "staff" ? (
-                  <Text className="text-center font-sans text-xs text-muted">
+                  <Text className="text-center font-sans text-[13px] text-muted">
                     {me?.hasPlan ? "Add a customer first." : "The business has no live plan yet — ask the owner."}
                   </Text>
                 ) : (

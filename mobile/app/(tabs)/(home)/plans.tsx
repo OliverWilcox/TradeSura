@@ -152,7 +152,7 @@ export default function PlansHub() {
                 {t.priceMonthlyPence > 0 ? (
                   <Text className="tabular-nums font-extrabold text-ok">
                     {formatPounds(t.priceMonthlyPence)}
-                    <Text className="text-xs font-bold text-muted">/month</Text>
+                    <Text className="text-[13px] font-bold text-muted">/month</Text>
                   </Text>
                 ) : (
                   // 30 Oct §5 — a draft's price starts blank.
@@ -170,7 +170,7 @@ export default function PlansHub() {
                     <Tick size={12} />
                     <View className="flex-1">
                       <Text className="text-[14px] text-ink">{line.title}</Text>
-                      {line.note ? <Text className="text-[12.5px] text-muted">{line.note}</Text> : null}
+                      {line.note ? <Text className="text-[13px] text-muted">{line.note}</Text> : null}
                     </View>
                   </View>
                 ))}

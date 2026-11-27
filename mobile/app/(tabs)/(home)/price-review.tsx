@@ -131,31 +131,31 @@ export default function PriceReview() {
                   className="w-[84px] p-0 text-center tabular-nums text-3xl font-semibold text-ink"
                 />
               </View>
-              <Text className="text-center font-sans text-xs text-muted">
+              <Text className="text-center font-sans text-[13px] text-muted">
                 Starts {longDate(data.effectiveAt)}
                 {data.capPercent != null ? ` · at most ${data.capPercent}% higher` : ""}
               </Text>
-              {invalid && <Text className="mt-1 text-center font-sans text-xs text-warn">{invalid}</Text>}
+              {invalid && <Text className="mt-1 text-center font-sans text-[13px] text-warn">{invalid}</Text>}
             </Card>
 
             <Card>
               <Micro className="mb-1">Who gets the notice</Micro>
               {eligible.length === 0 ? (
-                <Text className="py-1 font-sans text-xs text-muted">
+                <Text className="py-1 font-sans text-[13px] text-muted">
                   No one yet — each customer can have one price review a year.
                 </Text>
               ) : (
                 eligible.map((c, i) => (
                   <View key={i} className="flex-row justify-between border-b border-line-soft py-2 last:border-b-0">
                     <Text className="font-sans text-sm text-ink">{c.name}</Text>
-                    <Text className="tabular-nums text-xs text-muted">
+                    <Text className="tabular-nums text-[13px] text-muted">
                       {pounds(c.pricePence)} → {newPence >= MIN_PENCE ? pounds(newPence) : "—"}
                     </Text>
                   </View>
                 ))
               )}
               {waiting.length > 0 && (
-                <Text className="mt-2 font-sans text-xs text-faint">
+                <Text className="mt-2 font-sans text-[13px] text-faint">
                   {waiting.length} other{waiting.length === 1 ? "" : "s"}{" "}can&apos;t be reviewed yet (a review is
                   pending, or they joined or were last reviewed less than a year ago). They keep their price.
                 </Text>

@@ -165,7 +165,7 @@ export default function ImportContacts() {
             <View
               className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${confirmed ? "border-flame bg-flame" : "border-line"}`}
             >
-              {confirmed && <Text className="text-[11px] text-white">✓</Text>}
+              {confirmed && <Text className="text-[13px] text-white">✓</Text>}
             </View>
             <Text className="flex-1 font-sans text-[13px] text-muted">
               These are my own customers — people I&apos;ve done work for or who&apos;ve asked me to.
@@ -193,7 +193,7 @@ export default function ImportContacts() {
             onPress={() => router.push("/add-customer")}
           />
           {!confirmed && (
-            <Text className="font-sans text-xs text-warn">Tick the box above to import from contacts or a spreadsheet.</Text>
+            <Text className="font-sans text-[13px] text-warn">Tick the box above to import from contacts or a spreadsheet.</Text>
           )}
           {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
         </ScrollView>
@@ -246,8 +246,8 @@ export default function ImportContacts() {
         contentContainerClassName="gap-1 p-4 pb-28"
         ListHeaderComponent={
           <View className="mb-2 flex-row items-center justify-between">
-            <Text className="font-sans text-xs text-muted">Tick the customers to add.</Text>
-            <Text className="font-sans text-xs text-muted">
+            <Text className="font-sans text-[13px] text-muted">Tick the customers to add.</Text>
+            <Text className="font-sans text-[13px] text-muted">
               {selected.size} of {contacts.length} selected
             </Text>
           </View>
@@ -260,7 +260,7 @@ export default function ImportContacts() {
             }`}
           >
             <Text className="font-sans text-sm text-ink">{item.name}</Text>
-            <Text className="tabular-nums text-xs text-muted">{item.phone}</Text>
+            <Text className="tabular-nums text-[13px] text-muted">{item.phone}</Text>
           </Pressable>
         )}
       />
@@ -273,7 +273,7 @@ export default function ImportContacts() {
           <View
             className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${confirmed ? "border-flame bg-flame" : "border-line"}`}
           >
-            {confirmed && <Text className="text-[11px] text-white">✓</Text>}
+            {confirmed && <Text className="text-[13px] text-white">✓</Text>}
           </View>
           <Text className="flex-1 font-sans text-[13px] text-muted">
             These are my own customers — people I&apos;ve done work for or who&apos;ve asked me

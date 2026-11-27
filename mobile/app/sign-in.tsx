@@ -184,7 +184,7 @@ export default function SignIn() {
             </Pressable>
 
             <View className="mt-6">
-              <Text className="tabular-nums text-[12.5px] font-bold uppercase tracking-[4px] text-brand-blue-lift">
+              <Text className="tabular-nums text-[13px] font-bold uppercase tracking-[4px] text-brand-blue-lift">
                 Care plan platform
               </Text>
               <View className="mt-2.5">

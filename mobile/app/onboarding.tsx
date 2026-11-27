@@ -26,7 +26,7 @@ const PILL: Record<StepTone, { box: string; text: string }> = {
 function StatusPill({ tone, label }: { tone: StepTone; label: string }) {
   return (
     <View className={`mt-1.5 self-start rounded-md px-2 py-0.5 ${PILL[tone].box}`}>
-      <Text className={`text-[12px] font-semibold ${PILL[tone].text}`}>{label}</Text>
+      <Text className={`text-[13px] font-semibold ${PILL[tone].text}`}>{label}</Text>
     </View>
   );
 }
@@ -167,7 +167,7 @@ function MemberPackCard() {
       <View className="flex-row flex-wrap gap-1.5">
         {MEMBER_PACK.map(({ label: item }) => (
           <View key={item} className="w-[58px] items-center justify-center rounded-md border border-line-strong bg-white/5 px-1 py-2">
-            <Text className="text-center text-[9.5px] leading-[12px] text-muted">{item}</Text>
+            <Text className="text-center text-[9.5px] leading-[18px] text-muted">{item}</Text>
           </View>
         ))}
       </View>
@@ -269,8 +269,8 @@ export default function Onboarding() {
 
             {keepGrowing.length > 0 && (
               <View className="mt-3 flex-row items-center justify-between">
-                <Text className="text-[12.5px] font-bold uppercase tracking-[0.12em] text-flame">Keep growing</Text>
-                <Text className="text-[12.5px] text-muted">Any time</Text>
+                <Text className="text-[13px] font-bold uppercase tracking-[0.12em] text-flame">Keep growing</Text>
+                <Text className="text-[13px] text-muted">Any time</Text>
               </View>
             )}
             {keepGrowing.map((s) => (
@@ -305,15 +305,15 @@ export default function Onboarding() {
                 <Text className="text-[15px] font-extrabold leading-[18px] text-ink">
                   {done} of {live.length}
                 </Text>
-                <Text className="text-[9px] leading-[11px] text-muted">to go live</Text>
+                <Text className="text-[13px] leading-[18px] text-muted">to go live</Text>
               </View>
             </View>
           </View>
           <Text className="text-[15px] text-muted">Three steps and you can take customers. About 5 minutes.</Text>
 
           <View className="mt-2 flex-row items-center justify-between">
-            <Text className="text-[12.5px] font-bold uppercase tracking-[0.12em] text-flame">Go live</Text>
-            <Text className="text-[12.5px] text-muted">Needed to take customers</Text>
+            <Text className="text-[13px] font-bold uppercase tracking-[0.12em] text-flame">Go live</Text>
+            <Text className="text-[13px] text-muted">Needed to take customers</Text>
           </View>
           {live.map((s, i) => (
             <GoLiveRow key={s.key} n={i + 1} step={s} current={next?.key === s.key} />
@@ -325,8 +325,8 @@ export default function Onboarding() {
           <Text className="-mt-1 text-center text-[13px] text-muted">You can finish these any time from Home.</Text>
 
           <View className="mt-3 flex-row items-center justify-between">
-            <Text className="text-[12.5px] font-bold uppercase tracking-[0.12em] text-flame">Grow</Text>
-            <Text className="text-[12.5px] text-muted">Any time · optional</Text>
+            <Text className="text-[13px] font-bold uppercase tracking-[0.12em] text-flame">Grow</Text>
+            <Text className="text-[13px] text-muted">Any time · optional</Text>
           </View>
           {grow.map((s) => (
             <GrowRow key={s.key} step={s} />

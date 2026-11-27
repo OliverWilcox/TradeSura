@@ -23,7 +23,7 @@ export default function ShowThemNow() {
     <View className="flex-1 bg-bg">
       <SafeAreaView edges={["top"]} className="bg-bg-deep">
         <View className="flex-row items-center justify-between gap-3 px-4 py-2.5">
-          <Text className="flex-1 font-sans text-xs text-muted" numberOfLines={2}>
+          <Text className="flex-1 font-sans text-[13px] text-muted" numberOfLines={2}>
             {joined ? "They've joined. Take the phone back to ask for a review." : "Hand the phone over: they pick a plan and join here."}
           </Text>
           <Pressable

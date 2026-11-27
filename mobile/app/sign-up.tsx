@@ -277,11 +277,11 @@ function cardReadWarning(
 function FieldError({ children }: { children?: ReactNode }) {
   if (!children) return null;
   // Red (QA, Nov 2026): input errors share one danger colour across the app.
-  return <Text className="mt-1.5 text-[13px] leading-[17px] text-danger">{children}</Text>;
+  return <Text className="mt-1.5 text-[13px] leading-[18px] text-danger">{children}</Text>;
 }
 
 function Hint({ children }: { children: ReactNode }) {
-  return <Text className="mt-1.5 text-[12.5px] leading-[17px] text-white/70">{children}</Text>;
+  return <Text className="mt-1.5 text-[13px] leading-[18px] text-white/70">{children}</Text>;
 }
 
 // A plain blue tick for "verified" / "selected" — never a checkbox, so
@@ -1424,7 +1424,7 @@ export default function SignUp() {
               <View className="flex-1">
                 <Lockup height={25} />
               </View>
-              <Text className="tabular-nums text-[10.5px] font-medium tracking-widest text-white/80">
+              <Text className="tabular-nums text-[13px] font-medium tracking-widest text-white/80">
                 STEP {step} OF 3
               </Text>
             </View>
@@ -1440,7 +1440,7 @@ export default function SignUp() {
               {STEP_LABELS.map((l, i) => (
                 <Text
                   key={l}
-                  className={`flex-1 text-[12px] ${i === 0 ? "text-left" : i === 1 ? "text-center" : "text-right"} ${i + 1 === step ? "font-semibold text-white" : "text-white/50"}`}
+                  className={`flex-1 text-[13px] ${i === 0 ? "text-left" : i === 1 ? "text-center" : "text-right"} ${i + 1 === step ? "font-semibold text-white" : "text-white/50"}`}
                 >
                   {l}
                 </Text>
@@ -1762,7 +1762,7 @@ export default function SignUp() {
                             onPress={() => toggleInterest(t.code)}
                             className={`h-9 flex-row items-center gap-1.5 rounded-lg border px-2.5 ${on ? "border-brand-blue" : "border-white/25"}`}
                           >
-                            <Text className="overflow-hidden rounded bg-white/10 px-1.5 py-0.5 tabular-nums text-[9px] text-white/70">
+                            <Text className="overflow-hidden rounded bg-white/10 px-1.5 py-0.5 tabular-nums text-[13px] text-white/70">
                               {on ? "NOTED" : "SOON"}
                             </Text>
                             <Text className="text-[13px] text-white">{t.name}</Text>
@@ -1824,7 +1824,7 @@ export default function SignUp() {
                           >
                             <Text className="text-[14.5px] font-bold text-on-light">Take another photo</Text>
                           </Pressable>
-                          <Text className="mt-2 text-[12px] leading-[17px] text-white/60">
+                          <Text className="mt-2 text-[13px] leading-[18px] text-white/60">
                             Sure it&apos;s right? Carry on and we&apos;ll check it by hand.
                           </Text>
                         </View>
@@ -1984,7 +1984,7 @@ export default function SignUp() {
                                   {[company.number, company.town].filter(Boolean).join(" · ")}
                                 </Text>
                                 {company.office && (
-                                  <Text className="mt-1.5 text-[12.5px] leading-[17px] text-white/55">
+                                  <Text className="mt-1.5 text-[13px] leading-[18px] text-white/55">
                                     Registered office: {[company.office.line1, company.office.town, company.office.postcode].filter(Boolean).join(", ")}
                                   </Text>
                                 )}
@@ -2052,7 +2052,7 @@ export default function SignUp() {
                                     className={`px-3.5 py-3 ${i > 0 ? "border-t border-white/10" : ""}`}
                                   >
                                     <Text className="text-[14.5px] font-semibold text-white">{c.name}</Text>
-                                    <Text className="mt-0.5 text-[12.5px] text-white/60">
+                                    <Text className="mt-0.5 text-[13px] text-white/60">
                                       {[c.number, c.town].filter(Boolean).join(" · ")}
                                     </Text>
                                   </Pressable>
@@ -2096,7 +2096,7 @@ export default function SignUp() {
                       )}
                       {/* Build Review 3 — a warning, never a block. */}
                       {businessType !== "ltd" && /\b(ltd|limited)\b/i.test(tradingName) && (
-                        <Text className="mt-1.5 text-[12.5px] leading-[17px] text-warn">
+                        <Text className="mt-1.5 text-[13px] leading-[18px] text-warn">
                           Only limited companies can use &ldquo;Ltd&rdquo; in their name — pick Limited company
                           above, or take it out.
                         </Text>

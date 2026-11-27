@@ -368,7 +368,7 @@ function OwnerHome() {
                       <RingMark size={72} />
                     </View>
                   )}
-                  <Text className="mt-2 text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
+                  <Text className="mt-2 text-[13px] font-bold uppercase tracking-[0.08em] text-muted">
                     {awake && data.nextPayoutPence !== null ? "Next payout" : "Paid every"}
                   </Text>
                   <Text className="text-[14px] font-semibold text-ink">
@@ -519,7 +519,7 @@ function OwnerHome() {
                     <Text className="tabular-nums font-bold text-warn">
                       £{(data.prizeYearlyPence / 100).toFixed(0)}/yr not collected
                     </Text>
-                    <Text className="mt-0.5 text-[12.5px] text-muted">
+                    <Text className="mt-0.5 text-[13px] text-muted">
                       {data.noPlan}{" "}book customers aren&apos;t on a plan yet
                     </Text>
                   </View>
@@ -538,7 +538,7 @@ function OwnerHome() {
                 <Text className="mt-1 text-[15px] font-bold text-ink">
                   {data.offersWaiting.customerFirstName}{" "}hasn&apos;t set up their plan yet
                 </Text>
-                <Text className="mt-1 text-[12.5px] text-muted">
+                <Text className="mt-1 text-[13px] text-muted">
                   Worth a follow-up call — the link is still live.
                 </Text>
               </Card>
@@ -596,7 +596,7 @@ function OwnerHome() {
                 </Pressable>
               )}
               {data.upcoming.length === 0 && data.failedRecently === 0 && !data.referral && data.emergencies === 0 && (
-                <Text className="py-1 text-xs text-muted">
+                <Text className="py-1 text-[13px] text-muted">
                   Nothing needs you today — no active plans or messages.
                 </Text>
               )}

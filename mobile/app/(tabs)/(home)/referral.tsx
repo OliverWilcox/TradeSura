@@ -237,7 +237,7 @@ export default function Referral() {
                 their first year, then about £
                 {Math.round((EXAMPLE_CUSTOMERS * EXAMPLE_PLAN_PENCE * FEE_RATE * 12 * data.lifetimePercent) / 10000)} a year.
               </Text>
-              <Text className="mt-1 text-[12.5px] text-muted">Example only</Text>
+              <Text className="mt-1 text-[13px] text-muted">Example only</Text>
             </Card>
 
             <Card>
@@ -270,7 +270,7 @@ export default function Referral() {
                 blurRadius={data.hasPayout ? 0 : 8}
                 accessibilityLabel="Your income card"
               />
-              <Text className="mt-2 font-sans text-[11px] text-faint">
+              <Text className="mt-2 font-sans text-[13px] text-faint">
                 {data.hasPayout
                   ? "Post it in the group — let them ask."
                   : "Unlocks with your first payout."}
@@ -295,10 +295,10 @@ export default function Referral() {
                 resizeMode="contain"
                 accessibilityLabel="QR code for your invite link"
               />
-              <Text className="mt-2 font-sans text-[11px] text-faint">
+              <Text className="mt-2 font-sans text-[13px] text-faint">
                 Or let them scan or copy your invite link.
               </Text>
-              <Text selectable className="mt-1.5 tabular-nums text-xs text-flame-deep">
+              <Text selectable className="mt-1.5 tabular-nums text-[13px] text-flame-deep">
                 {data.link}
               </Text>
             </Card>
@@ -306,7 +306,7 @@ export default function Referral() {
             <Card>
               <SectionHeading className="mb-1.5">Your referrals</SectionHeading>
               {data.invitees.length === 0 ? (
-                <Text className="py-1 font-sans text-xs text-muted">
+                <Text className="py-1 font-sans text-[13px] text-muted">
                   No referrals yet. Share your link to get started.
                 </Text>
               ) : (
@@ -318,7 +318,7 @@ export default function Referral() {
                     </View>
                     {r.stage === "earning" ? (
                       <View className="mt-1 flex-row items-center justify-between">
-                        <Text className="font-sans text-xs text-muted">
+                        <Text className="font-sans text-[13px] text-muted">
                           {r.activePlans} plan{r.activePlans === 1 ? "" : "s"} live · you get {r.ratePercent}% of our fee
                         </Text>
                         <Text className="tabular-nums text-sm font-semibold text-copper">
@@ -340,7 +340,7 @@ export default function Referral() {
 
             <Card>
               <SectionHeading className="mb-1">The deal, plainly</SectionHeading>
-              <Text className="font-sans text-xs text-muted">
+              <Text className="font-sans text-[13px] text-muted">
                 Every installer is an affiliate. For each engineer you bring in, you earn{" "}
                 {data.firstYearPercent}% of TradeSura&apos;s fee on every plan they sell for their
                 first {data.firstYearMonths} months, then {data.lifetimePercent}% for as long as they

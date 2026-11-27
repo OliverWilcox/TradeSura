@@ -27,7 +27,7 @@ function VerifiedChip({ small = false }: { small?: boolean }) {
   return (
     <View className="flex-row items-center gap-1.5 self-start rounded-full border border-[#D5DDE8] py-0.5 pl-0.5 pr-2.5">
       <Image source={BADGE} style={{ width: small ? 18 : 22, height: small ? 18 : 22 }} accessibilityLabel="TradeSura Verified Member badge" />
-      <Text className={small ? "text-[11.5px]" : "text-[12.5px]"} style={{ color: NAVY }}>
+      <Text className={small ? "text-[13px]" : "text-[13px]"} style={{ color: NAVY }}>
         Verified Member · Gas Safe verified
       </Text>
     </View>
@@ -37,7 +37,7 @@ function VerifiedChip({ small = false }: { small?: boolean }) {
 // Before the check is done the preview says where the badge will go,
 // rather than claiming it.
 function BadgeHint() {
-  return <Text className="text-[12px] text-[#5B6B82]">Your badge appears once your Gas Safe check is done</Text>;
+  return <Text className="text-[13px] text-[#5B6B82]">Your badge appears once your Gas Safe check is done</Text>;
 }
 
 export function CustomerPlanCard({
@@ -151,7 +151,7 @@ export function CustomerPlanCard({
             >
               <Text className="text-[16px] font-semibold text-white">Join</Text>
             </View>
-            <Text className="mt-1.5 text-center text-[12.5px] text-muted">Customers tap this to join</Text>
+            <Text className="mt-1.5 text-center text-[13px] text-muted">Customers tap this to join</Text>
           </>
         )}
       </View>
@@ -191,7 +191,7 @@ export function CustomerPlanPeek({
         <Text className="font-bold">{tradingName}</Text> · {name} · {priceText(priceMonthlyPence)}
       </Text>
       {verified !== undefined && <View className="mt-2">{verified ? <VerifiedChip small /> : <BadgeHint />}</View>}
-      <Text className="mt-2 self-start overflow-hidden rounded-full bg-[#E3EEFB] px-2.5 py-0.5 text-[12px] text-[#1F4E8C]">
+      <Text className="mt-2 self-start overflow-hidden rounded-full bg-[#E3EEFB] px-2.5 py-0.5 text-[13px] text-[#1F4E8C]">
         Cancel any time. No contract.
       </Text>
       <View className="mt-2 gap-1">
@@ -205,12 +205,12 @@ export function CustomerPlanPeek({
                 {t.title}
               </Text>
               {/* e.g. the annual service: "available after your third payment". */}
-              {t.note ? <Text className="text-[12px] text-[#5B6B82]">{t.note}</Text> : null}
+              {t.note ? <Text className="text-[13px] text-[#5B6B82]">{t.note}</Text> : null}
             </View>
           </View>
         ))}
         {lines.length > max && (
-          <Text className="pl-5 text-[12.5px] text-[#5B6B82]">+ {lines.length - max} more</Text>
+          <Text className="pl-5 text-[13px] text-[#5B6B82]">+ {lines.length - max} more</Text>
         )}
       </View>
       <View className="mt-2.5 self-start rounded-md px-5 py-1.5" style={{ backgroundColor: JOIN_BLUE }}>

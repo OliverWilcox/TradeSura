@@ -165,7 +165,7 @@ export default function EditPlan() {
 
         {activePlanCount > 0 && (
           <Card className="border-warn-tint bg-warn-tint">
-            <Text className="font-sans text-xs text-warn">
+            <Text className="font-sans text-[13px] text-warn">
               Changes apply to new customers — your {activePlanCount} current customer
               {activePlanCount === 1 ? "" : "s"} keep what they signed up for. To change what they
               pay, use the annual price review below.

@@ -121,7 +121,7 @@ const SLIDER_MAX = 200;
 
 function SectionLabel({ children }: { children: string }) {
   return (
-    <Text className="mb-2 text-[11.5px] font-bold uppercase tracking-[2px]" style={{ color: BLUE }}>
+    <Text className="mb-2 text-[13px] font-bold uppercase tracking-[2px]" style={{ color: BLUE }}>
       {children}
     </Text>
   );
@@ -210,7 +210,7 @@ function Carousel() {
             return <View key={c.title} className="h-1 flex-1 rounded-full" style={{ backgroundColor: colour }} />;
           })}
         </View>
-        {index === 0 && <Text className="text-[12px] text-white/55">Swipe →</Text>}
+        {index === 0 && <Text className="text-[13px] text-white/55">Swipe →</Text>}
       </View>
     </View>
   );
@@ -300,7 +300,7 @@ function Earnings() {
           {formatPounds(monthly * 12)} a year
         </Text>
       </Panel>
-      <Text className="mt-2 text-center text-[12.5px] text-white/60">
+      <Text className="mt-2 text-center text-[13px] text-white/60">
         Example: a £{EXAMPLE_PLAN_PENCE / 100} a month plan. You set your own price.
       </Text>
     </View>
@@ -414,11 +414,11 @@ export default function HowItWorks() {
             {PACK.map((p) => (
               <View key={p.label} className="flex-1 items-center gap-1.5">
                 <Icon name={p.icon} size={26} color={BLUE} />
-                <Text className="text-center text-[12px] leading-[15px] text-white">{p.label}</Text>
+                <Text className="text-center text-[13px] leading-[18px] text-white">{p.label}</Text>
               </View>
             ))}
           </View>
-          <Text className="mt-3.5 text-[12.5px] text-white/60">Posted free when your badge goes live.</Text>
+          <Text className="mt-3.5 text-[13px] text-white/60">Posted free when your badge goes live.</Text>
         </Panel>
 
         <Panel className="mt-6">

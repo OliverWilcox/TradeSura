@@ -127,11 +127,11 @@ export default function WebsiteScreen() {
                 <Text className="text-[13px] font-bold uppercase tracking-[0.1em] text-flame">Website code</Text>
               </View>
               <View className="mt-2.5 rounded-xl border border-line-strong bg-bg p-3">
-                <Text selectable className="tabular-nums text-[12.5px] leading-[19px] text-ink">
+                <Text selectable className="tabular-nums text-[13px] leading-[19px] text-ink">
                   {data.snippet}
                 </Text>
               </View>
-              <Text className="mt-2 text-[12.5px] text-muted">
+              <Text className="mt-2 text-[13px] text-muted">
                 Works with WordPress, Wix, Squarespace and most site builders: add an HTML or embed
                 block where the plans should go.
               </Text>
@@ -206,7 +206,7 @@ export default function WebsiteScreen() {
                 <View className="mt-3 items-center rounded-xl bg-white p-3">
                   <Image source={{ uri: planLink.qrDataUrl }} style={{ width: 200, height: 200 }} accessibilityLabel="QR code for your plans" />
                 </View>
-                <Text className="mt-2 text-[12.5px] text-muted">
+                <Text className="mt-2 text-[13px] text-muted">
                   Put it on your van, invoices, Facebook page or Google profile.
                 </Text>
                 <View className="mt-3 flex-row gap-2.5">

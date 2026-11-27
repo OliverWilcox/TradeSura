@@ -84,7 +84,7 @@ export default function YourNumbers() {
               <View key={r.id} className="border-b border-line-soft py-2">
                 <Text className="text-[13px] text-warn">{stars(r.stars)}</Text>
                 {r.comment && <Text className="mt-0.5 text-[13px] text-ink">&ldquo;{r.comment}&rdquo;</Text>}
-                <Text className="mt-0.5 text-[12px] text-muted">
+                <Text className="mt-0.5 text-[13px] text-muted">
                   {r.customerName ?? "Customer"} · {r.reply ? "Replied" : "No reply yet"}
                 </Text>
               </View>

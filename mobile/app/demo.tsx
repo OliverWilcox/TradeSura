@@ -45,11 +45,11 @@ export default function Demo() {
         <SafeAreaView edges={["top"]} className="bg-bg-deep">
           <View className="flex-row items-center justify-between px-4 py-2.5">
             {practice ? (
-              <Text className="flex-1 font-sans text-xs text-muted" numberOfLines={1}>
+              <Text className="flex-1 font-sans text-[13px] text-muted" numberOfLines={1}>
                 <Text className="font-bold text-warn">PRACTICE</Text> · nothing is saved, no payment taken
               </Text>
             ) : (
-              <Text className="flex-1 font-sans text-xs text-muted" numberOfLines={1}>
+              <Text className="flex-1 font-sans text-[13px] text-muted" numberOfLines={1}>
                 Viewing {me?.tradingName ?? "your"} plan page — hand the phone over
               </Text>
             )}

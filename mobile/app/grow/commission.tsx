@@ -67,7 +67,7 @@ export default function CommissionScreen() {
         <ScrollView contentContainerClassName="gap-3.5 px-4 pb-10 pt-4" keyboardShouldPersistTaps="handled">
           <Card>
             <Text className="text-[15px] font-semibold text-ink">Reward your team for the plans they sell</Text>
-            <Text className="mt-0.5 text-[12.5px] leading-[18px] text-muted">
+            <Text className="mt-0.5 text-[13px] leading-[18px] text-muted">
               We keep track of who sold what. You pay your team yourself; nothing comes out of your payouts.
             </Text>
             <View className="mt-3 gap-2">
@@ -83,7 +83,7 @@ export default function CommissionScreen() {
                   className={`rounded-xl border-[1.5px] px-3.5 py-3 ${type === t.key ? "border-flame bg-flame/10" : "border-white/20"}`}
                 >
                   <Text className="text-[15px] font-semibold text-ink">{t.label}</Text>
-                  <Text className="text-[12.5px] text-muted">{t.hint}</Text>
+                  <Text className="text-[13px] text-muted">{t.hint}</Text>
                 </Pressable>
               ))}
             </View>
@@ -123,10 +123,10 @@ export default function CommissionScreen() {
                 </Text>
                 <Text className="text-[15px] font-semibold text-ok">{formatPounds(r.thisMonthPence)}</Text>
               </View>
-              <Text className="mt-0.5 text-[12.5px] text-muted">
+              <Text className="mt-0.5 text-[13px] text-muted">
                 {r.signedUp} signed up · {r.live} live · {r.offers} offered
               </Text>
-              <Text className="mt-0.5 text-[12.5px] text-muted">
+              <Text className="mt-0.5 text-[13px] text-muted">
                 This month, and <Text className="text-ok">{formatPounds(r.toDatePence)}</Text> to date
               </Text>
             </Card>

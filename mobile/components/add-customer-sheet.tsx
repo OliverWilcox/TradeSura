@@ -28,7 +28,7 @@ function Row({
     >
       <View className="shrink">
         <Text className="font-semibold text-sm text-ink">{title}</Text>
-        <Text className="mt-0.5 font-sans text-xs text-muted">{sub}</Text>
+        <Text className="mt-0.5 font-sans text-[13px] text-muted">{sub}</Text>
       </View>
       <Chevron />
     </Pressable>
@@ -153,7 +153,7 @@ export function AddCustomerSheet({
 
           {me?.role !== "staff" && (
             <Pressable onPress={() => go("/plans")} className="items-center pt-3">
-              <Text className="font-semibold text-xs text-flame-deep">Manage plans</Text>
+              <Text className="font-semibold text-[13px] text-flame-deep">Manage plans</Text>
             </Pressable>
           )}
         </Pressable>

@@ -133,7 +133,7 @@ export default function GetPaid() {
             accessibilityLabel="Direct Debit set up on the customer's phone"
           >
             <Icon name="verified" size={28} color="#3dd68c" />
-            <Text className="text-[11px] font-bold tracking-[0.06em] text-ink">DD</Text>
+            <Text className="text-[13px] font-bold tracking-[0.06em] text-ink">DD</Text>
           </View>
           <Icon name="chevron" size={26} color="#c9d6e6" />
           <View className="items-center justify-center">

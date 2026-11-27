@@ -28,13 +28,13 @@ export default function MembershipShop() {
                 : "Your free member pack ships when your badge goes live."
               : "The shop unlocks with your badge."}
           </Text>
-          <Text className="mt-1.5 text-center font-sans text-xs text-night-muted">
+          <Text className="mt-1.5 text-center font-sans text-[13px] text-night-muted">
             Coming this October.
           </Text>
         </Card>
         <Card>
           <Micro className="mb-1">Why it&apos;s locked</Micro>
-          <Text className="font-sans text-xs text-muted">
+          <Text className="font-sans text-[13px] text-muted">
             Anything carrying the Verified Member mark can only ever go to a verified account —
             it&apos;s re-locked automatically if your account is ever paused.
           </Text>

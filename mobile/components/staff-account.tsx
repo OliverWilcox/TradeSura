@@ -27,7 +27,7 @@ export function StaffAccount() {
               <Text className="font-bold text-base text-ink">
                 {`${me?.firstName ?? ""} ${me?.lastName ?? ""}`.trim() || me?.email}
               </Text>
-              <Text className="font-sans text-xs text-muted">Engineer at {me?.businessName}</Text>
+              <Text className="font-sans text-[13px] text-muted">Engineer at {me?.businessName}</Text>
             </View>
           </View>
         </Card>
@@ -55,7 +55,7 @@ export function StaffAccount() {
           Sign out
         </Button>
         <Pressable onPress={() => router.push("/delete-account")} className="items-center py-2">
-          <Text className="font-sans text-xs text-muted">Delete my account</Text>
+          <Text className="font-sans text-[13px] text-muted">Delete my account</Text>
         </Pressable>
       </ScrollView>
     </View>

@@ -61,7 +61,7 @@ export default function Trades() {
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
         <Card className="border-flame-tint bg-flame-tint">
-          <Text className="font-sans text-xs text-flame-deep">
+          <Text className="font-sans text-[13px] text-flame-deep">
             <Text className="font-semibold">One pack per trade.</Text> A trade only gets a
             care plan where a recurring service event anchors it — that annual visit is what makes
             the plan honest. Register interest and we&apos;ll tell you when your pack&apos;s
@@ -97,7 +97,7 @@ export default function Trades() {
                 ) : (
                   <Pressable onPress={() => register(p.code)} disabled={busy === p.code}>
                     <Text
-                      className={`font-semibold text-xs ${busy === p.code ? "text-faint" : "text-flame-deep"}`}
+                      className={`font-semibold text-[13px] ${busy === p.code ? "text-faint" : "text-flame-deep"}`}
                     >
                       {busy === p.code ? "…" : "Register interest →"}
                     </Text>

@@ -68,7 +68,7 @@ export default function AddId() {
             }}
           />
         </View>
-        <Text className="mt-2.5 text-[12.5px] leading-[17px] text-white/60">
+        <Text className="mt-2.5 text-[13px] leading-[18px] text-white/60">
           Needed for your Verified Member badge. Only used to verify you — never shown to customers.
         </Text>
         {card.phase === "added" && (

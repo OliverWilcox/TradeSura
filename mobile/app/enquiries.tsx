@@ -114,19 +114,19 @@ export default function Enquiries() {
             <Text className="mt-1 text-[13px] text-muted">
               Homeowners who asked for a local engineer. The first to take one gets their details.
             </Text>
-            {leadError && <Text className="mt-2 text-xs text-danger">{leadError}</Text>}
+            {leadError && <Text className="mt-2 text-[13px] text-danger">{leadError}</Text>}
             {leads.map((l) => (
               <View key={l.id} className="mt-3 border-t border-line-soft pt-3">
                 <View className="flex-row items-start justify-between gap-2">
                   <View className="shrink">
                     <Text className="text-[15px] font-bold text-ink">{l.teaser}</Text>
-                    <Text className="text-[12px] text-muted">{when(l.createdAt)}</Text>
+                    <Text className="text-[13px] text-muted">{when(l.createdAt)}</Text>
                   </View>
                   {l.foundingOnly && <Pill tone="info">FOUNDING FIRST</Pill>}
                 </View>
                 <Text className="mt-2 text-[14px] leading-[20px] text-ink">{l.message}</Text>
                 {l.foundingOnly && (
-                  <Text className="mt-1 text-[12px] text-muted">
+                  <Text className="mt-1 text-[13px] text-muted">
                     Only Founding Members can see this until {when(l.foundingUntil)}.
                   </Text>
                 )}
@@ -151,7 +151,7 @@ export default function Enquiries() {
             <View className="flex-row items-start justify-between gap-2">
               <View className="shrink">
                 <Text className="text-[15px] font-bold text-ink">{q.name || "Someone"}</Text>
-                <Text className="text-[12px] text-muted">
+                <Text className="text-[13px] text-muted">
                   {when(q.createdAt)}
                   {q.source ? ` · ${SOURCE[q.source] ?? q.source}` : ""}
                 </Text>
@@ -200,7 +200,7 @@ export default function Enquiries() {
             {calls.slice(0, 20).map((q) => (
               <View key={q.id} className="flex-row items-center justify-between border-b border-line-soft py-2">
                 <Text className="text-[13px] text-ink">{when(q.createdAt)}</Text>
-                <Text className="text-[12px] text-muted">{SOURCE[q.source ?? ""] ?? "Profile"}</Text>
+                <Text className="text-[13px] text-muted">{SOURCE[q.source ?? ""] ?? "Profile"}</Text>
               </View>
             ))}
           </Card>

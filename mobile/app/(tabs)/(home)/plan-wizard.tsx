@@ -697,7 +697,7 @@ export default function PlanWizard() {
           {!isEdit && savedOnce && (
             <View className="flex-row items-center gap-1.5 rounded-full border border-line-strong px-3 py-1.5">
               <Icon name="saved" size={14} />
-              <Text className="text-[12.5px] text-ink">Draft saved</Text>
+              <Text className="text-[13px] text-ink">Draft saved</Text>
             </View>
           )}
           {/* Review 4 — one way out besides "<": save the draft and leave
@@ -729,7 +729,7 @@ export default function PlanWizard() {
       >
         {activePlanCount > 0 && (
           <Card className="border-warn-tint bg-warn-tint">
-            <Text className="text-xs text-warn">
+            <Text className="text-[13px] text-warn">
               Changes apply to new customers — your {activePlanCount} current customer
               {activePlanCount === 1 ? "" : "s"} keep what they signed up for.
             </Text>
@@ -855,7 +855,7 @@ export default function PlanWizard() {
                               </Pressable>
                             )}
                           </View>
-                          {sub ? <Text className="mt-0.5 text-[12.5px] text-muted">{sub}</Text> : null}
+                          {sub ? <Text className="mt-0.5 text-[13px] text-muted">{sub}</Text> : null}
                           {on && t.pricingLabel === RATE_LABEL && (
                             <TextInput
                               value={rates[t.code] ?? ""}
@@ -900,7 +900,7 @@ export default function PlanWizard() {
             </View>
 
             <Card>
-              <Text className="text-center text-[12px] font-bold uppercase tracking-[0.12em] text-muted">
+              <Text className="text-center text-[13px] font-bold uppercase tracking-[0.12em] text-muted">
                 Monthly price
               </Text>
               <View className="mt-2 flex-row items-center justify-between">
@@ -1277,9 +1277,9 @@ export default function PlanWizard() {
               <Text className="text-[19px] font-bold text-ink">{selected.size} selected</Text>
               {/* Not on our own quick starts — the warning is for plans they build up. */}
               {selected.size > RECOMMENDED_MAX && !presets.some((p) => p.name === starter) ? (
-                <Text className="text-[12.5px] text-warn">Over 6 options can be a lot for customers to take in</Text>
+                <Text className="text-[13px] text-warn">Over 6 options can be a lot for customers to take in</Text>
               ) : selected.size < RECOMMENDED_MIN && !serviceRuleError ? (
-                <Text className="text-[12.5px] text-muted">Most plans have 3 to 6 options</Text>
+                <Text className="text-[13px] text-muted">Most plans have 3 to 6 options</Text>
               ) : null}
               <Text className="text-[13px] text-muted">You set your price next</Text>
             </View>
@@ -1335,13 +1335,13 @@ export default function PlanWizard() {
           >
             <View className="mb-4 h-1 w-10 self-center rounded-full bg-line-strong" />
             <Text className="text-[18px] font-bold text-ink">{info?.title}</Text>
-            <Text className="mt-1 text-[12px] font-bold uppercase tracking-[0.08em] text-muted">
+            <Text className="mt-1 text-[13px] font-bold uppercase tracking-[0.08em] text-muted">
               What your customer agrees to
             </Text>
             <Text className="mt-2 text-[15px] leading-[22px] text-ink">{info?.bodyText}</Text>
             {info && qualPrompts[info.code] && (
               <>
-                <Text className="mt-4 text-[12px] font-bold uppercase tracking-[0.08em] text-muted">
+                <Text className="mt-4 text-[13px] font-bold uppercase tracking-[0.08em] text-muted">
                   Qualification
                 </Text>
                 <Text className="mt-1 text-[15px] leading-[22px] text-ink">

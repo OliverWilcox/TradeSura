@@ -96,7 +96,7 @@ export default function Ratings() {
                     {data.summary.average !== null ? data.summary.average.toFixed(1) : "—"}
                     <Text className="text-base text-flame"> ★</Text>
                   </Text>
-                  <Text className="text-xs text-muted">
+                  <Text className="text-[13px] text-muted">
                     {data.summary.count} verified TradeSura customer{data.summary.count === 1 ? "" : "s"}
                   </Text>
                 </View>
@@ -120,15 +120,15 @@ export default function Ratings() {
                   {"★".repeat(r.stars ?? 0)}
                   <Text className="text-line-strong">{"★".repeat(5 - (r.stars ?? 0))}</Text>
                 </Text>
-                <Text className="text-[11px] text-faint">{day(r.ratedAt)}</Text>
+                <Text className="text-[13px] text-faint">{day(r.ratedAt)}</Text>
               </View>
-              <Text className="mt-1 text-xs text-muted">{r.customerName ?? "Customer"} · verified TradeSura customer</Text>
+              <Text className="mt-1 text-[13px] text-muted">{r.customerName ?? "Customer"} · verified TradeSura customer</Text>
               {r.comment ? <Text className="mt-2 text-sm text-ink">“{r.comment}”</Text> : null}
               {r.removedReason ? (
-                <Text className="mt-2 text-xs text-warn">Removed by TradeSura: {r.removedReason}</Text>
+                <Text className="mt-2 text-[13px] text-warn">Removed by TradeSura: {r.removedReason}</Text>
               ) : r.reply ? (
                 <View className="mt-2.5 rounded-xl bg-line-soft px-3 py-2">
-                  <Text className="text-[11px] font-bold text-muted">Your reply</Text>
+                  <Text className="text-[13px] font-bold text-muted">Your reply</Text>
                   <Text className="mt-0.5 text-sm text-ink">{r.reply}</Text>
                 </View>
               ) : replyingTo === r.id ? (
@@ -143,8 +143,8 @@ export default function Ratings() {
                     textAlignVertical="top"
                     className="min-h-[72px] rounded-xl border border-line-strong bg-bg px-3.5 py-3 text-[16px] text-ink"
                   />
-                  <Text className="text-[11px] text-faint">One reply per rating, shown publicly. You can&apos;t edit it later.</Text>
-                  {replyError && <Text className="text-xs text-danger">{replyError}</Text>}
+                  <Text className="text-[13px] text-faint">One reply per rating, shown publicly. You can&apos;t edit it later.</Text>
+                  {replyError && <Text className="text-[13px] text-danger">{replyError}</Text>}
                   <Button onPress={() => sendReply(r.id)} disabled={busy || draft.trim().length < 2}>
                     {busy ? "Posting…" : "Post reply"}
                   </Button>

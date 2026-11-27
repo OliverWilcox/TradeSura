@@ -87,7 +87,7 @@ export default function GoalScreen() {
           {editing ? (
             <Card>
               <Text className="text-[15px] font-semibold text-ink">How many plans will you sign this month?</Text>
-              <Text className="mt-0.5 text-[12.5px] leading-[18px] text-muted">Most engineers start with 10. You can change it any time.</Text>
+              <Text className="mt-0.5 text-[13px] leading-[18px] text-muted">Most engineers start with 10. You can change it any time.</Text>
               <TextInput
                 value={value}
                 onChangeText={(v) => {

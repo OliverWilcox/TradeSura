@@ -60,7 +60,7 @@ export function StaffHome() {
         <Card variant="raised" className="items-center py-5">
           <Micro>Sign-ups this week</Micro>
           <Text className="mt-1 tabular-nums text-5xl font-semibold text-ink">{count}</Text>
-          <Text className="mt-1 font-sans text-xs text-muted">
+          <Text className="mt-1 font-sans text-[13px] text-muted">
             Customers who joined a plan you offered, since Monday.
           </Text>
         </Card>
@@ -69,7 +69,7 @@ export function StaffHome() {
           Offer a plan
         </Button>
         {!canAdd && (
-          <Text className="text-center font-sans text-xs text-muted">
+          <Text className="text-center font-sans text-[13px] text-muted">
             The business has no live plan yet — ask the owner to make one live.
           </Text>
         )}

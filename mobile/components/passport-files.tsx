@@ -149,12 +149,12 @@ export function PassportFiles({
           {f.contentType === "application/pdf" ? (
             <View className="h-16 w-16 items-center justify-center rounded-[10px] border border-line bg-bg">
               <Icon name="document" size={22} color="#5FA3F0" />
-              <Text className="mt-0.5 text-[10px] font-semibold text-flame">PDF</Text>
+              <Text className="mt-0.5 text-[13px] font-semibold text-flame">PDF</Text>
             </View>
           ) : (
             <Image source={{ uri: f.url }} style={{ width: 64, height: 64, borderRadius: 10 }} />
           )}
-          <Text numberOfLines={1} className="mt-1 text-center text-[10.5px] text-muted">
+          <Text numberOfLines={1} className="mt-1 text-center text-[13px] text-muted">
             {f.label || f.kindLabel}
           </Text>
         </Pressable>
@@ -172,7 +172,7 @@ export function PassportFiles({
           ) : (
             <>
               <Icon name="plus" size={16} color="#5FA3F0" />
-              <Text className="text-xs font-semibold text-flame">Add photo or document</Text>
+              <Text className="text-[13px] font-semibold text-flame">Add photo or document</Text>
             </>
           )}
         </Pressable>

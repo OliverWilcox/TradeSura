@@ -322,7 +322,7 @@ export function SectionHeading({ children, className = "" }: { children: ReactNo
 export function Micro({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <Text
-      className={`text-[12px] font-bold uppercase tracking-[0.08em] text-muted ${className}`}
+      className={`text-[13px] font-bold uppercase tracking-[0.08em] text-muted ${className}`}
     >
       {children}
     </Text>
@@ -350,7 +350,7 @@ export function Pill({ tone, children }: { tone: keyof typeof pillStyles; childr
     // labels broke mid-word ("AU / TO", "DON / E" on Reminders).
     <Text
       numberOfLines={1}
-      className={`shrink-0 self-start overflow-hidden rounded-full px-2.5 py-1 text-[11px] font-extrabold tracking-[0.04em] ${pillStyles[tone]}`}
+      className={`shrink-0 self-start overflow-hidden rounded-full px-2.5 py-1 text-[13px] font-extrabold tracking-[0.04em] ${pillStyles[tone]}`}
     >
       {children}
     </Text>

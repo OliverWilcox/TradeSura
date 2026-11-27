@@ -263,7 +263,7 @@ export default function ProfileScreen() {
                 textAlignVertical="top"
                 className="mt-2 min-h-[120px] rounded-xl border border-line-strong bg-bg px-3.5 py-3 text-[16px] leading-[22px] text-ink"
               />
-              <Text className="mt-1 text-right text-[12px] text-muted">
+              <Text className="mt-1 text-right text-[13px] text-muted">
                 {bio.length}/{BIO_MAX}
               </Text>
               {errorFor("profileBio")}
@@ -294,7 +294,7 @@ export default function ProfileScreen() {
                     className={`h-[72px] w-[96px] items-center justify-center rounded-[10px] border border-dashed border-line-strong ${photoBusy ? "opacity-50" : ""}`}
                   >
                     <Icon name={photoBusy ? "clock" : "camera"} size={18} color="#5fa3f0" />
-                    <Text className="mt-1 text-[12px] text-flame">{photoBusy ? "Uploading" : "Add photo"}</Text>
+                    <Text className="mt-1 text-[13px] text-flame">{photoBusy ? "Uploading" : "Add photo"}</Text>
                   </Pressable>
                 )}
               </View>
@@ -314,7 +314,7 @@ export default function ProfileScreen() {
                 placeholderTextColor="#6e86a3"
                 className="mt-2 min-h-[48px] rounded-xl border border-line-strong bg-bg px-3.5 text-[16px] text-ink"
               />
-              <Text className="mt-1.5 text-[12.5px] text-muted">Towns or postcode areas — what people type into Google.</Text>
+              <Text className="mt-1.5 text-[13px] text-muted">Towns or postcode areas — what people type into Google.</Text>
               {errorFor("serviceArea")}
               <Text className="mt-3 text-[13px] font-semibold text-ink">Your town</Text>
               <TextInput
@@ -328,7 +328,7 @@ export default function ProfileScreen() {
                 placeholderTextColor="#6e86a3"
                 className="mt-1.5 min-h-[48px] rounded-xl border border-line-strong bg-bg px-3.5 text-[16px] text-ink"
               />
-              <Text className="mt-1.5 text-[12.5px] text-muted">
+              <Text className="mt-1.5 text-[13px] text-muted">
                 Your profile is listed under &ldquo;Gas engineers in {town.trim() || "your town"}&rdquo;.
               </Text>
               {errorFor("town")}
@@ -355,7 +355,7 @@ export default function ProfileScreen() {
                     placeholderTextColor="#6e86a3"
                     className="mt-1.5 min-h-[48px] rounded-xl border border-line-strong bg-bg px-3.5 text-[16px] text-ink"
                   />
-                  <Text className="mt-1.5 text-[12.5px] text-muted">Leave blank to use your mobile.</Text>
+                  <Text className="mt-1.5 text-[13px] text-muted">Leave blank to use your mobile.</Text>
                   {errorFor("enquiryPhone")}
                 </>
               )}
@@ -363,7 +363,7 @@ export default function ProfileScreen() {
                 <Text className="flex-1 text-[15px] text-ink">Show Message button</Text>
                 <Toggle value={showMessage} onValueChange={setShowMessage} accessibilityLabel="Show Message button" />
               </View>
-              <Text className="mt-1 text-[12.5px] text-muted">
+              <Text className="mt-1 text-[13px] text-muted">
                 Messages land in Enquiries in this app, with a notification and an email.
               </Text>
             </Card>

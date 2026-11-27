@@ -138,7 +138,7 @@ export default function TeamAdd() {
           <Micro className="mb-1.5">Their Gas Safe ID card</Micro>
           <IdCardPicker value={card} onChange={setCard} upload={async () => {}} error={errors.card} whose="their" />
           <FieldError>{errors.card}</FieldError>
-          <Text className="mt-2 font-sans text-xs text-muted">
+          <Text className="mt-2 font-sans text-[13px] text-muted">
             We check it against the register, usually within 24 hours. They can add customers straight
             away and send offers once it&apos;s approved.
           </Text>
@@ -148,7 +148,7 @@ export default function TeamAdd() {
         <Button onPress={save} disabled={busy}>
           {busy ? "Adding…" : "Add to my team"}
         </Button>
-        <Text className="px-1 text-center font-sans text-xs text-muted">
+        <Text className="px-1 text-center font-sans text-[13px] text-muted">
           We&apos;ll email them how to sign in. Staff are free, with no limit.
         </Text>
       </ScrollView>

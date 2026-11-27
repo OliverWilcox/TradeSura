@@ -216,11 +216,11 @@ export default function Customers() {
       >
         {planFilter && (
           <View className="flex-row items-center justify-between rounded-xl border border-flame bg-flame-tint px-3 py-2">
-            <Text className="flex-1 font-sans text-xs text-flame" numberOfLines={1}>
+            <Text className="flex-1 font-sans text-[13px] text-flame" numberOfLines={1}>
               Showing customers on {planName || "this plan"}
             </Text>
             <Pressable onPress={() => router.replace("/(tabs)/(customers)/customers")}>
-              <Text className="font-semibold text-xs text-flame-deep">Clear ×</Text>
+              <Text className="font-semibold text-[13px] text-flame-deep">Clear ×</Text>
             </Pressable>
           </View>
         )}
