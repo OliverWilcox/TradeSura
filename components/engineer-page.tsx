@@ -413,7 +413,7 @@ export async function EngineerPage({
         </dl>
       </div>
 
-      <p className="font-mono text-[10px] text-faint text-center pt-1">
+      <p className="font-mono text-[12px] leading-[18px] text-muted text-center pt-1">
         Direct Debit Guarantee protected · 14-day cooling-off · cancel any time
       </p>
 

@@ -55,7 +55,7 @@ export function offerForReason(
 }
 
 export function pounds(pence: number): string {
-  return pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
+  return `£${(pence / 100).toLocaleString("en-GB", { minimumFractionDigits: pence % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
 // What they've paid in so far. Yearly plans are 12 months for the price of

@@ -44,7 +44,7 @@ export function coolingOffEnd(from: Date): Date {
 }
 
 export function poundsLabel(pence: number): string {
-  return pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
+  return `£${(pence / 100).toLocaleString("en-GB", { minimumFractionDigits: pence % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
 // "£12 a month", "£132 a year", "… including VAT" — the full price the

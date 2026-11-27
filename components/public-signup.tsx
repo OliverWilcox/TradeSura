@@ -37,7 +37,7 @@ export type ReasonSlot = {
 };
 
 function pounds(pence: number) {
-  return pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
+  return `£${(pence / 100).toLocaleString("en-GB", { minimumFractionDigits: pence % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
 type Started = {
@@ -291,7 +291,7 @@ export function PublicSignup({
             ? "Join is switched off in preview"
             : busy
               ? "Setting up…"
-              : `${mode === "practice" ? "PRACTICE · " : ""}Join now · ${selected.name}, ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)}`}
+              : `${mode === "practice" ? "PRACTICE · " : ""}Join for ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)}`}
         </button>
       ) : null}
       </div>

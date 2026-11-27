@@ -59,15 +59,18 @@ export function escapeHtml(s: string): string {
 export function emailButton(href: string, label: string, opts: { width?: number; color?: string } = {}): string {
   const width = opts.width ?? 536;
   const color = opts.color ?? EMAIL.blue;
+  // White on the light brand blue was hard to read (QA 26 Nov): navy text on it,
+  // white on any darker colour passed in.
+  const ink = color.toUpperCase() === EMAIL.blue.toUpperCase() ? EMAIL.navy : "#ffffff";
   const text = escapeHtml(label);
   return `<!--[if mso]>
 <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${href}" style="height:52px;v-text-anchor:middle;width:${width}px;" arcsize="23%" stroke="f" fillcolor="${color}">
-<w:anchorlock/><center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:17px;font-weight:bold;">${text}</center>
+<w:anchorlock/><center style="color:${ink};font-family:Arial,Helvetica,sans-serif;font-size:17px;font-weight:bold;">${text}</center>
 </v:roundrect>
 <![endif]--><!--[if !mso]><!-- -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
 <td align="center" bgcolor="${color}" style="background:${color};border-radius:12px;">
-<a href="${href}" style="display:block;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:17px;line-height:52px;border-radius:12px;">${text}</a>
+<a href="${href}" style="display:block;color:${ink};text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:17px;line-height:52px;border-radius:12px;">${text}</a>
 </td></tr></table>
 <!--<![endif]-->`;
 }

@@ -23,7 +23,7 @@ type Tier = {
 };
 
 function pounds(pence: number) {
-  return pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
+  return `£${(pence / 100).toLocaleString("en-GB", { minimumFractionDigits: pence % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
 type Started = {
@@ -189,7 +189,7 @@ export function SignupTiers({
         <button onClick={choose} disabled={busy} className={JOIN_BTN}>
           {busy
             ? "Opening secure Direct Debit setup…"
-            : `Join now · ${selected.name}, ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)}`}
+            : `Join for ${priceLine(selected.priceMonthlyPence, billingInterval, vatRegistered)}`}
         </button>
       )}
       </div>

@@ -30,10 +30,11 @@ export function CustomerShell({
             {tradingName} <span className="text-flame">Care Plans</span>
           </div>
         </div>
-        {sub && <div className="text-[11px] text-muted mt-0.5">{sub}</div>}
+        {sub && <div className="text-[12px] text-muted mt-0.5">{sub}</div>}
       </header>
       <main className="flex-1 flex flex-col gap-3.5 px-4 py-4">{children}</main>
-      <footer className="font-mono text-[10px] text-faint text-center px-4 py-3 space-y-1">
+      {/* 12px muted, not 10px faint: the gas emergency line has to be readable (QA 26 Nov). */}
+      <footer className="font-mono text-[12px] leading-[18px] text-muted text-center px-4 py-4 space-y-1.5">
         <p>
           Smell gas? Call the National Gas Emergency line free:{" "}
           <a href="tel:0800111999" className="font-semibold text-ink">

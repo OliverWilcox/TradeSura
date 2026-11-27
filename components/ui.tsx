@@ -107,7 +107,7 @@ export function RowLine({ left, right }: { left: ReactNode; right?: ReactNode })
 }
 
 export function Money({ pence, suffix = "" }: { pence: number; suffix?: string }) {
-  const pounds = pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
+  const pounds = `£${(pence / 100).toLocaleString("en-GB", { minimumFractionDigits: pence % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
   return (
     <span className="font-mono font-semibold text-ok">
       {pounds}

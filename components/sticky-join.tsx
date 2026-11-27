@@ -35,10 +35,17 @@ export function StickyJoin({
     focus?.current?.focus({ preventScroll: true });
   }
 
+  // Room at the very bottom of the page so the bar never hides the footer's gas
+  // emergency line. A spacer div here sat mid-page, under Home Passport, as an
+  // empty gap (QA 26 Nov), so the room goes on the body instead.
+  useEffect(() => {
+    const cls = ["pb-16", "md:pb-0"];
+    document.body.classList.add(...cls);
+    return () => document.body.classList.remove(...cls);
+  }, []);
+
   return (
     <>
-      {/* Room at the bottom so the bar never hides the footer's gas emergency line. */}
-      <div aria-hidden className="h-16 md:hidden" />
       <div
         className={`fixed inset-x-0 bottom-0 z-40 md:hidden transition-transform duration-200 ${
           targetVisible ? "translate-y-full" : "translate-y-0"

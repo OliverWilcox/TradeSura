@@ -6,11 +6,13 @@ import { perMonth } from "@/lib/engineer";
 import { FIRST_PAYMENT_LINE } from "@/lib/billing-interval";
 
 function pounds(pence: number) {
-  return pence % 100 === 0 ? `£${pence / 100}` : `£${(pence / 100).toFixed(2)}`;
+  return `£${(pence / 100).toLocaleString("en-GB", { minimumFractionDigits: pence % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
+// Waiting state (details not filled in yet) keeps the label readable: a paler
+// blue with white text, not 50% opacity, which turned the text muddy (QA 26 Nov).
 export const JOIN_BTN =
-  "block w-full text-center font-semibold rounded-[10px] px-4 py-3 text-[15px] bg-[#1F5FC4] text-white disabled:opacity-50";
+  "block w-full text-center font-semibold rounded-[10px] px-4 py-3 text-[15px] bg-[#1F5FC4] text-white disabled:bg-[#1F5FC4]/45 disabled:text-white/85";
 
 export function PlanTierCard({
   name,

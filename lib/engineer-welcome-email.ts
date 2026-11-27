@@ -71,7 +71,7 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
   const doneCount = goLive.filter((i) => i.done).length;
 
   const rows = `
-  <tr><td bgcolor="${EMAIL.navy}" style="background:${EMAIL.navy};padding:4px 32px 30px;">
+  <tr><td bgcolor="${EMAIL.navy}" style="background:${EMAIL.navy};padding:28px 32px 30px;">
     <div style="font-size:28px;line-height:34px;font-weight:700;color:#ffffff;">You're in, ${firstName} &#128075;</div>
     <div style="font-size:16px;line-height:24px;color:#C5D0E0;padding-top:10px;"><b style="color:#ffffff;">${brand}</b> now has a free TradeSura account. <b style="color:#ffffff;">No selling needed. Pick why you were there, hand the customer your phone, and the app does the selling for you.</b> Customers pay monthly or yearly by Direct Debit, you keep <b style="color:#3DD68C;">80%</b>, paid every Friday.</div>
   </td></tr>
@@ -111,25 +111,20 @@ export async function engineerWelcomeEmailHtml(engineerId: string) {
     </table>
   </td></tr>
 
+  <!-- Stacked, not side by side: two columns shrank to tiny text on a phone (QA 26 Nov). -->
   <tr><td style="padding:22px 32px 4px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-      <tr>
-        <td width="50%" valign="top" style="padding-right:8px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${EMAIL.wash};border-radius:12px;"><tr><td style="padding:16px;font-size:14px;line-height:20px;color:${EMAIL.ink};">
-            <div style="font-weight:700;font-size:15px;padding-bottom:4px;">Give customers a choice</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${EMAIL.wash};border-radius:12px;"><tr><td style="padding:16px;font-size:15px;line-height:22px;color:${EMAIL.ink};">
+            <div style="font-weight:700;font-size:16px;padding-bottom:4px;">Give customers a choice</div>
             Offer 2 or 3 plans, e.g. service and priority from £10, Boiler Care, and a Landlord plan with the CP12. Customers like picking.
             <div style="padding-top:8px;"><a href="${open("plan-wizard")}" style="color:${EMAIL.link};font-weight:700;text-decoration:none;">Build a plan &rarr;</a></div>
           </td></tr></table>
-        </td>
-        <td width="50%" valign="top" style="padding-left:8px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${EMAIL.wash};border-radius:12px;"><tr><td style="padding:16px;font-size:14px;line-height:20px;color:${EMAIL.ink};">
-            <div style="font-weight:700;font-size:15px;padding-bottom:4px;">Know another engineer?</div>
+  </td></tr>
+  <tr><td style="padding:12px 32px 4px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${EMAIL.wash};border-radius:12px;"><tr><td style="padding:16px;font-size:15px;line-height:22px;color:${EMAIL.ink};">
+            <div style="font-weight:700;font-size:16px;padding-bottom:4px;">Know another engineer?</div>
             Earn <b>${REFERRAL_FIRST_YEAR_PERCENT}% of our fee</b> on every plan they sell for their first year, then <b>${REFERRAL_LIFETIME_PERCENT}% for life</b>.
             <div style="padding-top:8px;"><a href="${referralLink(code)}" style="color:${EMAIL.link};font-weight:700;text-decoration:none;">Share your invite link &rarr;</a></div>
           </td></tr></table>
-        </td>
-      </tr>
-    </table>
   </td></tr>
 
   <tr><td style="padding:16px 32px 4px;">
