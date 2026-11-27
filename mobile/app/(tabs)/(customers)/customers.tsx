@@ -7,7 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { offerLock } from "@/lib/offer-lock";
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
-import { AppHeader, Card, Pill, Button, ScreenTitle, SectionHeading } from "@/components/ui";
+import { AppHeader, Card, Pill, Button, GateSheet, ScreenTitle, SectionHeading } from "@/components/ui";
 
 type Customer = {
   id: string;
@@ -106,6 +106,15 @@ export default function Customers() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importConsent, setImportConsent] = useState(false);
+  const [consentFor, setConsentFor] = useState<"csv" | "contacts" | null>(null);
+  function runImport(kind: "csv" | "contacts") {
+    if (kind === "csv") pickCsv();
+    else router.push({ pathname: "/customers/import-contacts", params: { consent: "1" } });
+  }
+  function askConsent(kind: "csv" | "contacts") {
+    if (importConsent) runImport(kind);
+    else setConsentFor(kind);
+  }
   const [salesByEngineer, setSalesByEngineer] = useState<{ name: string; plans: number }[] | null>(null);
   const { me } = useAuth();
   // Review 4 — Offer buttons look locked while offers are, and say why.
@@ -216,10 +225,10 @@ export default function Customers() {
           </View>
         )}
         <ScreenTitle title="Customers" intro="Your book. Offer a plan to anyone who isn't on one yet." />
-        {lock && <Text className="-mt-1.5 font-sans text-xs text-warn">Offers: {lock.reason}</Text>}
+        {lock && <Text className="-mt-1.5 font-sans text-[13px] leading-[18px] text-warn">Offers: {lock.reason}</Text>}
         {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
 
-        {tabs.length > 0 && (
+        {tabs.length > 0 && counts?.all !== 0 && (
           <View className="flex-row flex-wrap gap-1.5">
             {tabs.map((t) => (
               <Pressable
@@ -231,7 +240,7 @@ export default function Customers() {
                 className={`rounded-full border-[1.5px] px-3 py-1.5 ${segment === t.key ? "border-flame bg-flame-tint" : "border-line bg-paper"}`}
               >
                 <Text
-                  className={`font-semibold text-[12px] ${segment === t.key ? "text-flame-deep" : "text-muted"}`}
+                  className={`font-semibold text-[13px] ${segment === t.key ? "text-flame" : "text-muted"}`}
                 >
                   {t.label} {t.n}
                 </Text>
@@ -253,17 +262,18 @@ export default function Customers() {
                   <Text className="font-bold text-sm text-ink">
                     {c.firstName} {c.lastName}
                   </Text>
-                  <Text className="font-sans text-[11px] text-muted">{statusLine(c)}</Text>
+                  <Text className="font-sans text-[13px] text-muted">{statusLine(c)}</Text>
                 </Pressable>
                 {/* Part 10 LAW — the Offer button appears only on
                     never-offered rows; the one-nudge law extends here — an
                     already-offered customer doesn't get a second button, the
                     48h nudge machinery covers them. */}
-                {c.status === "NONE" && c.neverOffered ? (
+                {/* While offers are locked the row shows its status, not a
+                    greyed-out button: the line above says why (QA 26 Nov). */}
+                {c.status === "NONE" && c.neverOffered && !lock ? (
                   <Button
                     variant="flame"
                     className="px-3 py-1.5"
-                    disabled={!!lock}
                     onPress={() =>
                       router.push({ pathname: "/offer", params: { customerId: c.id } })
                     }
@@ -271,7 +281,8 @@ export default function Customers() {
                     Offer
                   </Button>
                 ) : (
-                  pill(c)
+                  // Centred in the row, top to bottom (QA 27 Nov).
+                  <View className="justify-center self-center">{pill(c)}</View>
                 )}
               </View>
             ))}
@@ -283,16 +294,13 @@ export default function Customers() {
               </Pressable>
             )}
           </Card>
-        ) : (
-          <Card>
-            <Text className="py-2 text-center font-sans text-sm text-muted">
-              {segment === "noplan"
-                ? counts?.all === 0
-                  ? "Your book is empty — add a customer or import below."
-                  : "Everyone in your book is on a plan."
-                : "Nothing here."}
-            </Text>
-          </Card>
+        ) : counts?.all === 0 ? null : (
+          // An empty book needs no empty box: "Add a customer by hand" and the
+          // import card below are the next step (QA 26 Nov). A filter with no
+          // matches gets one plain line.
+          <Text className="py-1 text-center font-sans text-sm text-muted">
+            {segment === "noplan" ? "Everyone in your book is on a plan." : "No customers in this list yet."}
+          </Text>
         )}
 
         {/* Part 10 — "doctrine naming, same verb as route 2" (the offer
@@ -321,7 +329,7 @@ export default function Customers() {
 
         {/* Part 10 — "Import can't be the only way in." */}
         <Pressable onPress={() => router.push("/add-customer")} className="items-center py-1">
-          <Text className="font-semibold text-sm text-flame-deep">Add a customer by hand</Text>
+          <Text className="font-semibold text-sm text-flame">Add a customer by hand</Text>
         </Pressable>
 
         {/* Section 8 — importing the book is an owner action. */}
@@ -329,43 +337,36 @@ export default function Customers() {
           <>
             <Card>
               <SectionHeading className="mb-1">Import your book</SectionHeading>
-              <Text className="mb-2.5 font-sans text-xs text-muted">
+              <Text className="mb-2.5 font-sans text-[13px] leading-[18px] text-muted">
                 CSV, or pick from your phone&apos;s contacts. We de-dupe by phone number
                 automatically.
               </Text>
-              <Pressable
-                onPress={() => setImportConsent((v) => !v)}
-                className="mb-2.5 flex-row items-start gap-2.5"
-              >
-                <View
-                  className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${importConsent ? "border-flame bg-flame" : "border-line"}`}
-                >
-                  {importConsent && <Text className="text-[11px] text-white">✓</Text>}
-                </View>
-                <Text className="flex-1 font-sans text-[13px] text-muted">
-                  These are my own customers — people I&apos;ve done work for or who&apos;ve asked me
-                  to.
-                </Text>
-              </Pressable>
-              <Button variant="ghost" onPress={pickCsv} disabled={importing || !importConsent}>
+              {/* Both routes ask first — "these are my own customers" is our
+                  PECR basis for contacting them (Build Review 2). A
+                  confirmation sheet on tap replaced the tick box (QA 26 Nov). */}
+              <Button variant="ghost" onPress={() => askConsent("csv")} disabled={importing}>
                 {importing ? "Importing…" : "Import CSV"}
               </Button>
-              {/* Both routes need the box ticked — it's our PECR basis for
-                  contacting them (Build Review 2). */}
-              <Button
-                variant="ghost"
-                className="mt-2"
-                onPress={() => router.push({ pathname: "/customers/import-contacts", params: { consent: "1" } })}
-                disabled={importing || !importConsent}
-              >
+              <Button variant="ghost" className="mt-2" onPress={() => askConsent("contacts")} disabled={importing}>
                 Import from contacts
               </Button>
-              {importResult && <Text className="mt-2 font-sans text-xs text-ink">{importResult}</Text>}
-              {importError && <Text className="mt-2 font-sans text-xs text-danger">{importError}</Text>}
+              {importResult && <Text className="mt-2 font-sans text-[13px] text-ink">{importResult}</Text>}
+              {importError && <Text className="mt-2 font-sans text-[13px] text-danger">{importError}</Text>}
             </Card>
           </>
         )}
       </ScrollView>
+      <GateSheet
+        visible={consentFor !== null}
+        onClose={() => setConsentFor(null)}
+        reason="Are these your own customers? People you've done work for, or who've asked you to. We only contact people who already know you."
+        cta="Yes, they're my customers"
+        onCta={() => {
+          const kind = consentFor;
+          setImportConsent(true);
+          if (kind) runImport(kind);
+        }}
+      />
     </View>
   );
 }

@@ -79,8 +79,9 @@ export function goLiveSteps(me: Me | null): SetupStep[] {
           status: "Not started",
           tone: "grey",
           cta: "Build plan",
-          // Opens the builder with its "Back to setup" bar.
-          href: { pathname: "/plans", params: { from: "setup" } },
+          // Opens the builder with its "Back to setup" bar — straight there, not via
+          // My plans, which loaded and then swapped screens (QA 26 Nov: "not smooth").
+          href: { pathname: "/plan-wizard", params: { from: "setup" } },
           next: "build your first plan",
         };
 

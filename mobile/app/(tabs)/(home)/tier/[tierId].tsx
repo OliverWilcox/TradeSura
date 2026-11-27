@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { AppHeader, Card, Micro, Pill, RowLine, Chevron, Button } from "@/components/ui";
 import { Skeleton, Bone, RowBone } from "@/components/skeleton";
 import { formatPounds } from "@/lib/earnings";
-import { offerLock, readyLabel } from "@/lib/offer-lock";
+import { offerLock, readyLabel, readyNote } from "@/lib/offer-lock";
 
 // Build Guide v2 Part 7.4 — "Edit plan": three rows, each opening its wizard
 // step pre-filled, plus the stop/start toggle. This screen is a menu into
@@ -150,7 +150,7 @@ export default function EditPlan() {
 
   const lock = offerLock(me ? { ...me, hasPlan: true } : me);
   const pill =
-    tier.status === "LIVE" && lock ? { tone: "info" as const, label: () => readyLabel(lock) } : STATUS_PILL[tier.status];
+    tier.status === "LIVE" && lock ? { tone: "info" as const, label: () => readyLabel() } : STATUS_PILL[tier.status];
 
   return (
     <View className="flex-1 bg-panel">
@@ -159,6 +159,9 @@ export default function EditPlan() {
       </SafeAreaView>
       <View className="gap-2.5 px-4 pb-8 pt-4">
         <Pill tone={pill.tone}>{pill.label(activePlanCount)}</Pill>
+        {tier.status === "LIVE" && lock && readyNote(lock) ? (
+          <Text className="text-[13px] leading-[18px] text-muted">{readyNote(lock)}</Text>
+        ) : null}
 
         {activePlanCount > 0 && (
           <Card className="border-warn-tint bg-warn-tint">

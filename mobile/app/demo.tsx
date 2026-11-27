@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { WebView } from "react-native-webview";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth-context";
-import { AppHeader, Card, Micro, Button } from "@/components/ui";
+import { AppHeader, Card, Button } from "@/components/ui";
 import { Icon } from "@/components/icon";
 import { RingSpinner } from "@/components/skeleton";
 import { offerLock } from "@/lib/offer-lock";
@@ -81,7 +81,7 @@ export default function Demo() {
         {practice && (
           <Card className="border-warn">
             <Text className="font-bold text-sm text-warn">PRACTICE</Text>
-            <Text className="mt-1 font-sans text-xs text-muted">
+            <Text className="mt-1 font-sans text-[13px] leading-[18px] text-muted">
               Try the whole hand-over as a customer would — use a made-up customer like
               &quot;Sam Taylor&quot;. Nothing you do here creates a customer, sets up a Direct Debit or takes a payment.
             </Text>
@@ -91,35 +91,39 @@ export default function Demo() {
           <Text className="font-semibold text-sm text-ink">
             Hand your phone over at the kitchen table
           </Text>
-          <Text className="mt-1 font-sans text-xs text-muted">
+          <Text className="mt-1 font-sans text-[13px] leading-[18px] text-muted">
             This opens your plan page, right here in the app. The customer picks a plan and sets
             up the Direct Debit on your phone — your account stays hidden. Tap ✕ any time to come
             straight back.
           </Text>
           {!me?.hasPlan && (
-            <Text className="mt-2 font-sans text-xs text-warn">
+            <Text className="mt-2 font-sans text-[13px] text-warn">
               Build a plan first so there&apos;s something to show.
             </Text>
           )}
         </Card>
-
-        <Button
-          onPress={() => {
-            setLoading(true);
-            setViewing(true);
-          }}
-          disabled={!url || !me?.hasPlan}
-        >
-          {practice ? "Start the practice run" : "Open my plan page"}
-        </Button>
-        <Micro className="text-center">
-          {practice
-            ? offerLock(me) !== null
-              ? "Real sign-ups unlock once your Gas Safe check and payments are done."
-              : "Practice only — for a real customer, use Offer a plan."
-            : "Anything signed up here is tagged as an in-person sale."}
-        </Micro>
       </ScrollView>
+      {/* The one action sits at the bottom, in thumb reach (QA 26 Nov). */}
+      <SafeAreaView edges={["bottom"]} className="border-t border-line bg-panel">
+        <View className="px-4 pt-3">
+          <Button
+            onPress={() => {
+              setLoading(true);
+              setViewing(true);
+            }}
+            disabled={!url || !me?.hasPlan}
+          >
+            {practice ? "Start the practice run" : "Open my plan page"}
+          </Button>
+          <Text className="mb-2 mt-2.5 text-center font-sans text-[13px] leading-[18px] text-muted">
+            {practice
+              ? offerLock(me) !== null
+                ? "Real sign-ups unlock once your Gas Safe check and payments are done."
+                : "Practice only — for a real customer, use Offer a plan."
+              : "Anything signed up here is tagged as an in-person sale."}
+          </Text>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }

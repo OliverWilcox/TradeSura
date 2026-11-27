@@ -32,7 +32,7 @@ function checkTheirPostcode(v: string): string | null {
 }
 
 function FieldError({ children }: { children?: string | null }) {
-  return children ? <Text className="mt-1 font-sans text-[13px] text-warn">{children}</Text> : null;
+  return children ? <Text className="mt-1 font-sans text-[13px] text-danger">{children}</Text> : null;
 }
 
 // Build Guide v2 Part 9.3 — Add-customer sheet, route 3: "Just save their
@@ -125,7 +125,7 @@ export default function AddCustomer() {
                   }}
                   placeholder="First name"
                   placeholderTextColor="#6e86a3"
-                  className={`${inputCls} ${errors.firstName ? "border-warn" : "border-line"}`}
+                  className={`${inputCls} ${errors.firstName ? "border-danger" : "border-line"}`}
                 />
                 <FieldError>{errors.firstName}</FieldError>
               </View>
@@ -138,7 +138,7 @@ export default function AddCustomer() {
                   }}
                   placeholder="Last name"
                   placeholderTextColor="#6e86a3"
-                  className={`${inputCls} ${errors.lastName ? "border-warn" : "border-line"}`}
+                  className={`${inputCls} ${errors.lastName ? "border-danger" : "border-line"}`}
                 />
                 <FieldError>{errors.lastName}</FieldError>
               </View>
@@ -153,7 +153,7 @@ export default function AddCustomer() {
                 placeholder="Mobile (07…)"
                 placeholderTextColor="#6e86a3"
                 keyboardType="phone-pad"
-                className={`${inputCls} ${errors.phone ? "border-warn" : "border-line"}`}
+                className={`${inputCls} ${errors.phone ? "border-danger" : "border-line"}`}
               />
               <FieldError>{errors.phone}</FieldError>
             </View>
@@ -169,7 +169,7 @@ export default function AddCustomer() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
-                className={`${inputCls} ${errors.email ? "border-warn" : "border-line"}`}
+                className={`${inputCls} ${errors.email ? "border-danger" : "border-line"}`}
               />
               <FieldError>{errors.email}</FieldError>
             </View>
@@ -191,7 +191,7 @@ export default function AddCustomer() {
         <Card>
           <Micro className="mb-1.5">Last boiler service (optional)</Micro>
           <MonthPicker value={lastServiced} onChange={setLastServiced} />
-          <Text className="mt-1.5 font-sans text-[11px] text-faint">
+          <Text className="mt-1.5 font-sans text-[13px] text-muted">
             Powers automatic service reminders.
           </Text>
         </Card>
@@ -209,7 +209,7 @@ export default function AddCustomer() {
             className="flex-row items-start gap-2.5"
           >
             <View
-              className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${ownCustomer ? "border-flame bg-flame" : errors.consent ? "border-warn" : "border-line"}`}
+              className={`mt-0.5 h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] ${ownCustomer ? "border-flame bg-flame" : errors.consent ? "border-danger" : "border-line"}`}
             >
               {ownCustomer && <Text className="text-[11px] text-white">✓</Text>}
             </View>
@@ -220,7 +220,7 @@ export default function AddCustomer() {
           <FieldError>{errors.consent}</FieldError>
         </View>
 
-        {error && <Text className="font-sans text-sm text-warn">{error}</Text>}
+        {error && <Text className="font-sans text-sm text-danger">{error}</Text>}
         <Button onPress={save} disabled={busy}>
           {busy ? "Saving…" : "Save to my book"}
         </Button>

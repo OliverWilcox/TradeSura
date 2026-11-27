@@ -7,7 +7,7 @@ import { AppHeader, Card, Pill, Tick, Button, ScreenTitle } from "@/components/u
 import { Skeleton, Bone, TextBone } from "@/components/skeleton";
 import { formatPounds } from "@/lib/earnings";
 import { useAuth } from "@/lib/auth-context";
-import { offerLock, readyLabel } from "@/lib/offer-lock";
+import { offerLock, readyLabel, readyNote } from "@/lib/offer-lock";
 import { YearlyRule } from "@/components/yearly-rule";
 
 type Tier = {
@@ -143,7 +143,7 @@ export default function PlansHub() {
         {tiers.map((t) => {
           const fee = Math.floor(t.priceMonthlyPence * FEE_RATE); // rounded down, engineer's favour
           const pill =
-            t.status === "LIVE" && lock ? { tone: "info" as const, label: () => readyLabel(lock) } : STATUS_PILL[t.status];
+            t.status === "LIVE" && lock ? { tone: "info" as const, label: () => readyLabel() } : STATUS_PILL[t.status];
           const lines = t.clauseLines ?? t.clauseTitles.map((title) => ({ title, note: null }));
           return (
             <Card key={t.id}>
@@ -177,6 +177,9 @@ export default function PlansHub() {
               </View>
               <View className="mt-2.5">
                 <Pill tone={pill.tone}>{pill.label(t.activePlanCount)}</Pill>
+                {t.status === "LIVE" && lock && readyNote(lock) ? (
+                  <Text className="mt-1.5 text-[13px] leading-[18px] text-muted">{readyNote(lock)}</Text>
+                ) : null}
               </View>
               {t.status === "DRAFT" ? (
                 <Button

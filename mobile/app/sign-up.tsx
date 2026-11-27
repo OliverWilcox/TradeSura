@@ -209,7 +209,7 @@ function Input({
           setFocused(false);
           props.onBlur?.(e);
         }}
-        className={`h-14 rounded-xl border bg-[#081321] px-3.5 py-0 text-[17px] text-white ${right ? "pr-20" : ""} ${props.editable === false ? "text-white/70" : ""} ${error ? "border-warn" : focused ? "border-brand-blue" : "border-white/30"}`}
+        className={`h-14 rounded-xl border bg-[#081321] px-3.5 py-0 text-[17px] text-white ${right ? "pr-20" : ""} ${props.editable === false ? "text-white/70" : ""} ${error ? "border-danger" : focused ? "border-brand-blue" : "border-white/30"}`}
       />
       {right && <View className="absolute right-3.5">{right}</View>}
     </View>
@@ -1900,7 +1900,7 @@ export default function SignUp() {
                   {/* Skipped cards come back on Getting started and Home as "Photo needed · Add photo". */}
                   <Pressable onPress={skipCard} className="mt-2 items-center py-2.5" accessibilityRole="button">
                     <Text className="text-[14px] font-semibold text-white/80">Skip for now</Text>
-                    <Text className="mt-0.5 text-[13px] text-white/60">
+                    <Text className="mt-1 px-6 text-center text-[13px] leading-[19px] text-white/60">
                       Add your card later from Getting started. You can still build your plans.
                     </Text>
                   </Pressable>

@@ -74,6 +74,8 @@ const WEB_PATHS: Partial<Record<IconName, string>> = {
   lock: "M7 11V8a5 5 0 0110 0v3M5 11h14v10H5z",
   plus: "M12 5v14M5 12h14",
   minus: "M5 12h14",
+  payouts: "M12 3a9 9 0 100 18 9 9 0 000-18zM14.5 9a2.5 2.5 0 00-4.5 1.5V16M8.5 13h5M8.5 16h7",
+  addCustomer: "M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M18 8v6M15 11h6",
 };
 
 export function Icon({

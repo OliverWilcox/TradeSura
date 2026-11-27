@@ -154,7 +154,7 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
             </View>
           )}
         </View>
-        <Text style={{ fontSize: 10, fontWeight: "600", color }}>{TAB_LABELS[route.name]}</Text>
+        <Text style={{ fontSize: 11, fontWeight: "600", color }}>{TAB_LABELS[route.name]}</Text>
       </Pressable>
     );
   }
@@ -207,7 +207,7 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
               <Icon name="addCustomer" size={26} color="#0f2140" weight="medium" />
             </Pressable>
             <Text
-              style={{ fontSize: 10, fontWeight: "600", color: heroAwake ? "#f3f7fb" : IDLE, marginTop: 2 }}
+              style={{ fontSize: 11, fontWeight: "600", color: heroAwake ? "#f3f7fb" : IDLE, marginTop: 2 }}
             >
               Offer a plan
             </Text>

@@ -216,7 +216,9 @@ function OwnerAccount() {
       mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.85,
+      // Same as the Gas Safe card picker: a fuller-quality phone photo sent as
+      // base64 goes past the server's 4.5 MB upload limit (QA 26 Nov).
+      quality: 0.35,
       base64: true,
     });
     if (result.canceled || !result.assets[0]?.base64) return;
@@ -227,7 +229,8 @@ function OwnerAccount() {
         method: "POST",
         body: JSON.stringify({
           base64: asset.base64,
-          mimeType: asset.mimeType ?? "image/jpeg",
+          // The picker hands back a compressed JPEG; iPhones can still label it HEIC.
+          mimeType: asset.mimeType === "image/png" ? "image/png" : "image/jpeg",
         }),
       });
       setSettings((prev) => (prev ? { ...prev, logoUrl } : prev));
@@ -345,12 +348,14 @@ function OwnerAccount() {
         {/* Build Guide v2 Part 13 — identity header: initials avatar (with
             the tick once verified), name, email. */}
         <View className="flex-row items-center gap-3 px-1">
-          <Avatar size={56} />
+          {/* On Account itself the picture changes the logo, rather than
+              opening Account again on top of itself (QA 26 Nov). */}
+          <Avatar size={56} onPress={pickLogo} label={settings?.logoUrl ? "Change logo" : "Add a logo"} />
           <View className="shrink">
             <Text className="font-bold text-base text-ink" numberOfLines={1}>
               {me?.tradingName || `${me?.firstName ?? ""} ${me?.lastName ?? ""}`.trim() || "Your account"}
             </Text>
-            <Text className="font-sans text-xs text-muted" numberOfLines={1}>
+            <Text className="font-sans text-[13px] text-muted" numberOfLines={1}>
               {me?.email}
             </Text>
           </View>
@@ -459,7 +464,7 @@ function OwnerAccount() {
               <View className="flex-row items-start justify-between gap-3">
                 <View className="flex-1 gap-2">
                   <View>
-                    <Text className="font-sans text-xs text-muted">Trading address</Text>
+                    <Text className="font-sans text-[13px] text-muted">Trading address</Text>
                     <Text className="mt-0.5 font-sans text-sm text-ink">
                       {settings.addresses.trading
                         ? [...settings.addresses.trading.lines, settings.addresses.trading.town, settings.addresses.trading.postcode].join(", ")
@@ -467,7 +472,7 @@ function OwnerAccount() {
                     </Text>
                   </View>
                   <View>
-                    <Text className="font-sans text-xs text-muted">Post and member pack go to</Text>
+                    <Text className="font-sans text-[13px] text-muted">Post and member pack go to</Text>
                     <Text className="mt-0.5 font-sans text-sm text-ink">
                       {settings.addresses.correspondenceSameAsTrading || !settings.addresses.correspondence
                         ? "Your trading address"
@@ -485,7 +490,7 @@ function OwnerAccount() {
               name, can add one — it drives the greeting and avatar initials. */}
           <View className="mt-2 flex-row gap-2">
             <View className="flex-1">
-              <Text className="font-sans text-xs text-muted">First name</Text>
+              <Text className="font-sans text-[13px] text-muted">First name</Text>
               <TextInput
                 value={firstName}
                 onChangeText={(v) => {
@@ -498,7 +503,7 @@ function OwnerAccount() {
               />
             </View>
             <View className="flex-1">
-              <Text className="font-sans text-xs text-muted">Last name</Text>
+              <Text className="font-sans text-[13px] text-muted">Last name</Text>
               <TextInput
                 value={lastName}
                 onChangeText={(v) => {
@@ -511,7 +516,7 @@ function OwnerAccount() {
               />
             </View>
           </View>
-          <Text className="mt-3 font-sans text-xs text-muted">Trading name</Text>
+          <Text className="mt-3 font-sans text-[13px] text-muted">Trading name</Text>
           <TextInput
             value={tradingName}
             onChangeText={(v) => {
@@ -523,13 +528,13 @@ function OwnerAccount() {
             className="mt-1 min-h-[48px] rounded-[10px] border border-line bg-paper px-3.5 font-sans text-[16px] text-ink"
           />
           {legalFallback && (
-            <Text className="mt-1 font-sans text-[11px] text-faint">Leave blank to use {legalFallback}</Text>
+            <Text className="mt-1 font-sans text-[13px] text-muted">Leave blank to use {legalFallback}</Text>
           )}
           {settings && (
             <View className="mt-3 flex-row items-center justify-between gap-3">
               <View className="shrink">
                 <Text className="font-sans text-sm text-ink">VAT registered</Text>
-                <Text className="font-sans text-[11px] text-faint">
+                <Text className="font-sans text-[13px] text-muted">
                   Customers see your prices as &ldquo;including VAT&rdquo;.
                 </Text>
               </View>
@@ -541,8 +546,8 @@ function OwnerAccount() {
               />
             </View>
           )}
-          {vatError && <Text className="mt-1.5 font-sans text-xs text-danger">{vatError}</Text>}
-          <Text className="mt-3 font-sans text-xs text-muted">Logo (optional)</Text>
+          {vatError && <Text className="mt-1.5 font-sans text-[13px] text-danger">{vatError}</Text>}
+          <Text className="mt-3 font-sans text-[13px] text-muted">Logo (optional)</Text>
           <Pressable
             onPress={pickLogo}
             disabled={logoBusy}
@@ -566,10 +571,10 @@ function OwnerAccount() {
               {logoBusy ? "Uploading…" : settings?.logoUrl ? "Change logo" : "Add a logo"}
             </Text>
           </Pressable>
-          {logoError && <Text className="mt-1.5 font-sans text-xs text-danger">{logoError}</Text>}
+          {logoError && <Text className="mt-1.5 font-sans text-[13px] text-danger">{logoError}</Text>}
           {settings && (
             <View className="mt-3 border-t border-line-soft pt-2.5">
-              <Text className="mb-1.5 font-sans text-xs text-muted">Your page</Text>
+              <Text className="mb-1.5 font-sans text-[13px] text-muted">Your page</Text>
               <AddressPicker
                 slug={settings.slug}
                 chosen={Boolean(settings.slugChosen)}
@@ -601,7 +606,7 @@ function OwnerAccount() {
         {winback && (
           <Card>
             <Text className="font-semibold text-sm text-ink">Win-back offer</Text>
-            <Text className="mt-0.5 font-sans text-xs text-muted">
+            <Text className="mt-0.5 font-sans text-[13px] text-muted">
               Texted from you to customers 30 days after their plan ends, and again before winter.
             </Text>
             <View className="mt-2" accessibilityRole="radiogroup">
@@ -626,7 +631,7 @@ function OwnerAccount() {
                 );
               })}
             </View>
-            {winbackError && <Text className="mt-1.5 font-sans text-xs text-danger">{winbackError}</Text>}
+            {winbackError && <Text className="mt-1.5 font-sans text-[13px] text-danger">{winbackError}</Text>}
           </Card>
         )}
 
@@ -652,7 +657,7 @@ function OwnerAccount() {
             <View className="flex-row items-center justify-between gap-3">
               <View className="shrink">
                 <Text className="font-sans text-sm text-ink">Setup help by text</Text>
-                <Text className="font-sans text-[11px] text-faint">
+                <Text className="font-sans text-[13px] text-muted">
                   TradeSura can text you to help you finish setting up. Off, we&apos;ll email instead.
                 </Text>
               </View>
@@ -663,7 +668,7 @@ function OwnerAccount() {
                 accessibilityLabel="Setup help by text"
               />
             </View>
-            {setupError && <Text className="mt-1.5 font-sans text-xs text-danger">{setupError}</Text>}
+            {setupError && <Text className="mt-1.5 font-sans text-[13px] text-danger">{setupError}</Text>}
           </Card>
         )}
 
@@ -672,7 +677,7 @@ function OwnerAccount() {
             <View className="flex-row items-center justify-between gap-3">
               <View className="shrink">
                 <Text className="font-sans text-sm text-ink">Updates on WhatsApp</Text>
-                <Text className="font-sans text-[11px] text-faint">
+                <Text className="font-sans text-[13px] text-muted">
                   New customers, cancel requests and failed payments come to WhatsApp instead of a text.
                 </Text>
               </View>
@@ -683,7 +688,7 @@ function OwnerAccount() {
                 accessibilityLabel="Updates on WhatsApp"
               />
             </View>
-            {waError && <Text className="mt-1.5 font-sans text-xs text-danger">{waError}</Text>}
+            {waError && <Text className="mt-1.5 font-sans text-[13px] text-danger">{waError}</Text>}
           </Card>
         )}
 
@@ -739,10 +744,11 @@ function OwnerAccount() {
         </Button>
         {/* Section 10 — App Store 5.1.1 needs in-app deletion. */}
         <Pressable onPress={() => router.push("/delete-account")} className="items-center py-2">
-          <Text className="font-sans text-xs text-muted">Delete my account</Text>
+          {/* Red, like every destructive action (QA 26 Nov). */}
+          <Text className="font-semibold text-sm text-danger">Delete my account</Text>
         </Pressable>
         {/* Matt, 4 Nov: the trade mark line in the app's legal section. */}
-        <Text className="px-4 pb-2 text-center font-sans text-[11px] text-faint">
+        <Text className="px-4 pb-2 text-center font-sans text-[13px] text-muted">
           TradeSura® is a UK registered trade mark of TradeSura Ltd.
         </Text>
       </ScrollView>

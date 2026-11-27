@@ -9,6 +9,8 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -63,6 +65,9 @@ export default function Welcome() {
   // 30 Oct update 3.2 — the iPhone backup when the store doesn't carry the
   // code through: paste it from the text, or type it from the letter.
   const [codeInput, setCodeInput] = useState("");
+  // The keyboard covered the code box (QA 26 Nov): scroll it into view on focus.
+  const scrollRef = useRef<ScrollView>(null);
+  const codeBoxY = useRef(0);
   const [codeBusy, setCodeBusy] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
   const dismissedFired = useRef(false);
@@ -231,16 +236,19 @@ export default function Welcome() {
     <View className="flex-1 bg-night">
       <AuthBackdrop fadeToNavy />
       <SafeAreaView edges={["top", "bottom"]} className="flex-1">
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
         {/* Fit the guide's compact copy at default text size. Keep scrolling
             available for small screens and larger accessibility text. */}
         <ScrollView
+          ref={scrollRef}
+          keyboardShouldPersistTaps="handled"
           className="flex-1"
           contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8 }}
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
           <Animated.View style={fadeRise(brandAnim)}>
-            <Text className="tabular-nums text-[10px] font-bold uppercase tracking-[3px] text-brand-blue-lift">
+            <Text className="tabular-nums text-[12px] font-bold uppercase tracking-[3px] text-brand-blue-lift">
               Care plan platform
             </Text>
             <View className="mt-2.5">
@@ -290,14 +298,14 @@ export default function Welcome() {
                     </Text>{" "}
                     a year
                   </Text>
-                  <Text className="mt-0.5 text-[10px] text-white/50">
+                  <Text className="mt-0.5 text-[13px] text-white/60">
                     Example only. You set your own price.
                   </Text>
                 </View>
                 {/* 3.6 */}
                 <View className="mt-3 flex-row items-start gap-1.5">
-                  <Icon name="importBook" size={12} color="#5FA3F0" weight="semibold" />
-                  <Text className="shrink text-[12.5px] leading-[18px] text-white/85">
+                  <Icon name="importBook" size={15} color="#5FA3F0" weight="semibold" />
+                  <Text className="shrink text-[13.5px] leading-[19px] text-white/85">
                     <Text className="font-semibold text-white">Already got customers?</Text> Import
                     your book and offer them all in one tap.
                   </Text>
@@ -309,7 +317,12 @@ export default function Welcome() {
           </View>
 
           {!personalisedName && (
-            <View className="mb-3 rounded-2xl border border-white/20 bg-white/[0.06] p-3">
+            <View
+              className="mb-3 rounded-2xl border border-white/20 bg-white/[0.06] p-3"
+              onLayout={(e) => {
+                codeBoxY.current = e.nativeEvent.layout.y;
+              }}
+            >
               <Text className="text-[13.5px] font-semibold text-white">Got a letter or a text from us?</Text>
               <Pressable
                 onPress={pasteCode}
@@ -328,14 +341,18 @@ export default function Welcome() {
                     setCodeError(null);
                   }}
                   onSubmitEditing={() => submitCode(codeInput)}
-                  placeholder="Or type the code from your letter"
+                  onFocus={() =>
+                    setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, codeBoxY.current - 16), animated: true }), 250)
+                  }
+                  // Short enough to show in full beside Go (QA 26 Nov).
+                  placeholder="Or type your code"
                   placeholderTextColor="#6e86a3"
                   autoCapitalize="characters"
                   autoCorrect={false}
                   autoComplete="off"
                   returnKeyType="go"
                   accessibilityLabel="Your code"
-                  className={`h-12 flex-1 rounded-xl border bg-[#081321] px-3.5 text-[16px] text-white ${codeError ? "border-warn" : "border-white/30"}`}
+                  className={`h-12 flex-1 rounded-xl border bg-[#081321] px-3.5 text-[16px] text-white ${codeError ? "border-danger" : "border-white/30"}`}
                 />
                 <Pressable
                   onPress={() => submitCode(codeInput)}
@@ -346,7 +363,7 @@ export default function Welcome() {
                   {codeBusy ? <ActivityIndicator color="#0F2140" /> : <Text className="text-[14px] font-bold text-on-light">Go</Text>}
                 </Pressable>
               </View>
-              {codeError && <Text className="mt-1.5 text-[12.5px] leading-[17px] text-warn">{codeError}</Text>}
+              {codeError && <Text className="mt-1.5 text-[12.5px] leading-[17px] text-danger">{codeError}</Text>}
             </View>
           )}
 
@@ -390,7 +407,7 @@ export default function Welcome() {
               </Text>
             </Pressable>
             {/* Not green — green is money only (Part 2.1). */}
-            <Text className="mt-1.5 text-center text-[10px] text-white/75">
+            <Text className="mt-1.5 text-center text-[13px] text-white/75">
               Takes 2 minutes · No card required
             </Text>
             <Pressable
@@ -399,17 +416,18 @@ export default function Welcome() {
             >
               <Text className="text-[14px] font-semibold text-white">I already have an account</Text>
             </Pressable>
-            <Text className="mt-3 text-center tabular-nums text-[11px] uppercase tracking-wider text-night-muted">
+            <Text className="mt-3 text-center tabular-nums text-[13px] uppercase tracking-wider text-night-muted">
               Verified members only
             </Text>
             {/* Build Review 3 §3 — the official badge, never typed text.
                 Outline-only white vector (not the boxed pill), so it still
                 doesn't read as a third button (4 Oct notes 3.10). */}
-            <View className="mb-1 mt-2 items-center opacity-80">
-              <PoweredByStripe width={92} />
+            <View className="mb-1 mt-2 items-center">
+              <PoweredByStripe width={116} />
             </View>
           </Animated.View>
         </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
   );

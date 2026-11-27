@@ -55,20 +55,21 @@ export function PayoutTimeline({ refreshKey }: { refreshKey?: unknown }) {
     <View className="rounded-2xl border border-line-strong p-4">
       <Micro className="mb-2">{who ? "When you get paid" : "How the money reaches you"}</Micro>
       {steps.map(([label, date], i) => (
-        <View key={label} className="flex-row items-center gap-3 py-1.5">
-          <View className="items-center" style={{ width: 22 }}>
+        // Top-aligned so a label that wraps keeps its dot and date on its first line (QA 26 Nov).
+        <View key={label} className="flex-row items-start gap-3 py-1.5">
+          <View className="items-center pt-[5px]" style={{ width: 22 }}>
             <View
               className={i === steps.length - 1 ? "h-3 w-3 rounded-full bg-flame" : "h-2.5 w-2.5 rounded-full border-2 border-flame"}
             />
           </View>
-          <Text className="flex-1 text-[14.5px] text-ink">{label}</Text>
-          <Text className={i === steps.length - 1 ? "text-[14.5px] font-bold text-ink" : "text-[14.5px] text-muted"}>
+          <Text className="flex-1 text-[14.5px] leading-[20px] text-ink">{label}</Text>
+          <Text className={`shrink-0 text-right text-[14.5px] leading-[20px] ${i === steps.length - 1 ? "font-bold text-ink" : "text-muted"}`}>
             {date}
           </Text>
         </View>
       ))}
       {/* Matt, 16 Nov: the date read as if the 7-day hold came on top. It's in it. */}
-      <Text className="mt-2 text-[12px] leading-[17px] text-muted">
+      <Text className="mt-2 text-[13px] leading-[18px] text-muted">
         {data.firstPayoutHeld === true
           ? "This is your real first payout date. It already allows for the 7 days a new account's first payment is held. After that, you're paid every Friday for whatever has cleared."
           : data.firstPayoutHeld === false

@@ -131,14 +131,23 @@ export function initials(me: { firstName?: string | null; lastName?: string | nu
   return (me.email?.[0] ?? "").toUpperCase();
 }
 
-export function Avatar({ size = 32 }: { size?: number }) {
+export function Avatar({
+  size = 32,
+  onPress,
+  label = "Account",
+}: {
+  size?: number;
+  /** Defaults to opening Account. */
+  onPress?: () => void;
+  label?: string;
+}) {
   const { me } = useAuth();
   const verified = Boolean(me?.gasSafeVerifiedAt);
   return (
     <Pressable
-      onPress={() => router.push("/more")}
+      onPress={onPress ?? (() => router.push("/more"))}
       accessibilityRole="button"
-      accessibilityLabel="Account"
+      accessibilityLabel={label}
       hitSlop={8}
       style={{ width: size, height: size }}
     >
@@ -313,7 +322,7 @@ export function SectionHeading({ children, className = "" }: { children: ReactNo
 export function Micro({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <Text
-      className={`text-[11px] font-bold uppercase tracking-[0.08em] text-muted ${className}`}
+      className={`text-[12px] font-bold uppercase tracking-[0.08em] text-muted ${className}`}
     >
       {children}
     </Text>
@@ -341,7 +350,7 @@ export function Pill({ tone, children }: { tone: keyof typeof pillStyles; childr
     // labels broke mid-word ("AU / TO", "DON / E" on Reminders).
     <Text
       numberOfLines={1}
-      className={`shrink-0 self-start overflow-hidden rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-[0.04em] ${pillStyles[tone]}`}
+      className={`shrink-0 self-start overflow-hidden rounded-full px-2.5 py-1 text-[11px] font-extrabold tracking-[0.04em] ${pillStyles[tone]}`}
     >
       {children}
     </Text>

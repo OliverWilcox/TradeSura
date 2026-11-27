@@ -95,7 +95,7 @@ export function AddressLookupField({
           autoCapitalize="characters"
           autoComplete="postal-code"
           textContentType="postalCode"
-          className={`flex-1 ${fieldCls} ${postcodeError ? "border-warn" : ""}`}
+          className={`flex-1 ${fieldCls} ${postcodeError ? "border-danger" : ""}`}
         />
         <Pressable
           onPress={findAddress}
@@ -105,12 +105,12 @@ export function AddressLookupField({
           {searching ? (
             <ActivityIndicator color="#5FA3F0" />
           ) : (
-            <Text className="font-semibold text-xs text-flame-deep">Find address</Text>
+            <Text className="font-semibold text-sm text-flame">Find address</Text>
           )}
         </Pressable>
       </View>
 
-      {postcodeError && <Text className="text-[13px] text-warn">{postcodeError}</Text>}
+      {postcodeError && <Text className="text-[13px] text-danger">{postcodeError}</Text>}
       {/* Matt 16 Nov — sentence case, not the uppercase Micro label. */}
       {searchError && <Text className="text-[13px] leading-[18px] text-white/70">{searchError}</Text>}
 

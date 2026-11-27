@@ -28,24 +28,24 @@ export function MonthPicker({
           hitSlop={8}
           className="h-8 w-8 items-center justify-center rounded-lg border border-line"
         >
-          <Text className="text-lg font-bold text-flame-deep">−</Text>
+          <Text className="text-lg font-bold text-flame">−</Text>
         </Pressable>
         <Text className="font-sans text-sm text-ink">
           {value ? value.toLocaleDateString("en-GB", { month: "long", year: "numeric" }) : "Not sure — skip"}
         </Text>
         {value ? (
           <Pressable onPress={() => step(1)} hitSlop={8} className="h-8 w-8 items-center justify-center rounded-lg border border-line">
-            <Text className="text-lg font-bold text-flame-deep">＋</Text>
+            <Text className="text-lg font-bold text-flame">＋</Text>
           </Pressable>
         ) : (
-          <Pressable onPress={() => onChange(now)} hitSlop={8} className="h-8 w-8 items-center justify-center">
-            <Text className="font-semibold text-xs text-flame-deep">Set</Text>
+          <Pressable onPress={() => onChange(now)} hitSlop={8} className="h-8 min-w-8 items-center justify-center px-1">
+            <Text className="font-semibold text-sm text-flame">Set</Text>
           </Pressable>
         )}
       </View>
       {value && (
         <Pressable onPress={() => onChange(null)} hitSlop={8} className="self-start">
-          <Text className="font-sans text-xs text-faint">Clear</Text>
+          <Text className="font-sans text-[13px] text-muted">Clear</Text>
         </Pressable>
       )}
     </View>

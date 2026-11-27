@@ -113,9 +113,9 @@ export function AddressPicker({
         />
       </View>
       {check && (
-        <Text className={`mt-1 text-xs ${check.ok ? "text-muted" : "text-danger"}`}>{check.text}</Text>
+        <Text className={`mt-1 text-[13px] ${check.ok ? "text-muted" : "text-danger"}`}>{check.text}</Text>
       )}
-      <Text className="mt-1 text-[11px] text-faint">
+      <Text className="mt-1 text-[13px] leading-[18px] text-muted">
         It goes on your plan links, QR codes, member pack and website. If you change it, links and QR codes
         you&apos;ve already shared keep working: they forward to the new address.
       </Text>
