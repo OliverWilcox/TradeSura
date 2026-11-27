@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, Pressable, Share } from "react-native";
+import { View, Text, ScrollView, RefreshControl, Pressable, Share, Linking, Platform } from "react-native";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+import { File, Paths } from "expo-file-system";
 import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as WebBrowser from "expo-web-browser";
 import { api, apiText, ApiError, getHasSeenFirstPayout, setHasSeenFirstPayout } from "@/lib/api";
 import { AppHeader, Card, Micro, Pill, RowLine, Button } from "@/components/ui";
 import { RingProgress, payoutWeekProgress } from "@/components/ring-progress";
+import { Icon } from "@/components/icon";
 import { PayoutTimeline } from "@/components/payout-timeline";
 import { Skeleton, Bone, TextBone, RowBone } from "@/components/skeleton";
 
@@ -145,14 +148,34 @@ export default function Payouts() {
   }
 
   // Matt, 30 Oct §9.5 — the monthly statement of our 20% fee, for their
-  // accountant: a printable page they save as a PDF from the browser.
+  // accountant, as a PDF made on the phone.
   const [statementBusy, setStatementBusy] = useState<string | null>(null);
-  async function openStatement(month: string) {
+  async function openStatement(month: string, label: string) {
     setStatementBusy(month);
     setExportError(null);
     try {
-      const { url } = await api<{ url: string }>(`/api/payouts/statement-link?month=${month}`);
-      await WebBrowser.openBrowserAsync(url);
+      if (Platform.OS === "web") {
+        // No PDF maker in a browser: open the printable page.
+        const { url } = await api<{ url: string }>(`/api/payouts/statement-link?month=${month}`);
+        await Linking.openURL(url);
+        return;
+      }
+      // The statement is made into a real PDF on the phone and handed to the
+      // share sheet (preview, Save to Files, email the accountant). The page's
+      // own "Save as PDF" button did nothing in the in-app browser (QA 26 Nov).
+      const html = await apiText(`/api/payouts/statement?month=${month}`);
+      const { uri } = await Print.printToFileAsync({ html });
+      let pdf = new File(uri);
+      try {
+        // A readable file name for the accountant, not Print-1A2B.pdf.
+        const named = new File(Paths.cache, `TradeSura fee statement ${label}.pdf`);
+        if (named.exists) named.delete();
+        await pdf.move(named);
+        pdf = named;
+      } catch {
+        // Keep the generated name if the rename fails; the PDF is the same.
+      }
+      await Sharing.shareAsync(pdf.uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: `Fee statement · ${label}` });
     } catch (e) {
       setExportError(e instanceof ApiError ? e.message : "Couldn't open the statement.");
     } finally {
@@ -227,7 +250,15 @@ export default function Payouts() {
                 built under). */}
             <Card variant="hero">
               <View className="flex-row items-center gap-3">
-                <RingProgress size={44} progress={payoutWeekProgress()} dormant={data.count === 0} />
+                {/* Before the first payout an empty ring read as a broken loader
+                    (QA 26 Nov), so it shows the payouts icon until money moves. */}
+                {data.count === 0 ? (
+                  <View className="h-11 w-11 items-center justify-center rounded-full bg-flame-tint">
+                    <Icon name="payouts" size={22} color="#5fa3f0" />
+                  </View>
+                ) : (
+                  <RingProgress size={44} progress={payoutWeekProgress()} />
+                )}
                 <View className="flex-1">
                   <Micro>
                     {s?.nextPayout ? `Next payout · ${shortDate(s.nextPayout.arrivalDate)}` : "Next payout · Friday"}
@@ -237,7 +268,7 @@ export default function Payouts() {
                   </Text>
                 </View>
               </View>
-              <Text className="mt-2 font-sans text-xs text-night-muted">
+              <Text className="mt-2 font-sans text-[13px] leading-[18px] text-night-muted">
                 {/* Part 12 — "before anything's live" means before any PLAN
                     is live, independent of Stripe connection status. An
                     engineer can have Stripe connected with zero plans (this
@@ -252,13 +283,13 @@ export default function Payouts() {
                   : "This week's cleared collections — your 80%, paid direct to your bank."}
               </Text>
               {s && data.count > 0 && (
-                <Text className="mt-1 font-sans text-[11px] text-night-muted">
+                <Text className="mt-1 font-sans text-[13px] text-night-muted">
                   <Text className="tabular-nums">{pounds(s.availablePence)}</Text> available ·{" "}
                   <Text className="tabular-nums">{pounds(s.pendingPence)}</Text> still clearing
                 </Text>
               )}
               {data.stripeError && (
-                <Text className="mt-1 font-sans text-[11px] text-warn">
+                <Text className="mt-1 font-sans text-[13px] text-warn">
                   Couldn&apos;t reach our payments partner just now — showing the plan maths instead.
                 </Text>
               )}
@@ -277,7 +308,7 @@ export default function Payouts() {
               <RowLine
                 left="TradeSura fee (20%)"
                 right={
-                  <Text className="tabular-nums text-ink">
+                  <Text className="tabular-nums text-sm text-ink">
                     {data.month.feePence > 0 ? "−" : ""}
                     {pounds(data.month.feePence)}
                   </Text>
@@ -287,7 +318,7 @@ export default function Payouts() {
                 <RowLine
                   left="Referral bonus"
                   right={
-                    <Text className="tabular-nums font-semibold text-ok">
+                    <Text className="tabular-nums text-sm font-semibold text-ok">
                       ＋{pounds(data.referralBonusPence)}
                     </Text>
                   }
@@ -296,7 +327,7 @@ export default function Payouts() {
               <RowLine
                 left={<Text className="font-bold text-sm text-ink">To your bank</Text>}
                 right={
-                  <Text className="tabular-nums font-semibold text-copper">
+                  <Text className="tabular-nums text-sm font-semibold text-copper">
                     {pounds(data.month.toBankPence + data.referralBonusPence)}
                   </Text>
                 }
@@ -370,7 +401,7 @@ export default function Payouts() {
               {lastMonths(3).map(({ key, label }, i) => (
                 <Pressable
                   key={key}
-                  onPress={() => openStatement(key)}
+                  onPress={() => openStatement(key, label)}
                   disabled={statementBusy !== null}
                   accessibilityRole="button"
                 >
@@ -378,15 +409,15 @@ export default function Payouts() {
                     left={i === 0 ? `${label} (so far)` : label}
                     right={
                       <Text className="text-sm font-semibold text-flame">
-                        {statementBusy === key ? "Opening…" : "View"}
+                        {statementBusy === key ? "Making PDF…" : "View"}
                       </Text>
                     }
                   />
                 </Pressable>
               ))}
-              <Text className="mb-3 mt-1.5 font-sans text-xs text-muted">
-                Our 20% fee on each collection, for your accountant. No VAT is charged. Save it as a PDF from the
-                page.
+              <Text className="mb-3 mt-1.5 font-sans text-[13px] leading-[18px] text-muted">
+                Our 20% fee on each collection, for your accountant. No VAT is charged. View opens it as a PDF to
+                save or send.
               </Text>
               <Button variant="ghost" onPress={exportCsv} disabled={exporting}>
                 {exporting ? "Preparing…" : "Tax-year export (CSV)"}
